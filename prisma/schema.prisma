@@ -1,0 +1,219 @@
+// Piloti — schéma Prisma
+// SQLite en dev ET prod (cette version). Pour scale national SGDF : passer "postgresql".
+// Convention : enums portés comme `String` (SQLite ne supporte pas les enums Prisma).
+// Les valeurs autorisées vivent dans `src/lib/enums.ts` (TS) — source unique côté app.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Prisma 7 : l'URL vit dans prisma.config.ts (datasource.url),
+// pas dans ce bloc. Le client runtime reçoit l'adapter better-sqlite3 (cf. src/lib/db.ts).
+datasource db {
+  provider = "sqlite"
+}
+
+// ----------------------------------------------------------------------------
+// Better-auth (sessions / credentials / OAuth ready)
+// ----------------------------------------------------------------------------
+
+model User {
+  // Better-auth required
+  id            String   @id @default(cuid())
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  name          String
+  image         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Piloti additional fields (exposed via better-auth `additionalFields`)
+  firstName      String
+  lastName       String
+  role           String  @default("CHEF") // Role: ADMIN | CHEF | PARENT | SCOUT
+  status         String  @default("PENDING") // AccountStatus: PENDING | ACTIVE | REJECTED | SUSPENDED
+  unit           String? // Unit: BLEUS | VERTS | ROUGES | PIOS | COMPAS
+  phone          String?
+  rejectedReason String?
+
+  // Better-auth relations
+  sessions Session[]
+  accounts Account[]
+
+  // Piloti relations
+  borrowedLoans     Loan[]     @relation("LoanBorrower")
+  validatedReturns  Loan[]     @relation("LoanReturnedBy")
+  reportedIncidents Incident[] @relation("IncidentReporter")
+  resolvedIncidents Incident[] @relation("IncidentResolver")
+  auditLogs         AuditLog[]
+
+  @@index([status])
+  @@index([role])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+// ----------------------------------------------------------------------------
+// Piloti — Inventaire & vie du matériel
+// ----------------------------------------------------------------------------
+
+model Equipment {
+  id        String   @id @default(cuid())
+  name      String
+  category  String // EquipmentCategory: TENTE | MALLE | CUISINE | BIVOUAC | JEU | AUTRE
+  totalQty  Int      @default(1)
+  condition String   @default("BON") // EquipmentCondition: NEUF | BON | USE | A_REPARER | HORS_SERVICE
+  location  String?
+  photo     String?
+  notes     String?
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  loans     Loan[]
+  incidents Incident[]
+  auditLogs AuditLog[]
+
+  @@index([category])
+  @@index([archived])
+}
+
+model Loan {
+  id             String    @id @default(cuid())
+  equipmentId    String
+  borrowerId     String
+  quantity       Int       @default(1)
+  startDate      DateTime
+  expectedReturn DateTime
+  returnedAt     DateTime?
+  returnedById   String?
+  status         String    @default("ACTIF") // LoanStatus: ACTIF | RETARD | RETOURNE | SECHAGE
+  eventName      String?
+
+  // Séchage (statut SECHAGE)
+  dryingLocation   String?
+  dryingPersonName String?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  equipment  Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  borrower   User       @relation("LoanBorrower", fields: [borrowerId], references: [id])
+  returnedBy User?      @relation("LoanReturnedBy", fields: [returnedById], references: [id])
+  auditLogs  AuditLog[]
+
+  @@index([status])
+  @@index([equipmentId])
+  @@index([borrowerId])
+  @@index([expectedReturn])
+}
+
+model Incident {
+  id           String    @id @default(cuid())
+  equipmentId  String
+  reporterId   String
+  types        String // JSON: IncidentType[] (cf. src/lib/incident-categories.ts)
+  severity     String // IncidentSeverity: BLOQUANT | GENANT | MINEUR
+  photos       String    @default("[]") // JSON: string[] (chemins relatifs)
+  notes        String?
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolvedNote String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  equipment  Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  reporter   User       @relation("IncidentReporter", fields: [reporterId], references: [id])
+  resolvedBy User?      @relation("IncidentResolver", fields: [resolvedById], references: [id])
+  auditLogs  AuditLog[]
+
+  @@index([severity])
+  @@index([equipmentId])
+  @@index([resolvedAt])
+}
+
+// ----------------------------------------------------------------------------
+// Piloti — Audit (toute mutation laisse une trace, cf. lib/audit.ts)
+// ----------------------------------------------------------------------------
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String // ex: EQUIPMENT_CREATED, LOAN_RETURNED, INCIDENT_REPORTED
+  userId      String
+  equipmentId String?
+  loanId      String?
+  incidentId  String?
+  metadata    String   @default("{}") // JSON
+  createdAt   DateTime @default(now())
+
+  user      User       @relation(fields: [userId], references: [id])
+  equipment Equipment? @relation(fields: [equipmentId], references: [id], onDelete: SetNull)
+  loan      Loan?      @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  incident  Incident?  @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// Piloti — Événements (squelette V2, structure prête)
+// ----------------------------------------------------------------------------
+
+model Event {
+  id        String   @id @default(cuid())
+  name      String
+  type      String // EventType: REUNION | WEEK_END | CAMP | SERVICE
+  startDate DateTime
+  endDate   DateTime
+  unit      String? // Unit
+  createdAt DateTime @default(now())
+
+  @@index([startDate])
+}

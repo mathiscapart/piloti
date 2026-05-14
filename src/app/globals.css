@@ -1,0 +1,66 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* === Palette SGDF — couleurs principales === */
+  --color-forest: #2d6a4f;
+  --color-forest-soft: #d4f0e2;
+  --color-sky: #1d7ab0;
+  --color-sky-soft: #d0e8f5;
+  --color-sun: #f4c430;
+  --color-sun-soft: #fdf3c7;
+  --color-fire: #e05c1a;
+  --color-fire-soft: #fddccc;
+  --color-brick: #c0392b;
+  --color-brick-soft: #fddcdc;
+
+  /* === Palette SGDF — neutres === */
+  --color-sand: #faf7f2;
+  --color-snow: #ffffff;
+  --color-earth: #2c1810;
+  --color-trail: #6b7280;
+  --color-stone: #d1c9bc;
+
+  /* === Texte sur fonds soft (lisibilité WCAG) === */
+  --color-forest-ink: #2d6a4f;
+  --color-sky-ink: #1d7ab0;
+  --color-sun-ink: #92610a;
+  --color-fire-ink: #7a2b00;
+  --color-brick-ink: #7a1010;
+
+  /* === Mapping shadcn/ui → SGDF === */
+  --color-background: var(--color-sand);
+  --color-foreground: var(--color-earth);
+  --color-card: var(--color-snow);
+  --color-card-foreground: var(--color-earth);
+  --color-popover: var(--color-snow);
+  --color-popover-foreground: var(--color-earth);
+  --color-primary: var(--color-forest);
+  --color-primary-foreground: var(--color-snow);
+  --color-secondary: var(--color-sky-soft);
+  --color-secondary-foreground: var(--color-sky-ink);
+  --color-muted: #f0ebe3;
+  --color-muted-foreground: var(--color-trail);
+  --color-accent: var(--color-forest-soft);
+  --color-accent-foreground: var(--color-forest-ink);
+  --color-destructive: var(--color-brick);
+  --color-destructive-foreground: var(--color-snow);
+  --color-border: var(--color-stone);
+  --color-input: var(--color-stone);
+  --color-ring: var(--color-forest);
+
+  /* === Typographie === */
+  --font-sans: var(--font-nunito), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+
+  /* === Rayon SGDF supplémentaire (24px) === */
+  --radius-sgdf-xl: 24px;
+
+  /* === Ombres : carte au repos = spec utilisateur, autres = Notion === */
+  --shadow-card: 0 2px 8px rgba(44, 24, 16, 0.1);
+  --shadow-card-hover: 0 4px 12px rgba(44, 24, 16, 0.12);
+  --shadow-elevated: 0 12px 32px rgba(44, 24, 16, 0.16);
+}
+
+body {
+  font-feature-settings: "rlig" 1, "calt" 1;
+}

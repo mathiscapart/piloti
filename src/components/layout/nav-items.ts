@@ -21,7 +21,6 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/stock", label: "Stock", icon: Package },
   { href: "/prets", label: "Prêts", icon: Truck },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
-  { href: "/membres", label: "Membres", icon: Users },
 ];
 
 export const ADMIN_NAV: NavItem[] = [
@@ -30,5 +29,5 @@ export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/audit", label: "Journal d'audit", icon: History, adminOnly: true },
 ];
 
-// Items mobile : sous-ensemble du MAIN_NAV qui tient en bottom-nav
-export const BOTTOM_NAV: NavItem[] = MAIN_NAV.slice(0, 4); // Dashboard, Stock, Prêts, Incidents
+// Items mobile : reflet de MAIN_NAV (4 entrées tiennent en bottom-nav)
+export const BOTTOM_NAV: NavItem[] = MAIN_NAV;

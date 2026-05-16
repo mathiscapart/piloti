@@ -13,7 +13,14 @@ export const ACCOUNT_STATUSES = [
 ] as const;
 export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 
-export const UNITS = ["BLEUS", "VERTS", "ROUGES", "PIOS", "COMPAS"] as const;
+export const UNITS = [
+  "BLEUS",
+  "VERTS",
+  "ROUGES",
+  "PIOS",
+  "COMPAS",
+  "VIOLETS",
+] as const;
 export type Unit = (typeof UNITS)[number];
 
 export const EQUIPMENT_CATEGORIES = [

@@ -4,6 +4,16 @@ import { nextCookies } from "better-auth/next-js";
 
 import { db } from "@/lib/db";
 
+// Fail-fast : sans secret, better-auth en génère un aléatoire au boot →
+// toutes les sessions invalidées au prochain restart, casse l'auth en
+// silence. On veut planter immédiatement.
+if (!process.env.BETTER_AUTH_SECRET) {
+  throw new Error(
+    "BETTER_AUTH_SECRET manquant. Génère avec `openssl rand -hex 32` " +
+      "et ajoute-le à .env (dev) ou .env.production (prod).",
+  );
+}
+
 export const auth = betterAuth({
   database: prismaAdapter(db, { provider: "sqlite" }),
   secret: process.env.BETTER_AUTH_SECRET,
@@ -44,13 +54,14 @@ export const auth = betterAuth({
     cookiePrefix: "piloti",
   },
 
-  // Rate limit anti-bruteforce sur le login
+  // Rate limit anti-bruteforce + anti-flood
   rateLimit: {
     enabled: true,
     window: 60 * 15, // 15 min
     max: 100, // limite globale large
     customRules: {
       "/sign-in/email": { window: 60 * 15, max: 5 }, // 5 tentatives / 15 min
+      "/sign-up/email": { window: 60 * 15, max: 3 }, // 3 inscriptions / 15 min / IP
     },
   },
 

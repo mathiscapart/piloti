@@ -1,0 +1,41 @@
+# Piloti — override dev. À utiliser avec :
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Diff prod :
+#   - port 3000 exposé sur la machine hôte
+#   - bind mount du code source (hot reload)
+#   - target=dev (lance `pnpm dev`, pas `node server.js`)
+#   - cloudflared et traefik désactivés (override avec `profiles: [never]`)
+#   - DB sur le filesystem local plutôt qu'un volume nommé
+#
+# NB : pour la plupart des workflows dev, lance simplement `pnpm dev` en local.
+# Ce fichier sert si tu veux reproduire l'env conteneurisé pendant le dev.
+
+services:
+  migrate:
+    profiles: ["never"]
+
+  app:
+    build:
+      target: dev
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: file:/app/dev.db
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-32-chars-minimum-aaaaaa}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - /app/.next
+    command: ["pnpm", "dev"]
+    # Annule la dépendance prod sur le service `migrate` (disabled via profil)
+    depends_on: !reset null
+    networks: !reset null
+
+  traefik:
+    profiles: ["never"]
+
+  cloudflared:
+    profiles: ["never"]

@@ -19,6 +19,20 @@ const COOKIE_NAME = "piloti.session_token";
  * `response.cookies.delete`) parce qu'un `redirect()` depuis un Server Component
  * (layout) ne peut pas modifier les cookies de la réponse.
  */
+/**
+ * Construit un redirect avec Cache-Control: no-store.
+ *
+ * Sans ça, Cloudflare met en cache les 307 servis sur des URLs en `.webp`
+ * (default rules sur les extensions statiques) et ressert le redirect même
+ * quand le client devient authentifié — résultat : les photos d'incident
+ * s'affichent en blanc sur la PWA iOS après le 1er chargement non-authed.
+ */
+function noStoreRedirect(url: URL): NextResponse {
+  const res = NextResponse.redirect(url);
+  res.headers.set("Cache-Control", "no-store, private");
+  return res;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_PATHS.has(pathname);
@@ -26,7 +40,7 @@ export async function proxy(request: NextRequest) {
 
   if (!sessionCookie) {
     if (isPublic) return NextResponse.next();
-    return NextResponse.redirect(new URL("/login", request.url));
+    return noStoreRedirect(new URL("/login", request.url));
   }
 
   const session = await auth.api.getSession({ headers: request.headers });
@@ -37,14 +51,14 @@ export async function proxy(request: NextRequest) {
     // Cookie stale ou compte non-ACTIVE → clear + reroute
     const target = isPublic
       ? NextResponse.next()
-      : NextResponse.redirect(new URL("/login", request.url));
+      : noStoreRedirect(new URL("/login", request.url));
     target.cookies.delete(COOKIE_NAME);
     return target;
   }
 
   // Session ACTIVE sur page publique → dashboard
   if (isPublic) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return noStoreRedirect(new URL("/dashboard", request.url));
   }
 
   return NextResponse.next();
@@ -52,8 +66,13 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Tout sauf : /api/*, /_next/static, /_next/image, /favicon.ico, /uploads/*,
-    // et tout chemin contenant un point (fichier statique).
+    // Routes app — tout sauf : /api/*, /_next/*, /favicon.ico, /uploads/*,
+    // et les fichiers statiques (avec extension).
     "/((?!api|_next/static|_next/image|favicon.ico|uploads|.*\\.[\\w]+).*)",
+    // ...mais on RE-MATCH /uploads/* explicitement pour gater les photos
+    // d'incidents (S-2). Sans session ACTIVE → redirect /login, donc
+    // <img src="/uploads/..."> ne renvoie le binaire qu'à un utilisateur
+    // authentifié (le cookie same-origin part avec la requête image).
+    "/uploads/:path*",
   ],
 };

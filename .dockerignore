@@ -1,0 +1,43 @@
+# Build outputs
+.next
+.next-dev
+out
+build
+
+# Dev databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+prisma/dev.db*
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Local env (jamais shipper en image) — glob pour couvrir TOUS les .env*,
+# y compris .env.production (BETTER_AUTH_SECRET + CLOUDFLARE_TUNNEL_TOKEN).
+# Le compose les passe via --env-file au runtime, l'image n'en a pas besoin.
+.env*
+
+# Git + IDE + OS
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Tests + docs internes
+coverage
+*.test.ts
+*.spec.ts
+
+# Uploads dev — montés en volume en prod
+public/uploads
+
+# CI / Vercel
+.vercel
+.github

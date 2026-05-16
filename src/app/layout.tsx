@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono, Nunito } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -18,6 +18,22 @@ export const metadata: Metadata = {
   title: "Piloti — Gestion matériel scout",
   description:
     "Application de gestion du matériel pour les Scouts et Guides de France.",
+  applicationName: "Piloti",
+  appleWebApp: {
+    capable: true,
+    title: "Piloti",
+    statusBarStyle: "default",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2f5d3a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

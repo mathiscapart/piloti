@@ -21,22 +21,30 @@ export interface AuditContext {
  *
  * Règle invariante du projet : toute mutation de données passe par ce helper
  * pour garantir qu'une trace est créée dans la même transaction que la mutation.
- * Si la mutation échoue, l'AuditLog n'est pas créé non plus (et inversement).
+ *
+ * Le contexte d'audit peut être :
+ *   - Un objet statique : pour les updates / deletes où l'ID est connu d'avance.
+ *   - Une fonction `(result) => AuditContext` : pour les creates où l'ID
+ *     n'existe qu'après l'appel à `fn` (chicken/egg).
+ *
+ * Ordre des arguments choisi pour permettre à TypeScript d'inférer T depuis
+ * `fn` avant de typer le callback `ctx`.
  */
 export async function withAudit<T>(
-  ctx: AuditContext,
   fn: (tx: Tx) => Promise<T>,
+  ctx: AuditContext | ((result: T) => AuditContext),
 ): Promise<T> {
   return db.$transaction(async (tx) => {
     const result = await fn(tx);
+    const resolved = typeof ctx === "function" ? ctx(result) : ctx;
     await tx.auditLog.create({
       data: {
-        action: ctx.action,
-        userId: ctx.userId,
-        equipmentId: ctx.equipmentId ?? null,
-        loanId: ctx.loanId ?? null,
-        incidentId: ctx.incidentId ?? null,
-        metadata: JSON.stringify(ctx.metadata ?? {}),
+        action: resolved.action,
+        userId: resolved.userId,
+        equipmentId: resolved.equipmentId ?? null,
+        loanId: resolved.loanId ?? null,
+        incidentId: resolved.incidentId ?? null,
+        metadata: JSON.stringify(resolved.metadata ?? {}),
       },
     });
     return result;

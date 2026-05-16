@@ -26,17 +26,20 @@ interface AuthCtx {
 
 const ADMIN_ONLY = new Set<Action>([
   "equipment.archive",
-  "loan.return.validate",
   "incident.resolve",
   "admin.access",
   "user.approve",
 ]);
 
+// `loan.return.validate` est en ADMIN_OR_CHEF en V1 (relaxation par rapport
+// à la spec qui prévoyait ADMIN-only avec un workflow Chef-initie/Admin-valide).
+// Le 2e niveau de validation arrivera en V1.5 — voir DECISIONS.md D-008.
 const ADMIN_OR_CHEF = new Set<Action>([
   "equipment.view",
   "equipment.create",
   "equipment.update",
   "loan.create",
+  "loan.return.validate",
   "incident.report",
   "equipment.status.change",
 ]);

@@ -1,12 +1,14 @@
+import type { Prisma } from "@prisma/client";
+
 import { db } from "@/lib/db";
+import type { EquipmentCategory } from "@/lib/enums";
 
 const ACTIVE_LOAN_STATUSES = ["ACTIF", "RETARD", "SECHAGE"] as const;
 
-/**
- * Agrège tout ce dont le dashboard a besoin en un seul appel — `Promise.all`
- * pour exécuter en parallèle, et calculs JS pour les agrégats qui sortent
- * du SQL standard (articles "disponibles" = articles avec au moins 1 unité libre).
- */
+// ----------------------------------------------------------------------------
+// Dashboard
+// ----------------------------------------------------------------------------
+
 export async function getDashboardData() {
   const [equipmentList, activeLoanCount, openIncidentCount, lateLoans] =
     await Promise.all([
@@ -59,3 +61,301 @@ export async function getDashboardData() {
 }
 
 export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
+
+// ----------------------------------------------------------------------------
+// Catalogue (liste)
+// ----------------------------------------------------------------------------
+
+export interface ListEquipmentOpts {
+  search?: string;
+  category?: EquipmentCategory;
+  includeArchived?: boolean;
+}
+
+export async function listEquipment(opts: ListEquipmentOpts = {}) {
+  const where: Prisma.EquipmentWhereInput = {};
+  if (!opts.includeArchived) where.archived = false;
+  if (opts.search && opts.search.trim().length > 0) {
+    where.name = { contains: opts.search.trim() };
+  }
+  if (opts.category) where.category = opts.category;
+
+  const equipment = await db.equipment.findMany({
+    where,
+    orderBy: [{ name: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      condition: true,
+      location: true,
+      photo: true,
+      totalQty: true,
+      archived: true,
+      loans: {
+        where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
+        select: { quantity: true },
+      },
+      incidents: {
+        where: { resolvedAt: null },
+        select: { id: true },
+      },
+    },
+  });
+
+  return equipment.map((eq) => {
+    const loanedQty = eq.loans.reduce((s, l) => s + l.quantity, 0);
+    return {
+      id: eq.id,
+      name: eq.name,
+      category: eq.category,
+      condition: eq.condition,
+      location: eq.location,
+      photo: eq.photo,
+      totalQty: eq.totalQty,
+      archived: eq.archived,
+      loanedQty,
+      availableQty: Math.max(0, eq.totalQty - loanedQty),
+      openIncidentCount: eq.incidents.length,
+    };
+  });
+}
+
+export type EquipmentListItem = Awaited<ReturnType<typeof listEquipment>>[number];
+
+// ----------------------------------------------------------------------------
+// Catalogue (détail)
+// ----------------------------------------------------------------------------
+
+export async function getEquipmentDetail(id: string) {
+  const eq = await db.equipment.findUnique({
+    where: { id },
+    include: {
+      loans: {
+        orderBy: { startDate: "desc" },
+        take: 30,
+        include: {
+          borrower: { select: { firstName: true, lastName: true } },
+          returnedBy: { select: { firstName: true, lastName: true } },
+        },
+      },
+      incidents: {
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        include: {
+          reporter: { select: { firstName: true, lastName: true } },
+          resolvedBy: { select: { firstName: true, lastName: true } },
+        },
+      },
+      auditLogs: {
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        include: {
+          user: { select: { firstName: true, lastName: true } },
+        },
+      },
+    },
+  });
+
+  if (!eq) return null;
+
+  const activeLoans = eq.loans.filter((l) =>
+    ACTIVE_LOAN_STATUSES.includes(l.status as (typeof ACTIVE_LOAN_STATUSES)[number]),
+  );
+  const loanedQty = activeLoans.reduce((s, l) => s + l.quantity, 0);
+  const inRepairQty = eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE" ? eq.totalQty : 0;
+  const availableQty = Math.max(0, eq.totalQty - loanedQty - inRepairQty);
+
+  return {
+    ...eq,
+    stats: {
+      totalQty: eq.totalQty,
+      availableQty,
+      loanedQty,
+      inRepairQty,
+    },
+    openIncidentCount: eq.incidents.filter((i) => !i.resolvedAt).length,
+  };
+}
+
+export type EquipmentDetail = NonNullable<
+  Awaited<ReturnType<typeof getEquipmentDetail>>
+>;
+
+// ----------------------------------------------------------------------------
+// Loans — liste & détail
+// ----------------------------------------------------------------------------
+
+export type LoanFilter = "all" | "retard" | "bientot" | "sechage" | "actifs";
+
+export async function listLoans(filter: LoanFilter = "all") {
+  const now = new Date();
+  const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+  const where: Prisma.LoanWhereInput = {};
+
+  switch (filter) {
+    case "retard":
+      where.OR = [
+        { status: "RETARD" },
+        { AND: [{ status: "ACTIF" }, { expectedReturn: { lt: now } }] },
+      ];
+      break;
+    case "bientot":
+      where.status = "ACTIF";
+      where.expectedReturn = { gte: now, lte: in3Days };
+      break;
+    case "sechage":
+      where.status = "SECHAGE";
+      break;
+    case "actifs":
+      where.status = { in: ["ACTIF", "RETARD", "SECHAGE"] };
+      break;
+    case "all":
+    default:
+      // Pas de filtre — on prend tous les statuts sauf RETOURNE par défaut ?
+      // Spec dit "Tous" = on inclut tout, mais avec un ordre logique.
+      break;
+  }
+
+  const loans = await db.loan.findMany({
+    where,
+    orderBy: [
+      { status: "asc" }, // ACTIF < RETARD alphabétiquement, mais ce n'est pas l'ordre métier
+      { expectedReturn: "asc" },
+    ],
+    include: {
+      equipment: { select: { id: true, name: true, category: true } },
+      borrower: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+        },
+      },
+    },
+  });
+
+  return loans;
+}
+
+export type LoanListItem = Awaited<ReturnType<typeof listLoans>>[number];
+
+export async function getLoanDetail(id: string) {
+  return db.loan.findUnique({
+    where: { id },
+    include: {
+      equipment: {
+        select: { id: true, name: true, category: true, condition: true },
+      },
+      borrower: {
+        select: { firstName: true, lastName: true, phone: true },
+      },
+      returnedBy: { select: { firstName: true, lastName: true } },
+    },
+  });
+}
+
+// Équipement sélectionnable au step 1 du wizard. Inclut tout (archived false),
+// marque comme "déjà en cours" ceux qui ont un prêt ACTIF/RETARD/SECHAGE,
+// ou qui sont HORS_SERVICE/A_REPARER.
+export async function listBorrowableEquipment(search?: string) {
+  const where: Prisma.EquipmentWhereInput = { archived: false };
+  if (search && search.trim().length > 0) {
+    where.name = { contains: search.trim() };
+  }
+
+  const equipment = await db.equipment.findMany({
+    where,
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      condition: true,
+      totalQty: true,
+      photo: true,
+      location: true,
+      loans: {
+        where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
+        select: { quantity: true },
+      },
+    },
+  });
+
+  return equipment.map((eq) => {
+    const loanedQty = eq.loans.reduce((s, l) => s + l.quantity, 0);
+    const availableQty = Math.max(0, eq.totalQty - loanedQty);
+    const isBroken =
+      eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE";
+    return {
+      id: eq.id,
+      name: eq.name,
+      category: eq.category,
+      condition: eq.condition,
+      totalQty: eq.totalQty,
+      photo: eq.photo,
+      location: eq.location,
+      availableQty,
+      disabled: availableQty <= 0 || isBroken,
+      disabledReason: isBroken
+        ? eq.condition === "HORS_SERVICE"
+          ? "Hors service"
+          : "À réparer"
+        : availableQty <= 0
+          ? "Déjà prêté"
+          : undefined,
+    };
+  });
+}
+
+export type BorrowableEquipment = Awaited<
+  ReturnType<typeof listBorrowableEquipment>
+>[number];
+
+// Utilisateurs candidats à devenir emprunteur. ACTIVE only.
+export async function listBorrowers() {
+  return db.user.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      role: true,
+      unit: true,
+    },
+  });
+}
+
+export type BorrowerOption = Awaited<ReturnType<typeof listBorrowers>>[number];
+
+// ----------------------------------------------------------------------------
+// Incidents — liste & détail
+// ----------------------------------------------------------------------------
+
+export type IncidentStatusFilter = "open" | "resolved" | "all";
+export type IncidentSeverityFilter = "all" | "BLOQUANT" | "GENANT" | "MINEUR";
+
+export async function listIncidents(opts: {
+  status?: IncidentStatusFilter;
+  severity?: IncidentSeverityFilter;
+} = {}) {
+  const where: Prisma.IncidentWhereInput = {};
+  if (opts.status === "open") where.resolvedAt = null;
+  if (opts.status === "resolved") where.resolvedAt = { not: null };
+  if (opts.severity && opts.severity !== "all") where.severity = opts.severity;
+
+  return db.incident.findMany({
+    where,
+    orderBy: [{ resolvedAt: { sort: "asc", nulls: "first" } }, { createdAt: "desc" }],
+    include: {
+      equipment: { select: { id: true, name: true, category: true } },
+      reporter: { select: { firstName: true, lastName: true } },
+      resolvedBy: { select: { firstName: true, lastName: true } },
+    },
+  });
+}
+
+export type IncidentListItem = Awaited<ReturnType<typeof listIncidents>>[number];

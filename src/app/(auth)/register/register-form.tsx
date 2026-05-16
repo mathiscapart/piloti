@@ -24,6 +24,7 @@ const UNIT_LABELS: Record<(typeof UNITS)[number], string> = {
   ROUGES: "Rouges (8-11 ans)",
   PIOS: "Pionniers (14-17 ans)",
   COMPAS: "Compagnons (17-21 ans)",
+  VIOLETS: "Violets (chefs et responsables)",
 };
 
 export function RegisterForm() {

@@ -1,0 +1,43 @@
+# Piloti — middlewares Traefik (chargés via providers.file).
+# Référencés dans docker-compose.yml par `security-headers@file`.
+
+http:
+  middlewares:
+    security-headers:
+      headers:
+        # HSTS : force HTTPS via Cloudflare. La terminaison TLS est faite par
+        # l'edge Cloudflare ; le tunnel + Traefik voient HTTP côté serveur.
+        # On envoie quand même le header car le navigateur lit en HTTPS.
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+
+        # Anti-clickjacking + sniffing
+        frameDeny: true
+        contentTypeNosniff: true
+
+        # Referrer policy stricte (jamais exposer le chemin complet au tiers)
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+        # CSP minimaliste — adapter quand on ajoutera des CDN externes
+        contentSecurityPolicy: >-
+          default-src 'self';
+          img-src 'self' data: blob:;
+          font-src 'self' https://fonts.gstatic.com data:;
+          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+          script-src 'self' 'unsafe-inline';
+          connect-src 'self';
+          frame-ancestors 'none';
+          base-uri 'self';
+          form-action 'self';
+
+        # Désactive l'API de géolocalisation/caméra/micro par défaut (à
+        # affiner si on a besoin de la caméra mobile pour upload incident —
+        # l'input type=file capture="environment" ne passe pas par Permissions-Policy)
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+
+        # X-Powered-By etc. → on les neutralise
+        customResponseHeaders:
+          server: ""
+          x-powered-by: ""

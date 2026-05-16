@@ -1,0 +1,17 @@
+# Piloti — configuration statique Traefik.
+# La plupart de la config est passée en CLI dans docker-compose.yml pour
+# éviter de monter ce fichier ; on garde celui-ci comme documentation et
+# point d'entrée pour futurs override (par ex. metrics, certificats).
+
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+ping:
+  entryPoint: web
+
+# Providers et entryPoints sont définis via CLI dans docker-compose.yml
+# (providers.docker, providers.file, entrypoints.web).

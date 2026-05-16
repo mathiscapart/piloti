@@ -1,0 +1,135 @@
+# Piloti — stack prod.
+#
+# Architecture : Internet → Cloudflare CDN/WAF → cloudflared tunnel
+#                 → Traefik → app Next.js
+#
+# ZERO port exposé sur la machine hôte. Tout trafic entrant transite par
+# le tunnel Cloudflare (chiffré, NAT-traversal, sans IP publique).
+#
+# Démarrage :
+#   cp .env.example .env  &&  $EDITOR .env
+#   docker compose build
+#   docker compose up -d
+#
+# Logs :       docker compose logs -f app
+# Migration :  appliquée automatiquement par le service `migrate` au boot.
+
+services:
+  # ---------------------------------------------------------------------------
+  # Migrations Prisma — one-shot, exit 0, l'app ne démarre qu'après.
+  # ---------------------------------------------------------------------------
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: piloti:migrate
+    environment:
+      DATABASE_URL: file:/data/piloti.db
+    volumes:
+      - piloti-data:/data
+    networks:
+      - internal
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # App Next.js. Pas de `ports:` → uniquement accessible via Traefik.
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      target: runner
+    image: piloti:latest
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: file:/data/piloti.db
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET manquant}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL manquant}
+    volumes:
+      - piloti-data:/data
+      - piloti-uploads:/app/public/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
+    networks:
+      - internal
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=piloti_internal"
+      - "traefik.http.routers.piloti.rule=Host(`${TRAEFIK_DOMAIN:?TRAEFIK_DOMAIN manquant}`)"
+      - "traefik.http.routers.piloti.entrypoints=web"
+      - "traefik.http.routers.piloti.middlewares=security-headers@file"
+      - "traefik.http.services.piloti.loadbalancer.server.port=3000"
+
+  # ---------------------------------------------------------------------------
+  # Traefik — reverse proxy interne. Pas de dashboard exposé en prod.
+  # ---------------------------------------------------------------------------
+  traefik:
+    # v3.6 nécessaire pour parler à un daemon Docker Engine 29+ (API >= 1.45).
+    # v3.3 négocie API 1.24 en dur et plante en startup avec Docker 29.
+    image: traefik:v3.6
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=piloti_internal"
+      - "--providers.file.directory=/etc/traefik/config"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--ping=true"
+      # Pas de --api.dashboard=true → pas d'exposition admin
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/config:/etc/traefik/config:ro
+    # SELinux (Fedora/RHEL) bloque l'accès au docker.sock depuis le conteneur.
+    # On désactive le label SELinux uniquement pour ce service — Traefik est
+    # déjà confiné par son réseau (pas de port exposé) + un sock en read-only.
+    security_opt:
+      - label=disable
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - internal
+      - tunnel
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Cloudflared — tunnel sortant vers Cloudflare. Token-based.
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:2025.4.0
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN manquant}
+    healthcheck:
+      test: ["CMD", "cloudflared", "--version"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tunnel
+    restart: unless-stopped
+    depends_on:
+      traefik:
+        condition: service_healthy
+
+networks:
+  # Réseau "internal" — TOTALEMENT isolé d'Internet. app↔traefik uniquement.
+  # `internal: true` empêche l'app de faire des appels sortants intempestifs.
+  internal:
+    internal: true
+  # Réseau "tunnel" — non-internal car cloudflared a besoin d'Internet pour
+  # joindre l'edge Cloudflare. traefik est dual-homed sur les 2 réseaux.
+  tunnel:
+
+volumes:
+  piloti-data:
+  piloti-uploads:

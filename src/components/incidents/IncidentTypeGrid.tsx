@@ -2,17 +2,16 @@
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import type { EquipmentCategory } from "@/lib/enums";
-import { INCIDENT_TYPES_BY_CATEGORY } from "@/lib/incident-categories";
+import { getIncidentTypes } from "@/lib/incident-categories";
 
 interface Props {
-  category: EquipmentCategory | undefined;
+  category: string | undefined;
   selected: Set<string>;
   onToggle: (value: string) => void;
 }
 
 export function IncidentTypeGrid({ category, selected, onToggle }: Props) {
-  const options = category ? INCIDENT_TYPES_BY_CATEGORY[category] : [];
+  const options = category ? getIncidentTypes(category) : [];
 
   if (options.length === 0) {
     return (

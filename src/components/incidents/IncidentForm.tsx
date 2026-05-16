@@ -16,8 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { EquipmentCategory, IncidentSeverity } from "@/lib/enums";
-import type { ActionResult } from "@/modules/inventory/actions";
+import type { IncidentSeverity } from "@/lib/enums";
+import type { ActionResult } from "@/lib/types";
 import { createIncident } from "@/modules/inventory/incident-actions";
 
 const initialState: ActionResult = { error: null };
@@ -25,7 +25,7 @@ const initialState: ActionResult = { error: null };
 export interface EquipmentOption {
   id: string;
   name: string;
-  category: EquipmentCategory | string;
+  category: string;
 }
 
 interface IncidentFormProps {
@@ -99,9 +99,7 @@ export function IncidentForm({
       <div className="space-y-2">
         <Label>Type(s) de problème</Label>
         <IncidentTypeGrid
-          category={
-            selectedEquipment?.category as EquipmentCategory | undefined
-          }
+          category={selectedEquipment?.category}
           selected={types}
           onToggle={toggleType}
         />

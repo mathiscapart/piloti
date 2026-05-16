@@ -19,12 +19,19 @@ function daysOverdue(expectedReturn: Date): number {
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 }
 
-export function LoanCard({ loan }: { loan: LoanListItem }) {
+export function LoanCard({
+  loan,
+  dryableCategories,
+}: {
+  loan: LoanListItem;
+  dryableCategories: Set<string>;
+}) {
   const isLate =
     loan.status === "RETARD" ||
     (loan.status === "ACTIF" && loan.expectedReturn < new Date());
   const overdue = isLate ? daysOverdue(loan.expectedReturn) : 0;
   const canAct = loan.status === "ACTIF" || loan.status === "RETARD";
+  const canDry = canAct && dryableCategories.has(loan.equipment.category);
 
   return (
     <article
@@ -33,7 +40,7 @@ export function LoanCard({ loan }: { loan: LoanListItem }) {
         isLate && "border-l-4 border-brick",
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -71,7 +78,7 @@ export function LoanCard({ loan }: { loan: LoanListItem }) {
           ) : null}
         </div>
 
-        <div className="flex flex-shrink-0 flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 md:flex-shrink-0">
           {loan.borrower.phone ? (
             <Button asChild variant="outline" size="sm">
               <a href={`tel:${loan.borrower.phone.replace(/\s/g, "")}`}>
@@ -80,7 +87,7 @@ export function LoanCard({ loan }: { loan: LoanListItem }) {
               </a>
             </Button>
           ) : null}
-          {canAct ? <DryingDialog loanId={loan.id} /> : null}
+          {canDry ? <DryingDialog loanId={loan.id} /> : null}
           {loan.status !== "RETOURNE" ? (
             <Button asChild size="sm">
               <Link href={`/prets/${loan.id}/retour`}>

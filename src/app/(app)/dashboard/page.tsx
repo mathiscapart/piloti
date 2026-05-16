@@ -9,6 +9,7 @@ import {
 import Link from "next/link";
 
 import { KpiCard } from "@/components/dashboard/KpiCard";
+import { WaterFootprint } from "@/components/dashboard/WaterFootprint";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/get-current-user";
@@ -44,6 +45,31 @@ export default async function DashboardPage() {
         </h1>
         <p className="text-trail">Voici l&apos;état du matériel aujourd&apos;hui.</p>
       </header>
+
+      {/* Empreinte eau IA */}
+      <WaterFootprint />
+
+      {/* Actions rapides */}
+      <section className="grid gap-3 md:grid-cols-3">
+        <Button asChild size="lg" className="w-full">
+          <Link href="/prets/nouveau">
+            <Plus className="size-4" />
+            Nouveau prêt
+          </Link>
+        </Button>
+        <Button asChild size="lg" variant="destructive" className="w-full">
+          <Link href="/incidents/nouveau">
+            <AlertTriangle className="size-4" />
+            Signaler incident
+          </Link>
+        </Button>
+        <Button asChild size="lg" variant="info" className="w-full">
+          <Link href="/stock">
+            <Package className="size-4" />
+            Voir le stock
+          </Link>
+        </Button>
+      </section>
 
       {/* KPIs */}
       <section className="grid grid-cols-2 gap-3 md:gap-4">
@@ -153,27 +179,6 @@ export default async function DashboardPage() {
         )}
       </section>
 
-      {/* Actions rapides */}
-      <section className="grid gap-3 md:grid-cols-3">
-        <Button asChild size="lg" className="w-full">
-          <Link href="/prets/nouveau">
-            <Plus className="size-4" />
-            Nouveau prêt
-          </Link>
-        </Button>
-        <Button asChild size="lg" variant="destructive" className="w-full">
-          <Link href="/incidents/nouveau">
-            <AlertTriangle className="size-4" />
-            Signaler incident
-          </Link>
-        </Button>
-        <Button asChild size="lg" variant="info" className="w-full">
-          <Link href="/stock">
-            <Package className="size-4" />
-            Voir le stock
-          </Link>
-        </Button>
-      </section>
     </div>
   );
 }

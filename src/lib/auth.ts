@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
+import { Resend } from "resend";
 
 import { db } from "@/lib/db";
 
@@ -24,7 +25,26 @@ export const auth = betterAuth({
     // Pas d'autoSignIn : un nouveau compte est PENDING par défaut et ne doit pas
     // recevoir de session tant qu'un ADMIN ne l'a pas validé.
     autoSignIn: false,
-    minPasswordLength: 8,
+    minPasswordLength: 12,
+    // Révoque toutes les sessions existantes quand un mot de passe est réinitialisé.
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, url }) => {
+      const fromEmail =
+        process.env.RESEND_FROM_EMAIL ?? "noreply@piloti.mathiscapart.xyz";
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: fromEmail,
+        to: user.email,
+        subject: "Réinitialisation de votre mot de passe Piloti",
+        html: `
+          <p>Bonjour ${user.name},</p>
+          <p>Vous avez demandé la réinitialisation de votre mot de passe Piloti.</p>
+          <p>Cliquez sur ce lien pour choisir un nouveau mot de passe (valable 1 heure) :</p>
+          <p><a href="${url}" style="color:#1a7a4a;font-weight:bold;">${url}</a></p>
+          <p style="color:#888;font-size:12px;">Si vous n'avez pas fait cette demande, ignorez cet email.</p>
+        `,
+      });
+    },
   },
 
   // Champs Piloti exposés via le User table (cf. prisma/schema.prisma)

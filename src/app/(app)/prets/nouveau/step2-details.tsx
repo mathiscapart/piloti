@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createLoan } from "@/modules/inventory/loan-actions";
-import type { ActionResult } from "@/modules/inventory/actions";
+import type { ActionResult } from "@/lib/types";
 import type {
   BorrowableEquipment,
   BorrowerOption,
@@ -79,7 +79,7 @@ export function Step2Details({ selectedEquipment, borrowers }: Props) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label htmlFor="startDate">Date de départ</Label>
           <Input
             id="startDate"
@@ -87,9 +87,10 @@ export function Step2Details({ selectedEquipment, borrowers }: Props) {
             type="date"
             required
             defaultValue={today()}
+            className="w-full"
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label htmlFor="expectedReturn">Date de retour prévue</Label>
           <Input
             id="expectedReturn"
@@ -97,6 +98,7 @@ export function Step2Details({ selectedEquipment, borrowers }: Props) {
             type="date"
             required
             defaultValue={inDays(7)}
+            className="w-full"
           />
         </div>
       </div>

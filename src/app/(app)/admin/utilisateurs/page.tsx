@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import { listManageableUsers } from "@/modules/admin/queries";
 
 import {
+  ChangePasswordDialog,
+  DeleteUserButton,
   ReactivateButton,
   RoleSelect,
   SuspendButton,
@@ -38,30 +40,22 @@ export default async function AdminUtilisateursPage() {
           description="Aucun compte ACTIVE ni SUSPENDED."
         />
       ) : (
-        <div className="overflow-hidden rounded-2xl bg-snow shadow-card">
-          <table className="w-full text-sm">
-            <thead className="border-b border-stone bg-sand text-left text-xs font-bold uppercase tracking-wider text-trail">
-              <tr>
-                <th className="px-4 py-3">Membre</th>
-                <th className="hidden px-4 py-3 md:table-cell">Unité</th>
-                <th className="px-4 py-3">Rôle</th>
-                <th className="px-4 py-3">Statut</th>
-                <th className="px-4 py-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => {
-                const isSelf = u.id === currentUser.id;
-                const suspended = u.status === "SUSPENDED";
-                return (
-                  <tr
-                    key={u.id}
-                    className={cn(
-                      "border-t border-stone/60",
-                      suspended && "opacity-60",
-                    )}
-                  >
-                    <td className="px-4 py-3">
+        <>
+          {/* Mobile : cartes */}
+          <ul className="space-y-3 md:hidden">
+            {users.map((u) => {
+              const isSelf = u.id === currentUser.id;
+              const suspended = u.status === "SUSPENDED";
+              return (
+                <li
+                  key={u.id}
+                  className={cn(
+                    "rounded-2xl bg-snow p-4 shadow-card space-y-3",
+                    suspended && "opacity-60",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
                       <p className="font-bold text-earth">
                         {u.firstName} {u.lastName}
                         {isSelf ? (
@@ -71,50 +65,108 @@ export default async function AdminUtilisateursPage() {
                         ) : null}
                       </p>
                       <p className="text-xs text-trail">{u.email}</p>
-                    </td>
-                    <td className="hidden px-4 py-3 text-trail md:table-cell">
-                      {u.unit ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <RoleSelect
-                        userId={u.id}
-                        role={u.role}
-                        disabled={isSelf}
-                      />
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold",
-                          suspended
-                            ? "bg-brick-soft text-brick-ink"
-                            : "bg-forest-soft text-forest-ink",
-                        )}
-                      >
-                        {suspended ? "Suspendu" : "Actif"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {isSelf ? (
-                        <span className="text-xs text-trail">—</span>
-                      ) : suspended ? (
-                        <ReactivateButton
-                          userId={u.id}
-                          fullName={`${u.firstName} ${u.lastName}`}
-                        />
-                      ) : (
-                        <SuspendButton
-                          userId={u.id}
-                          fullName={`${u.firstName} ${u.lastName}`}
-                        />
+                      {u.unit ? <p className="text-xs text-trail">{u.unit}</p> : null}
+                    </div>
+                    <span
+                      className={cn(
+                        "shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold",
+                        suspended ? "bg-brick-soft text-brick-ink" : "bg-forest-soft text-forest-ink",
                       )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    >
+                      {suspended ? "Suspendu" : "Actif"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <RoleSelect userId={u.id} role={u.role} disabled={isSelf} />
+                    {!isSelf && (
+                      suspended ? (
+                        <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                      ) : (
+                        <SuspendButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                      )
+                    )}
+                    {!isSelf && (
+                      <ChangePasswordDialog userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                    )}
+                    {!isSelf && (
+                      <DeleteUserButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Desktop : tableau */}
+          <div className="hidden overflow-hidden rounded-2xl bg-snow shadow-card md:block">
+            <table className="w-full text-sm">
+              <thead className="border-b border-stone bg-sand text-left text-xs font-bold uppercase tracking-wider text-trail">
+                <tr>
+                  <th className="px-4 py-3">Membre</th>
+                  <th className="px-4 py-3">Unité</th>
+                  <th className="px-4 py-3">Rôle</th>
+                  <th className="px-4 py-3">Statut</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => {
+                  const isSelf = u.id === currentUser.id;
+                  const suspended = u.status === "SUSPENDED";
+                  return (
+                    <tr
+                      key={u.id}
+                      className={cn("border-t border-stone/60", suspended && "opacity-60")}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-bold text-earth">
+                          {u.firstName} {u.lastName}
+                          {isSelf ? (
+                            <span className="ml-1 rounded-full bg-sand px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-trail">
+                              toi
+                            </span>
+                          ) : null}
+                        </p>
+                        <p className="text-xs text-trail">{u.email}</p>
+                      </td>
+                      <td className="px-4 py-3 text-trail">{u.unit ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        <RoleSelect userId={u.id} role={u.role} disabled={isSelf} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold",
+                            suspended ? "bg-brick-soft text-brick-ink" : "bg-forest-soft text-forest-ink",
+                          )}
+                        >
+                          {suspended ? "Suspendu" : "Actif"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {isSelf ? (
+                            <span className="text-xs text-trail">—</span>
+                          ) : (
+                            <>
+                              {suspended ? (
+                                <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                              ) : (
+                                <SuspendButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                              )}
+                              <ChangePasswordDialog userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                              <DeleteUserButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { returnLoan } from "@/modules/inventory/loan-actions";
-import type { ActionResult } from "@/modules/inventory/actions";
+import type { ActionResult } from "@/lib/types";
 import {
   RETURN_CONDITIONS,
   RETURN_CONDITION_LABEL,

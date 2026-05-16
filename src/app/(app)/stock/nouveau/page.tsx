@@ -3,8 +3,11 @@ import Link from "next/link";
 
 import { EquipmentForm } from "@/components/equipment/EquipmentForm";
 import { createEquipment } from "@/modules/inventory/actions";
+import { listCategories } from "@/modules/inventory/queries";
 
-export default function NewEquipmentPage() {
+export default async function NewEquipmentPage() {
+  const categories = await listCategories();
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <header className="space-y-2">
@@ -24,6 +27,7 @@ export default function NewEquipmentPage() {
 
       <EquipmentForm
         action={createEquipment}
+        categories={categories}
         submitLabel="Créer l'article"
         pendingLabel="Création…"
       />

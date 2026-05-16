@@ -13,15 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  EQUIPMENT_CATEGORIES,
-  EQUIPMENT_CONDITIONS,
-} from "@/lib/enums";
-import {
-  CATEGORY_LABEL,
-  CONDITION_LABEL,
-} from "@/modules/inventory/types";
-import type { ActionResult } from "@/modules/inventory/actions";
+import { EQUIPMENT_CONDITIONS } from "@/lib/enums";
+import { CONDITION_LABEL } from "@/modules/inventory/types";
+import type { CategoryRow } from "@/modules/inventory/queries";
+import type { ActionResult } from "@/lib/types";
 
 interface InitialValues {
   name?: string;
@@ -38,6 +33,7 @@ interface EquipmentFormProps {
     state: ActionResult,
     formData: FormData,
   ) => Promise<ActionResult>;
+  categories: CategoryRow[];
   initial?: InitialValues;
   submitLabel: string;
   pendingLabel: string;
@@ -47,6 +43,7 @@ const initialState: ActionResult = { error: null };
 
 export function EquipmentForm({
   action,
+  categories,
   initial,
   submitLabel,
   pendingLabel,
@@ -69,14 +66,14 @@ export function EquipmentForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="category">Catégorie</Label>
-          <Select name="category" defaultValue={initial?.category ?? "TENTE"}>
+          <Select name="category" defaultValue={initial?.category ?? categories[0]?.slug ?? ""}>
             <SelectTrigger id="category">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {EQUIPMENT_CATEGORIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {CATEGORY_LABEL[c]}
+              {categories.map((c) => (
+                <SelectItem key={c.slug} value={c.slug}>
+                  {c.label}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { LoanCard } from "@/components/loans/LoanCard";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
-import { listLoans, type LoanFilter } from "@/modules/inventory/queries";
+import { listLoans, listCategories, type LoanFilter } from "@/modules/inventory/queries";
 
 const FILTERS: { value: LoanFilter; label: string }[] = [
   { value: "all", label: "Tous" },
@@ -26,18 +26,33 @@ export default async function PretsPage({ searchParams }: PageProps) {
     ? (raw as LoanFilter)
     : "all";
 
-  const loans = await listLoans(filter);
+  const [loans, categories] = await Promise.all([
+    listLoans(filter),
+    listCategories(),
+  ]);
+  const dryableCategories = new Set(
+    categories.filter((c) => c.canDry).map((c) => c.slug),
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <header>
-        <h1 className="text-3xl font-black text-earth md:text-4xl">Prêts</h1>
-        <p className="text-trail">
-          {loans.length} prêt{loans.length > 1 ? "s" : ""}
-          {filter !== "all"
-            ? ` · ${FILTERS.find((f) => f.value === filter)?.label}`
-            : ""}
-        </p>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-black text-earth md:text-4xl">Prêts</h1>
+          <p className="text-trail">
+            {loans.length} prêt{loans.length > 1 ? "s" : ""}
+            {filter !== "all"
+              ? ` · ${FILTERS.find((f) => f.value === filter)?.label}`
+              : ""}
+          </p>
+        </div>
+        <Link
+          href="/prets/nouveau"
+          className="inline-flex items-center gap-2 rounded-full bg-forest px-4 py-2 text-sm font-bold text-snow shadow-sm transition-colors hover:bg-forest/90"
+        >
+          <Plus className="size-4" />
+          Nouveau prêt
+        </Link>
       </header>
 
       <nav
@@ -72,7 +87,7 @@ export default async function PretsPage({ searchParams }: PageProps) {
           title={filter === "all" ? "Aucun prêt enregistré" : "Aucun prêt dans ce filtre"}
           description={
             filter === "all"
-              ? "Enregistre un prêt depuis le bouton + en bas à droite."
+              ? "Enregistre un prêt depuis le bouton « Nouveau prêt »."
               : "Essaie un autre filtre."
           }
         />
@@ -80,19 +95,12 @@ export default async function PretsPage({ searchParams }: PageProps) {
         <ul className="space-y-3">
           {loans.map((loan) => (
             <li key={loan.id}>
-              <LoanCard loan={loan} />
+              <LoanCard loan={loan} dryableCategories={dryableCategories} />
             </li>
           ))}
         </ul>
       )}
 
-      <Link
-        href="/prets/nouveau"
-        aria-label="Enregistrer un prêt"
-        className="fixed bottom-24 right-5 z-20 flex size-14 items-center justify-center rounded-full bg-forest text-snow shadow-elevated transition-colors hover:bg-forest/90 md:bottom-8 md:right-8"
-      >
-        <Plus className="size-6" />
-      </Link>
     </div>
   );
 }

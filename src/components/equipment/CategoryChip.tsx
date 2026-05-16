@@ -9,10 +9,8 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { EquipmentCategory } from "@/lib/enums";
-import { CATEGORY_LABEL } from "@/modules/inventory/types";
 
-const ICON: Record<EquipmentCategory, LucideIcon> = {
+const ICON: Record<string, LucideIcon> = {
   TENTE: Tent,
   MALLE: Box,
   CUISINE: UtensilsCrossed,
@@ -23,13 +21,14 @@ const ICON: Record<EquipmentCategory, LucideIcon> = {
 
 export function CategoryChip({
   category,
+  label,
   className,
 }: {
-  category: EquipmentCategory | string;
+  category: string;
+  label?: string;
   className?: string;
 }) {
-  const Icon = ICON[category as EquipmentCategory] ?? Package;
-  const label = CATEGORY_LABEL[category as EquipmentCategory] ?? category;
+  const Icon = ICON[category] ?? Package;
   return (
     <span
       className={cn(
@@ -38,7 +37,7 @@ export function CategoryChip({
       )}
     >
       <Icon className="size-3.5" />
-      {label}
+      {label ?? category}
     </span>
   );
 }
@@ -47,9 +46,9 @@ export function CategoryIcon({
   category,
   className,
 }: {
-  category: EquipmentCategory | string;
+  category: string;
   className?: string;
 }) {
-  const Icon = ICON[category as EquipmentCategory] ?? Package;
+  const Icon = ICON[category] ?? Package;
   return <Icon className={className} />;
 }

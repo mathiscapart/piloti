@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { markAsDrying } from "@/modules/inventory/loan-actions";
-import type { ActionResult } from "@/modules/inventory/actions";
+import type { ActionResult } from "@/lib/types";
 
 const initialState: ActionResult = { error: null };
 

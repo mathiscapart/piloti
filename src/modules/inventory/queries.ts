@@ -1,9 +1,10 @@
 import type { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import type { EquipmentCategory } from "@/lib/enums";
+import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 
-const ACTIVE_LOAN_STATUSES = ["ACTIF", "RETARD", "SECHAGE"] as const;
+// Days ahead used to flag loans as "coming due soon" on the dashboard.
+const UPCOMING_DUE_DAYS = 3;
 
 // ----------------------------------------------------------------------------
 // Dashboard
@@ -68,7 +69,7 @@ export type DashboardData = Awaited<ReturnType<typeof getDashboardData>>;
 
 export interface ListEquipmentOpts {
   search?: string;
-  category?: EquipmentCategory;
+  category?: string;
   includeArchived?: boolean;
 }
 
@@ -104,7 +105,7 @@ export async function listEquipment(opts: ListEquipmentOpts = {}) {
   });
 
   return equipment.map((eq) => {
-    const loanedQty = eq.loans.reduce((s, l) => s + l.quantity, 0);
+    const loanedQty = eq.loans.reduce((sum, loan) => sum + loan.quantity, 0);
     return {
       id: eq.id,
       name: eq.name,
@@ -162,7 +163,7 @@ export async function getEquipmentDetail(id: string) {
   const activeLoans = eq.loans.filter((l) =>
     ACTIVE_LOAN_STATUSES.includes(l.status as (typeof ACTIVE_LOAN_STATUSES)[number]),
   );
-  const loanedQty = activeLoans.reduce((s, l) => s + l.quantity, 0);
+  const loanedQty = activeLoans.reduce((sum, loan) => sum + loan.quantity, 0);
   const inRepairQty = eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE" ? eq.totalQty : 0;
   const availableQty = Math.max(0, eq.totalQty - loanedQty - inRepairQty);
 
@@ -183,6 +184,16 @@ export type EquipmentDetail = NonNullable<
 >;
 
 // ----------------------------------------------------------------------------
+// Categories
+// ----------------------------------------------------------------------------
+
+export async function listCategories() {
+  return db.category.findMany({ orderBy: [{ order: "asc" }, { label: "asc" }] });
+}
+
+export type CategoryRow = Awaited<ReturnType<typeof listCategories>>[number];
+
+// ----------------------------------------------------------------------------
 // Loans — liste & détail
 // ----------------------------------------------------------------------------
 
@@ -190,7 +201,7 @@ export type LoanFilter = "all" | "retard" | "bientot" | "sechage" | "actifs";
 
 export async function listLoans(filter: LoanFilter = "all") {
   const now = new Date();
-  const in3Days = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  const inNDays = new Date(now.getTime() + UPCOMING_DUE_DAYS * 24 * 60 * 60 * 1000);
 
   const where: Prisma.LoanWhereInput = {};
 
@@ -203,7 +214,7 @@ export async function listLoans(filter: LoanFilter = "all") {
       break;
     case "bientot":
       where.status = "ACTIF";
-      where.expectedReturn = { gte: now, lte: in3Days };
+      where.expectedReturn = { gte: now, lte: inNDays };
       break;
     case "sechage":
       where.status = "SECHAGE";
@@ -213,17 +224,13 @@ export async function listLoans(filter: LoanFilter = "all") {
       break;
     case "all":
     default:
-      // Pas de filtre — on prend tous les statuts sauf RETOURNE par défaut ?
-      // Spec dit "Tous" = on inclut tout, mais avec un ordre logique.
+      // No filter: returns all statuses including RETOURNE (closed loans).
       break;
   }
 
   const loans = await db.loan.findMany({
     where,
-    orderBy: [
-      { status: "asc" }, // ACTIF < RETARD alphabétiquement, mais ce n'est pas l'ordre métier
-      { expectedReturn: "asc" },
-    ],
+    orderBy: [{ expectedReturn: "asc" }],
     include: {
       equipment: { select: { id: true, name: true, category: true } },
       borrower: {
@@ -285,7 +292,7 @@ export async function listBorrowableEquipment(search?: string) {
   });
 
   return equipment.map((eq) => {
-    const loanedQty = eq.loans.reduce((s, l) => s + l.quantity, 0);
+    const loanedQty = eq.loans.reduce((sum, loan) => sum + loan.quantity, 0);
     const availableQty = Math.max(0, eq.totalQty - loanedQty);
     const isBroken =
       eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE";

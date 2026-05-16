@@ -6,6 +6,7 @@ import { EquipmentForm } from "@/components/equipment/EquipmentForm";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { updateEquipment } from "@/modules/inventory/actions";
+import { listCategories } from "@/modules/inventory/queries";
 import { db } from "@/lib/db";
 
 import { ArchiveButton } from "./archive-button";
@@ -17,7 +18,10 @@ interface PageProps {
 export default async function EditEquipmentPage({ params }: PageProps) {
   const { id } = await params;
   const user = await getCurrentUser();
-  const eq = await db.equipment.findUnique({ where: { id } });
+  const [eq, categories] = await Promise.all([
+    db.equipment.findUnique({ where: { id } }),
+    listCategories(),
+  ]);
   if (!eq) notFound();
 
   // Server Action curryfiée avec l'id (Next.js Server Actions bind-friendly)
@@ -41,6 +45,7 @@ export default async function EditEquipmentPage({ params }: PageProps) {
 
       <EquipmentForm
         action={action}
+        categories={categories}
         initial={{
           name: eq.name,
           category: eq.category,

@@ -5,26 +5,33 @@ import { z } from "zod";
 
 import { auth } from "@/lib/auth";
 import { UNITS } from "@/lib/enums";
+import { passwordSchema } from "@/lib/password-policy";
 
 export interface SignUpActionResult {
   error: string | null;
   success: string | null;
 }
 
-const schema = z.object({
-  firstName: z.string().trim().min(1, "Prénom requis."),
-  lastName: z.string().trim().min(1, "Nom requis."),
-  email: z.string().email("Email invalide."),
-  password: z.string().min(8, "Mot de passe : 8 caractères minimum."),
-  unit: z
-    .union([z.enum(UNITS), z.literal("")])
-    .optional()
-    .transform((v) => (v === "" || v === undefined ? undefined : v)),
-  phone: z
-    .string()
-    .optional()
-    .transform((v) => (v && v.trim().length > 0 ? v.trim() : undefined)),
-});
+const schema = z
+  .object({
+    firstName: z.string().trim().min(1, "Prénom requis."),
+    lastName: z.string().trim().min(1, "Nom requis."),
+    email: z.string().email("Email invalide."),
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, "Veuillez confirmer le mot de passe."),
+    unit: z
+      .union([z.enum(UNITS), z.literal("")])
+      .optional()
+      .transform((v) => (v === "" || v === undefined ? undefined : v)),
+    phone: z
+      .string()
+      .optional()
+      .transform((v) => (v && v.trim().length > 0 ? v.trim() : undefined)),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Les mots de passe ne correspondent pas.",
+    path: ["confirmPassword"],
+  });
 
 export async function signUpAction(
   _prev: SignUpActionResult,

@@ -5,10 +5,8 @@ import { CategoryChip } from "@/components/equipment/CategoryChip";
 import { EquipmentCard } from "@/components/equipment/EquipmentCard";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
-import { EQUIPMENT_CATEGORIES } from "@/lib/enums";
 import { cn } from "@/lib/utils";
-import { listEquipment } from "@/modules/inventory/queries";
-import { CATEGORY_LABEL } from "@/modules/inventory/types";
+import { listEquipment, listCategories } from "@/modules/inventory/queries";
 
 interface PageProps {
   searchParams: Promise<{ q?: string; cat?: string }>;
@@ -17,25 +15,34 @@ interface PageProps {
 export default async function StockPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const q = params.q?.trim();
-  const cat = EQUIPMENT_CATEGORIES.includes(
-    params.cat as (typeof EQUIPMENT_CATEGORIES)[number],
-  )
-    ? (params.cat as (typeof EQUIPMENT_CATEGORIES)[number])
-    : undefined;
 
-  const items = await listEquipment({ search: q, category: cat });
+  const [categories, items] = await Promise.all([
+    listCategories(),
+    listEquipment({ search: q, category: params.cat || undefined }),
+  ]);
+
+  const validSlugs = new Set(categories.map((c) => c.slug));
+  const cat = params.cat && validSlugs.has(params.cat) ? params.cat : undefined;
+  const catLabel = cat ? (categories.find((c) => c.slug === cat)?.label ?? cat) : undefined;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-black text-earth md:text-4xl">Stock</h1>
           <p className="text-trail">
             {items.length} article{items.length > 1 ? "s" : ""}
             {q ? ` correspondant à "${q}"` : ""}
-            {cat ? ` · ${CATEGORY_LABEL[cat]}` : ""}
+            {catLabel ? ` · ${catLabel}` : ""}
           </p>
         </div>
+        <Link
+          href="/stock/nouveau"
+          className="inline-flex items-center gap-2 rounded-full bg-forest px-4 py-2 text-sm font-bold text-snow shadow-sm transition-colors hover:bg-forest/90"
+        >
+          <Plus className="size-4" />
+          Ajouter
+        </Link>
       </header>
 
       <form
@@ -52,9 +59,7 @@ export default async function StockPage({ searchParams }: PageProps) {
           placeholder="Chercher un article…"
           className="pl-9"
         />
-        {cat ? (
-          <input type="hidden" name="cat" value={cat} />
-        ) : null}
+        {cat ? <input type="hidden" name="cat" value={cat} /> : null}
       </form>
 
       <nav
@@ -62,13 +67,13 @@ export default async function StockPage({ searchParams }: PageProps) {
         className="flex gap-2 overflow-x-auto pb-1"
       >
         <CategoryFilterLink active={!cat} label="Tous" q={q} cat={null} />
-        {EQUIPMENT_CATEGORIES.map((c) => (
+        {categories.map((c) => (
           <CategoryFilterLink
-            key={c}
-            active={cat === c}
-            label={CATEGORY_LABEL[c]}
+            key={c.slug}
+            active={cat === c.slug}
+            label={c.label}
             q={q}
-            cat={c}
+            cat={c.slug}
           />
         ))}
       </nav>
@@ -91,14 +96,6 @@ export default async function StockPage({ searchParams }: PageProps) {
         </div>
       )}
 
-      {/* FAB ajout — fixé en bas droite, au-dessus de la bottom-nav mobile */}
-      <Link
-        href="/stock/nouveau"
-        aria-label="Ajouter un article"
-        className="fixed bottom-24 right-5 z-20 flex size-14 items-center justify-center rounded-full bg-forest text-snow shadow-elevated transition-colors hover:bg-forest/90 md:bottom-8 md:right-8"
-      >
-        <Plus className="size-6" />
-      </Link>
     </div>
   );
 }
@@ -114,10 +111,10 @@ function CategoryFilterLink({
   q: string | undefined;
   cat: string | null;
 }) {
-  const params = new URLSearchParams();
-  if (q) params.set("q", q);
-  if (cat) params.set("cat", cat);
-  const href = params.toString() ? `/stock?${params.toString()}` : "/stock";
+  const urlParams = new URLSearchParams();
+  if (q) urlParams.set("q", q);
+  if (cat) urlParams.set("cat", cat);
+  const href = urlParams.toString() ? `/stock?${urlParams.toString()}` : "/stock";
 
   return (
     <Link

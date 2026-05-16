@@ -42,7 +42,7 @@ export default async function AdminInscriptionsPage() {
           {users.map((u) => (
             <li
               key={u.id}
-              className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-snow p-5 shadow-card"
+              className="flex flex-col gap-3 rounded-2xl bg-snow p-5 shadow-card md:flex-row md:items-start md:justify-between"
             >
               <div className="min-w-0 flex-1">
                 <p className="font-bold text-earth">
@@ -55,7 +55,7 @@ export default async function AdminInscriptionsPage() {
                   {u.phone ? ` · ${u.phone}` : ""}
                 </p>
               </div>
-              <div className="flex flex-shrink-0 gap-2">
+              <div className="flex gap-2 md:flex-shrink-0">
                 <RejectDialog
                   userId={u.id}
                   fullName={`${u.firstName} ${u.lastName}`}

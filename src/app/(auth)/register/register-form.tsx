@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PASSWORD_HINT } from "@/lib/password-policy";
 import {
   Select,
   SelectContent,
@@ -80,10 +81,22 @@ export function RegisterForm() {
           name="password"
           type="password"
           required
-          minLength={8}
+          minLength={12}
           autoComplete="new-password"
         />
-        <p className="text-xs text-trail">8 caractères minimum.</p>
+        <p className="text-xs text-trail">{PASSWORD_HINT}</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
+        <Input
+          id="confirmPassword"
+          name="confirmPassword"
+          type="password"
+          required
+          minLength={12}
+          autoComplete="new-password"
+        />
       </div>
 
       <div className="space-y-1.5">

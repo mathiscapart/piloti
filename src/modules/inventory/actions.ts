@@ -7,11 +7,10 @@ import { withAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 
+import type { ActionResult } from "@/lib/types";
+
 import { equipmentInputSchema } from "./types";
 
-export interface ActionResult {
-  error: string | null;
-}
 
 export async function createEquipment(
   _prev: ActionResult,

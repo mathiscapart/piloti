@@ -63,7 +63,7 @@ async function main() {
   console.log("→ Création des utilisateurs (via better-auth)…");
   const admin = await seedUser({
     email: "admin@piloti.fr",
-    password: "Admin2024!",
+    password: "PilotiAdmin2024!",
     firstName: "Admin",
     lastName: "Piloti",
     role: "ADMIN",
@@ -72,7 +72,7 @@ async function main() {
 
   const thomas = await seedUser({
     email: "thomas.martin@sgdf.fr",
-    password: "Chef2024!",
+    password: "PilotiChef2024!",
     firstName: "Thomas",
     lastName: "Martin",
     role: "CHEF",
@@ -83,7 +83,7 @@ async function main() {
 
   const julie = await seedUser({
     email: "julie.bernard@sgdf.fr",
-    password: "Chef2024!",
+    password: "PilotiChef2024!",
     firstName: "Julie",
     lastName: "Bernard",
     role: "CHEF",
@@ -94,7 +94,7 @@ async function main() {
 
   const paul = await seedUser({
     email: "paul.durand@sgdf.fr",
-    password: "Pending2024!",
+    password: "PilotiScout2024!",
     firstName: "Paul",
     lastName: "Durand",
     role: "CHEF",

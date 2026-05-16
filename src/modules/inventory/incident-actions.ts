@@ -8,7 +8,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { withAudit } from "@/lib/audit";
 import { can } from "@/lib/permissions";
 
-import type { ActionResult } from "./actions";
+import type { ActionResult } from "@/lib/types";
 import { createIncidentSchema, resolveIncidentSchema } from "./types";
 
 export async function createIncident(

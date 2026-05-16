@@ -23,16 +23,6 @@ export const UNITS = [
 ] as const;
 export type Unit = (typeof UNITS)[number];
 
-export const EQUIPMENT_CATEGORIES = [
-  "TENTE",
-  "MALLE",
-  "CUISINE",
-  "BIVOUAC",
-  "JEU",
-  "AUTRE",
-] as const;
-export type EquipmentCategory = (typeof EQUIPMENT_CATEGORIES)[number];
-
 export const EQUIPMENT_CONDITIONS = [
   "NEUF",
   "BON",
@@ -50,20 +40,26 @@ export const LOAN_STATUSES = [
 ] as const;
 export type LoanStatus = (typeof LOAN_STATUSES)[number];
 
+// The three statuses where equipment is unavailable (not yet returned).
+export const ACTIVE_LOAN_STATUSES = ["ACTIF", "RETARD", "SECHAGE"] as const;
+export type ActiveLoanStatus = (typeof ACTIVE_LOAN_STATUSES)[number];
+
 export const INCIDENT_SEVERITIES = ["BLOQUANT", "GENANT", "MINEUR"] as const;
 export type IncidentSeverity = (typeof INCIDENT_SEVERITIES)[number];
 
 export const EVENT_TYPES = ["REUNION", "WEEK_END", "CAMP", "SERVICE"] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
-// Liste libre — chaque mutation choisit son action. Pas restreinte à cette
-// liste pour rester extensible, mais ces valeurs sont les canoniques.
+// Canonical audit action names. Every withAudit() call should use one of these.
 export const AUDIT_ACTIONS = [
   "USER_REGISTERED",
   "USER_APPROVED",
+  "USER_REACTIVATED",
   "USER_REJECTED",
   "USER_SUSPENDED",
   "USER_ROLE_CHANGED",
+  "USER_DELETED",
+  "USER_PASSWORD_CHANGED",
   "EQUIPMENT_CREATED",
   "EQUIPMENT_UPDATED",
   "EQUIPMENT_ARCHIVED",
@@ -73,5 +69,8 @@ export const AUDIT_ACTIONS = [
   "LOAN_DRYING_STARTED",
   "INCIDENT_REPORTED",
   "INCIDENT_RESOLVED",
+  "CATEGORY_CREATED",
+  "CATEGORY_UPDATED",
+  "CATEGORY_DELETED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

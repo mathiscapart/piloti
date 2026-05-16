@@ -1,36 +1,32 @@
 import { z } from "zod";
 
-import { EQUIPMENT_CATEGORIES, EQUIPMENT_CONDITIONS } from "@/lib/enums";
+import { EQUIPMENT_CONDITIONS, INCIDENT_SEVERITIES } from "@/lib/enums";
 
-const optional = z
+// Reusable optional string transform: trims whitespace and converts empty strings to undefined.
+const optionalString = z
   .string()
   .trim()
   .optional()
   .transform((v) => (v && v.length > 0 ? v : undefined));
 
+// ----------------------------------------------------------------------------
+// Equipment
+// ----------------------------------------------------------------------------
+
 export const equipmentInputSchema = z.object({
   name: z.string().trim().min(1, "Nom requis."),
-  category: z.enum(EQUIPMENT_CATEGORIES),
+  category: z.string().trim().min(1, "Catégorie requise."),
   totalQty: z.coerce.number().int().min(1, "Quantité minimum 1."),
   condition: z.enum(EQUIPMENT_CONDITIONS).default("BON"),
-  location: optional,
+  location: optionalString,
   photo: z
     .union([z.string().url("URL de photo invalide."), z.literal("")])
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
-  notes: optional,
+  notes: optionalString,
 });
 
 export type EquipmentInput = z.infer<typeof equipmentInputSchema>;
-
-export const CATEGORY_LABEL: Record<(typeof EQUIPMENT_CATEGORIES)[number], string> = {
-  TENTE: "Tente",
-  MALLE: "Malle",
-  CUISINE: "Cuisine",
-  BIVOUAC: "Bivouac",
-  JEU: "Jeu",
-  AUTRE: "Autre",
-};
 
 export const CONDITION_LABEL: Record<(typeof EQUIPMENT_CONDITIONS)[number], string> = {
   NEUF: "Neuf",
@@ -44,13 +40,7 @@ export const CONDITION_LABEL: Record<(typeof EQUIPMENT_CONDITIONS)[number], stri
 // Loans
 // ----------------------------------------------------------------------------
 
-const optionalString = z
-  .string()
-  .trim()
-  .optional()
-  .transform((v) => (v && v.length > 0 ? v : undefined));
-
-// Step 2 du wizard : crée N prêts (un par equipmentId) avec mêmes infos.
+// Wizard step 2: creates N loans (one per equipmentId) with the same details.
 export const createLoanSchema = z.object({
   equipmentIds: z
     .array(z.string().min(1))
@@ -63,7 +53,7 @@ export const createLoanSchema = z.object({
 });
 export type CreateLoanInput = z.infer<typeof createLoanSchema>;
 
-// État constaté au retour. ABIME → l'app redirige vers le formulaire incident.
+// Condition observed at return. ABIME redirects to the incident form.
 export const RETURN_CONDITIONS = ["BON", "ABIME", "A_REPARER"] as const;
 export type ReturnCondition = (typeof RETURN_CONDITIONS)[number];
 
@@ -89,8 +79,6 @@ export type DryingInput = z.infer<typeof dryingSchema>;
 // Incidents
 // ----------------------------------------------------------------------------
 
-import { INCIDENT_SEVERITIES } from "@/lib/enums";
-
 export const createIncidentSchema = z.object({
   equipmentId: z.string().min(1, "Choisis un article."),
   types: z
@@ -114,10 +102,7 @@ export const SEVERITY_LABEL: Record<(typeof INCIDENT_SEVERITIES)[number], string
   MINEUR: "Mineur",
 };
 
-export const SEVERITY_DESCRIPTION: Record<
-  (typeof INCIDENT_SEVERITIES)[number],
-  string
-> = {
+export const SEVERITY_DESCRIPTION: Record<(typeof INCIDENT_SEVERITIES)[number], string> = {
   BLOQUANT: "Ne peut pas être utilisé",
   GENANT: "Utilisable avec précaution",
   MINEUR: "À surveiller",

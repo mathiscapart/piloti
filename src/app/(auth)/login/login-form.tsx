@@ -2,6 +2,8 @@
 
 import { useActionState } from "react";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +32,15 @@ export function LoginForm() {
         />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="password">Mot de passe</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="password">Mot de passe</Label>
+          <Link
+            href="/forgot-password"
+            className="text-xs text-trail underline-offset-4 hover:text-earth hover:underline"
+          >
+            Mot de passe oublié ?
+          </Link>
+        </div>
         <Input
           id="password"
           name="password"

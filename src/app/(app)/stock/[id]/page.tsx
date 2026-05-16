@@ -21,7 +21,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { getEquipmentDetail } from "@/modules/inventory/queries";
+import { getEquipmentDetail, listCategories } from "@/modules/inventory/queries";
 import { CONDITION_LABEL } from "@/modules/inventory/types";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -43,7 +43,11 @@ interface PageProps {
 
 export default async function EquipmentDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const eq = await getEquipmentDetail(id);
+  const [eq, categories] = await Promise.all([
+    getEquipmentDetail(id),
+    listCategories(),
+  ]);
+  const categoryLabel = categories.find((c) => c.slug === eq?.category)?.label;
   if (!eq) notFound();
 
   return (
@@ -69,7 +73,7 @@ export default async function EquipmentDetailPage({ params }: PageProps) {
 
         <div className="space-y-3 p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <CategoryChip category={eq.category} />
+            <CategoryChip category={eq.category} label={categoryLabel} />
             <ConditionBadge condition={eq.condition} />
             <IncidentBadge count={eq.openIncidentCount} />
             {eq.archived ? (

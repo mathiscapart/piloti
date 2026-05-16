@@ -31,9 +31,8 @@ const ADMIN_ONLY = new Set<Action>([
   "user.approve",
 ]);
 
-// `loan.return.validate` est en ADMIN_OR_CHEF en V1 (relaxation par rapport
-// à la spec qui prévoyait ADMIN-only avec un workflow Chef-initie/Admin-valide).
-// Le 2e niveau de validation arrivera en V1.5 — voir DECISIONS.md D-008.
+// `loan.return.validate` is ADMIN_OR_CHEF for now. The original spec intended
+// ADMIN-only with a Chef-initiates/Admin-validates workflow — deferred to V1.5.
 const ADMIN_OR_CHEF = new Set<Action>([
   "equipment.view",
   "equipment.create",

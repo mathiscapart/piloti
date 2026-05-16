@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="256" height="256" role="img" aria-label="Piloti">
+  <defs><filter id="stamp" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="2" seed="3"></feTurbulence>
+    <feDisplacementMap in="SourceGraphic" scale="1.2"></feDisplacementMap>
+  </filter></defs>
+  <g filter="url(#stamp)">
+    <path d="M22 80 L96 26 L74 100 L60 78 Z" fill="#FAF7F2"></path>
+  <path d="M60 78 L74 100 L66 84 Z" fill="#FAF7F2" opacity="0.65"></path>
+  </g>
+</svg>

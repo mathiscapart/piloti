@@ -34,8 +34,14 @@ export function Sidebar({ user }: { user: CurrentUser }) {
 
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-stone/60 bg-snow md:flex">
-      <div className="flex h-16 items-center gap-2 border-b border-stone/60 px-6">
-        <span className="text-2xl font-black text-forest">Piloti</span>
+      <div className="flex h-16 items-center border-b border-stone/60 px-5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo/piloti-lockup-clean.svg"
+          alt="Piloti"
+          width={120}
+          height={32}
+        />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">

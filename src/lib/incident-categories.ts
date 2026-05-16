@@ -4,8 +4,6 @@
 // Convention : identifiants en SNAKE_CASE pour stockage en DB (champ Incident.types JSON).
 // Labels FR pour l'UI.
 
-import type { EquipmentCategory } from "@/lib/enums";
-
 export interface IncidentTypeOption {
   value: string;
   label: string;
@@ -41,10 +39,7 @@ const GENERIC_TYPES: IncidentTypeOption[] = [
   { value: "GENERIC_AUTRE", label: "Autre (préciser en note)" },
 ];
 
-export const INCIDENT_TYPES_BY_CATEGORY: Record<
-  EquipmentCategory,
-  IncidentTypeOption[]
-> = {
+export const INCIDENT_TYPES_BY_CATEGORY: Record<string, IncidentTypeOption[]> = {
   TENTE: TENTE_TYPES,
   MALLE: MALLE_TYPES,
   CUISINE: CUISINE_TYPES,
@@ -52,6 +47,10 @@ export const INCIDENT_TYPES_BY_CATEGORY: Record<
   JEU: GENERIC_TYPES,
   AUTRE: GENERIC_TYPES,
 };
+
+export function getIncidentTypes(category: string): IncidentTypeOption[] {
+  return INCIDENT_TYPES_BY_CATEGORY[category] ?? GENERIC_TYPES;
+}
 
 // Pour afficher un label depuis un identifiant stocké en DB.
 export const INCIDENT_TYPE_LABEL: Record<string, string> = Object.fromEntries(

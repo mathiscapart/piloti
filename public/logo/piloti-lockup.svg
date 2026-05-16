@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 160" width="600" height="160" role="img" aria-label="Piloti">
+  <defs><filter id="stamp" x="-10%" y="-10%" width="120%" height="120%">
+    <feTurbulence type="fractalNoise" baseFrequency="1.4" numOctaves="2" seed="3"></feTurbulence>
+    <feDisplacementMap in="SourceGraphic" scale="1.2"></feDisplacementMap>
+  </filter></defs>
+  <g transform="translate(10,10)">
+    <rect width="140" height="140" rx="26" fill="#1D7AB0"></rect>
+    <g transform="translate(10,10) scale(1.0)">
+      <g transform="scale(1)">
+        <g filter="url(#stamp)">
+          <path d="M22 80 L96 26 L74 100 L60 78 Z" fill="#FFFFFF"></path>
+          <path d="M60 78 L74 100 L66 84 Z" fill="#FFFFFF" opacity="0.65"></path>
+        </g>
+      </g>
+    </g>
+    <circle cx="129" cy="129" r="7.5" fill="#F4C430"></circle>
+  </g>
+  <text x="172" y="118" font-family="Nunito, -apple-system, system-ui, sans-serif" font-weight="800" font-size="110" letter-spacing="-3" fill="#2C1810">piloti<tspan fill="#E05C1A">.</tspan></text>
+</svg>

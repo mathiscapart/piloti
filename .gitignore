@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# pnpm local store (si configuré en local dans le projet)
+.pnpm-store
+
+# Claude Code (mémoire locale, fichiers de session)
+.claude/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -48,3 +54,5 @@ next-env.d.ts
 
 # uploads (Phase 7)
 /public/uploads/
+
+prisma/migrations/

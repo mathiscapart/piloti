@@ -99,6 +99,18 @@ model Verification {
 }
 
 // ----------------------------------------------------------------------------
+// Piloti — Catégories de matériel (gérées depuis l'admin)
+// ----------------------------------------------------------------------------
+
+model Category {
+  slug      String   @id
+  label     String
+  canDry    Boolean  @default(false)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+// ----------------------------------------------------------------------------
 // Piloti — Inventaire & vie du matériel
 // ----------------------------------------------------------------------------
 

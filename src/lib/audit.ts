@@ -2,33 +2,32 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { AuditAction } from "@/lib/enums";
 
-type Tx = Prisma.TransactionClient;
+type Tx = Prisma.TransactionClient; // shorthand used only within this file
 
 export interface AuditContext {
-  /** Type d'action. Choisir dans AUDIT_ACTIONS quand c'est possible. */
-  action: AuditAction | string;
-  /** ID de l'utilisateur qui déclenche la mutation. */
+  /** Action type. Must be one of the canonical values in AUDIT_ACTIONS (src/lib/enums.ts). */
+  action: AuditAction;
+  /** ID of the user who triggered the mutation. */
   userId: string;
   equipmentId?: string | null;
   loanId?: string | null;
   incidentId?: string | null;
-  /** Métadonnées libres (oldValue/newValue/raison/etc.). JSON-stringifiées. */
+  /** Free-form metadata (old/new values, reason, etc.). Stored as JSON. */
   metadata?: Record<string, unknown>;
 }
 
 /**
- * Exécute `fn` dans une transaction Prisma et insère un AuditLog atomiquement.
+ * Runs `fn` inside a Prisma transaction and atomically inserts an AuditLog.
  *
- * Règle invariante du projet : toute mutation de données passe par ce helper
- * pour garantir qu'une trace est créée dans la même transaction que la mutation.
+ * Project invariant: every data mutation goes through this helper so that a
+ * trace is always created in the same transaction as the mutation itself.
  *
- * Le contexte d'audit peut être :
- *   - Un objet statique : pour les updates / deletes où l'ID est connu d'avance.
- *   - Une fonction `(result) => AuditContext` : pour les creates où l'ID
- *     n'existe qu'après l'appel à `fn` (chicken/egg).
+ * `ctx` can be:
+ *   - A static object — for updates/deletes where the target ID is known upfront.
+ *   - A callback `(result) => AuditContext` — for creates where the ID only
+ *     exists after `fn` resolves (avoids the chicken/egg problem).
  *
- * Ordre des arguments choisi pour permettre à TypeScript d'inférer T depuis
- * `fn` avant de typer le callback `ctx`.
+ * Arguments are ordered so TypeScript infers T from `fn` before typing `ctx`.
  */
 export async function withAudit<T>(
   fn: (tx: Tx) => Promise<T>,

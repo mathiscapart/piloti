@@ -23,6 +23,10 @@ export const metadata: Metadata = {
     capable: true,
     title: "Piloti",
     statusBarStyle: "default",
+    startupImage: "/icons/icon-512.png",
+  },
+  icons: {
+    apple: "/icons/apple-touch-icon.png",
   },
   formatDetection: {
     telephone: false,

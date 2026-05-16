@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  FolderOpen,
   History,
   LayoutDashboard,
   type LucideIcon,
@@ -26,6 +27,7 @@ export const MAIN_NAV: NavItem[] = [
 export const ADMIN_NAV: NavItem[] = [
   { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, adminOnly: true },
   { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, adminOnly: true },
+  { href: "/admin/categories", label: "Catégories", icon: FolderOpen, adminOnly: true },
   { href: "/admin/audit", label: "Journal d'audit", icon: History, adminOnly: true },
 ];
 

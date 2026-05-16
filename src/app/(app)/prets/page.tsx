@@ -36,23 +36,14 @@ export default async function PretsPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-black text-earth md:text-4xl">Prêts</h1>
-          <p className="text-trail">
-            {loans.length} prêt{loans.length > 1 ? "s" : ""}
-            {filter !== "all"
-              ? ` · ${FILTERS.find((f) => f.value === filter)?.label}`
-              : ""}
-          </p>
-        </div>
-        <Link
-          href="/prets/nouveau"
-          className="inline-flex items-center gap-2 rounded-full bg-forest px-4 py-2 text-sm font-bold text-snow shadow-sm transition-colors hover:bg-forest/90"
-        >
-          <Plus className="size-4" />
-          Nouveau prêt
-        </Link>
+      <header>
+        <h1 className="text-3xl font-black text-earth md:text-4xl">Prêts</h1>
+        <p className="text-trail">
+          {loans.length} prêt{loans.length > 1 ? "s" : ""}
+          {filter !== "all"
+            ? ` · ${FILTERS.find((f) => f.value === filter)?.label}`
+            : ""}
+        </p>
       </header>
 
       <nav
@@ -101,6 +92,13 @@ export default async function PretsPage({ searchParams }: PageProps) {
         </ul>
       )}
 
+      <Link
+        href="/prets/nouveau"
+        aria-label="Nouveau prêt"
+        className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-5 z-20 flex size-14 items-center justify-center rounded-full bg-forest text-snow shadow-elevated transition-colors hover:bg-forest/90 md:bottom-8 md:right-8"
+      >
+        <Plus className="size-6" />
+      </Link>
     </div>
   );
 }

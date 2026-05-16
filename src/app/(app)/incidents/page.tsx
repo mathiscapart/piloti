@@ -130,7 +130,7 @@ export default async function IncidentsPage({ searchParams }: PageProps) {
       <Link
         href="/incidents/nouveau"
         aria-label="Signaler un incident"
-        className="fixed bottom-24 right-5 z-20 flex size-14 items-center justify-center rounded-full bg-brick text-snow shadow-elevated transition-colors hover:bg-brick/90 md:bottom-8 md:right-8"
+        className="fixed bottom-28 right-5 z-20 flex size-14 items-center justify-center rounded-full bg-brick text-snow shadow-elevated transition-colors hover:bg-brick/90 md:bottom-8 md:right-8"
       >
         <Plus className="size-6" />
       </Link>

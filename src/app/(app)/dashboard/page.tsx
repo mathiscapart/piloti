@@ -51,7 +51,7 @@ export default async function DashboardPage() {
 
       {/* Actions rapides */}
       <section className="grid gap-3 md:grid-cols-3">
-        <Button asChild size="lg" className="w-full">
+        <Button asChild size="lg" variant="success" className="w-full">
           <Link href="/prets/nouveau">
             <Plus className="size-4" />
             Nouveau prêt

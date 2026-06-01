@@ -290,7 +290,13 @@ export async function getLoanDetail(id: string) {
     where: { id },
     include: {
       equipment: {
-        select: { id: true, name: true, category: true, condition: true },
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          condition: true,
+          baseWeightKg: true,
+        },
       },
       borrower: {
         select: { firstName: true, lastName: true, phone: true },

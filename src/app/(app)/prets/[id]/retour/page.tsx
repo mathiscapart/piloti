@@ -87,6 +87,7 @@ export default async function ReturnLoanPage({ params }: PageProps) {
         loanId={loan.id}
         quantity={loan.quantity}
         requireWeighing={category?.requireWeighing ?? false}
+        baseWeightKg={loan.equipment.baseWeightKg}
       />
     </div>
   );

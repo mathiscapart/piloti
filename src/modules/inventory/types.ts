@@ -30,6 +30,12 @@ export const equipmentInputSchema = z.object({
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
   notes: optionalString,
+  // US-17 — poids de référence (catégorie pesable). Validé contre la catégorie
+  // dans l'action (obligatoire si la catégorie est pesable).
+  baseWeightKg: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.coerce.number().positive("Poids de base invalide.").optional(),
+  ),
 });
 
 export type EquipmentInput = z.infer<typeof equipmentInputSchema>;

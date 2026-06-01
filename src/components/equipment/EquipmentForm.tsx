@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +28,7 @@ interface InitialValues {
   location?: string | null;
   photo?: string | null;
   notes?: string | null;
+  baseWeightKg?: number | null;
 }
 
 interface EquipmentFormProps {
@@ -60,6 +61,15 @@ export function EquipmentForm({
   const childrenOf = (slug: string) =>
     categories.filter((c) => c.parentSlug === slug);
 
+  // US-17 — catégorie pesable → article géré à l'unité (qté = 1) + poids de base.
+  const weighableSlugs = new Set(
+    categories.filter((c) => c.requireWeighing).map((c) => c.slug),
+  );
+  const [category, setCategory] = useState(
+    initial?.category ?? roots[0]?.slug ?? "",
+  );
+  const isWeighable = weighableSlugs.has(category);
+
   return (
     <form action={formAction} className="space-y-5 rounded-2xl bg-snow p-6 shadow-card">
       <div className="space-y-1.5">
@@ -76,7 +86,7 @@ export function EquipmentForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="category">Catégorie</Label>
-          <Select name="category" defaultValue={initial?.category ?? roots[0]?.slug ?? ""}>
+          <Select name="category" value={category} onValueChange={setCategory}>
             <SelectTrigger id="category">
               <SelectValue />
             </SelectTrigger>
@@ -127,14 +137,31 @@ export function EquipmentForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="totalQty">Quantité totale</Label>
-          <Input
-            id="totalQty"
-            name="totalQty"
-            type="number"
-            min={1}
-            required
-            defaultValue={initial?.totalQty ?? 1}
-          />
+          {isWeighable ? (
+            <>
+              <Input
+                id="totalQty"
+                name="totalQty"
+                type="number"
+                value={1}
+                readOnly
+                className="bg-sand"
+              />
+              <p className="text-xs text-trail">
+                Article pesable → géré à l&apos;unité (1). Crée un article par
+                exemplaire (#1, #2…).
+              </p>
+            </>
+          ) : (
+            <Input
+              id="totalQty"
+              name="totalQty"
+              type="number"
+              min={1}
+              required
+              defaultValue={initial?.totalQty ?? 1}
+            />
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -147,6 +174,27 @@ export function EquipmentForm({
           />
         </div>
       </div>
+
+      {isWeighable ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="baseWeightKg">Poids de base au retour (kg)</Label>
+          <Input
+            id="baseWeightKg"
+            name="baseWeightKg"
+            type="number"
+            step="0.01"
+            min={0}
+            required
+            defaultValue={initial?.baseWeightKg ?? ""}
+            placeholder="Ex. 13.0"
+            className="w-40"
+          />
+          <p className="text-xs text-trail">
+            Poids de référence (plein) utilisé pour calculer la consommation au
+            retour.
+          </p>
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         <Label htmlFor="photo">URL photo (optionnel)</Label>

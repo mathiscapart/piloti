@@ -27,14 +27,22 @@ export function ReturnForm({
   loanId,
   quantity,
   requireWeighing = false,
+  baseWeightKg = null,
 }: {
   loanId: string;
   quantity: number;
   requireWeighing?: boolean;
+  baseWeightKg?: number | null;
 }) {
   const action = returnLoan.bind(null, loanId);
   const [state, formAction, pending] = useActionState(action, initialState);
   const [selected, setSelected] = useState<ReturnCondition>("BON");
+  const [weight, setWeight] = useState("");
+
+  const consumed =
+    baseWeightKg != null && weight.trim() !== ""
+      ? Math.round((baseWeightKg - Number(weight)) * 100) / 100
+      : null;
 
   return (
     <form action={formAction} className="space-y-5 rounded-2xl bg-snow p-6 shadow-card">
@@ -101,11 +109,18 @@ export function ReturnForm({
             step="0.01"
             min={0}
             required
-            placeholder="Ex. 4.2"
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            placeholder="Ex. 9.2"
             className="w-32"
           />
           <p className="text-xs text-trail">
-            Cette catégorie impose de peser le matériel au retour.
+            {baseWeightKg != null
+              ? `Poids de base : ${baseWeightKg} kg.`
+              : "Cette catégorie impose de peser le matériel au retour."}
+            {consumed != null
+              ? ` Consommation estimée : ${consumed} kg.`
+              : ""}
           </p>
         </div>
       ) : null}

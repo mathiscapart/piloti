@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { z } from "zod";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
@@ -12,6 +13,43 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
 import { equipmentInputSchema } from "./types";
+
+// US-17 — un article d'une catégorie pesable est géré à l'unité : quantité = 1
+// et poids de base obligatoire. Mutualisé entre création et édition.
+async function resolveWeighable(
+  p: z.infer<typeof equipmentInputSchema>,
+): Promise<
+  | { error: string }
+  | {
+      name: string;
+      category: string;
+      totalQty: number;
+      condition: string;
+      location: string | null;
+      photo: string | null;
+      notes: string | null;
+      baseWeightKg: number | null;
+    }
+> {
+  const category = await db.category.findUnique({
+    where: { slug: p.category },
+    select: { requireWeighing: true },
+  });
+  const weighable = !!category?.requireWeighing;
+  if (weighable && p.baseWeightKg === undefined) {
+    return { error: "Catégorie pesable : indique le poids de base (kg)." };
+  }
+  return {
+    name: p.name,
+    category: p.category,
+    totalQty: weighable ? 1 : p.totalQty,
+    condition: p.condition,
+    location: p.location ?? null,
+    photo: p.photo ?? null,
+    notes: p.notes ?? null,
+    baseWeightKg: weighable ? (p.baseWeightKg ?? null) : null,
+  };
+}
 
 
 export async function createEquipment(
@@ -28,8 +66,11 @@ export async function createEquipment(
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
+  const data = await resolveWeighable(parsed.data);
+  if ("error" in data) return data;
+
   const equipment = await withAudit(
-    (tx) => tx.equipment.create({ data: parsed.data }),
+    (tx) => tx.equipment.create({ data }),
     (created) => ({
       action: "EQUIPMENT_CREATED",
       userId: user.id,
@@ -58,13 +99,16 @@ export async function updateEquipment(
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
+  const data = await resolveWeighable(parsed.data);
+  if ("error" in data) return data;
+
   await withAudit(
-    (tx) => tx.equipment.update({ where: { id }, data: parsed.data }),
+    (tx) => tx.equipment.update({ where: { id }, data }),
     {
       action: "EQUIPMENT_UPDATED",
       userId: user.id,
       equipmentId: id,
-      metadata: { changes: parsed.data },
+      metadata: { changes: data },
     },
   );
 

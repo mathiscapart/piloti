@@ -47,6 +47,9 @@ export type ActiveLoanStatus = (typeof ACTIVE_LOAN_STATUSES)[number];
 export const INCIDENT_SEVERITIES = ["BLOQUANT", "GENANT", "MINEUR"] as const;
 export type IncidentSeverity = (typeof INCIDENT_SEVERITIES)[number];
 
+export const DONATION_STATUSES = ["PENDING", "APPROVED", "REJECTED"] as const;
+export type DonationStatus = (typeof DONATION_STATUSES)[number];
+
 export const EVENT_TYPES = ["REUNION", "WEEK_END", "CAMP", "SERVICE"] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -74,5 +77,8 @@ export const AUDIT_ACTIONS = [
   "CATEGORY_DELETED",
   "CATEGORY_ARCHIVED",
   "CATEGORY_RESTORED",
+  "DONATION_SUBMITTED",
+  "DONATION_APPROVED",
+  "DONATION_REJECTED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

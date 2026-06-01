@@ -402,3 +402,26 @@ export async function listIncidents(opts: {
 }
 
 export type IncidentListItem = Awaited<ReturnType<typeof listIncidents>>[number];
+
+// ----------------------------------------------------------------------------
+// Donations (US-25)
+// ----------------------------------------------------------------------------
+
+export type DonationStatusFilter = "pending" | "processed" | "all";
+
+export async function listDonations(filter: DonationStatusFilter = "pending") {
+  const where: Prisma.DonationWhereInput = {};
+  if (filter === "pending") where.status = "PENDING";
+  if (filter === "processed") where.status = { in: ["APPROVED", "REJECTED"] };
+
+  return db.donation.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }],
+  });
+}
+
+export type DonationListItem = Awaited<ReturnType<typeof listDonations>>[number];
+
+export async function countPendingDonations() {
+  return db.donation.count({ where: { status: "PENDING" } });
+}

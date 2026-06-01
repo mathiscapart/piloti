@@ -16,6 +16,8 @@ export const ACTIONS = [
   "equipment.status.change",
   "admin.access",
   "user.approve",
+  "donation.create",
+  "donation.review",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -29,7 +31,11 @@ const ADMIN_ONLY = new Set<Action>([
   "incident.resolve",
   "admin.access",
   "user.approve",
+  "donation.review",
 ]);
+
+// US-25 — proposer un don est ouvert à tout utilisateur actif (chef, parent…).
+const ANY_ACTIVE = new Set<Action>(["donation.create"]);
 
 // `loan.return.validate` is ADMIN_OR_CHEF for now. The original spec intended
 // ADMIN-only with a Chef-initiates/Admin-validates workflow — deferred to V1.5.
@@ -45,6 +51,7 @@ const ADMIN_OR_CHEF = new Set<Action>([
 
 export function can(user: AuthCtx, action: Action): boolean {
   if (user.status !== "ACTIVE") return false;
+  if (ANY_ACTIVE.has(action)) return true;
   if (ADMIN_ONLY.has(action)) return user.role === "ADMIN";
   if (ADMIN_OR_CHEF.has(action)) {
     return user.role === "ADMIN" || user.role === "CHEF";

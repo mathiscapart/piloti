@@ -1,4 +1,4 @@
-import { ChevronRight, Package, Plus, Search } from "lucide-react";
+import { ChevronRight, Gift, Package, Plus, Search } from "lucide-react";
 import Link from "next/link";
 
 import { EquipmentCard } from "@/components/equipment/EquipmentCard";
@@ -48,13 +48,22 @@ export default async function StockPage({ searchParams }: PageProps) {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <header>
-        <h1 className="text-3xl font-black text-earth md:text-4xl">Stock</h1>
-        <p className="text-trail">
-          {items.length} article{items.length > 1 ? "s" : ""}
-          {q ? ` correspondant à "${q}"` : ""}
-          {catLabel ? ` · ${catLabel}` : ""}
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-3xl font-black text-earth md:text-4xl">Stock</h1>
+          <p className="text-trail">
+            {items.length} article{items.length > 1 ? "s" : ""}
+            {q ? ` correspondant à "${q}"` : ""}
+            {catLabel ? ` · ${catLabel}` : ""}
+          </p>
+        </div>
+        <Link
+          href="/dons/nouveau"
+          className="inline-flex items-center gap-1 text-sm font-bold text-forest hover:underline"
+        >
+          <Gift className="size-4" />
+          Proposer un don
+        </Link>
       </header>
 
       <form

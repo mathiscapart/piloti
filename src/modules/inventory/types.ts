@@ -122,3 +122,31 @@ export const SEVERITY_DESCRIPTION: Record<(typeof INCIDENT_SEVERITIES)[number], 
   GENANT: "Utilisable avec précaution",
   MINEUR: "À surveiller",
 };
+
+// ----------------------------------------------------------------------------
+// Donations (US-25)
+// ----------------------------------------------------------------------------
+
+export const createDonationSchema = z.object({
+  category: z.string().trim().min(1, "Catégorie requise."),
+  name: z.string().trim().min(1, "Nom de l'article requis."),
+  quantity: z.coerce.number().int().min(1, "Quantité minimum 1."),
+  condition: z.enum(EQUIPMENT_CONDITIONS).default("BON"),
+  dropoffDate: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.coerce.date().optional(),
+  ),
+  donorName: optionalString,
+  note: optionalString,
+});
+export type CreateDonationInput = z.infer<typeof createDonationSchema>;
+
+export const rejectDonationSchema = z.object({
+  rejectedReason: optionalString,
+});
+
+export const DONATION_STATUS_LABEL: Record<string, string> = {
+  PENDING: "En attente",
+  APPROVED: "Validé",
+  REJECTED: "Refusé",
+};

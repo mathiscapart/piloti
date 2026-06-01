@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { parseAndValidate } from "@/lib/import-equipment";
 import { can } from "@/lib/permissions";
 
 import type { ActionResult } from "@/lib/types";
@@ -128,6 +129,85 @@ export async function clearEquipmentNfc(id: string): Promise<ActionResult> {
 
   revalidatePath(`/stock/${id}`);
   return { error: null };
+}
+
+// US-22 — import d'inventaire depuis un CSV. Re-valide côté serveur (source de
+// vérité), crée les lignes valides + audit, et renvoie un rapport.
+export interface ImportReport {
+  created: number;
+  duplicates: number;
+  errors: number;
+  issues: { line: number; name: string; message: string }[];
+}
+
+export async function importEquipment(
+  csvText: string,
+): Promise<{ error: string | null; report?: ImportReport }> {
+  const user = await getCurrentUser();
+  if (!can(user, "equipment.create")) {
+    return { error: "Vous n'avez pas la permission d'importer du matériel." };
+  }
+
+  const [categories, existing] = await Promise.all([
+    db.category.findMany({
+      where: { archived: false },
+      select: { slug: true, label: true },
+    }),
+    db.equipment.findMany({ select: { name: true } }),
+  ]);
+
+  const { headerError, rows } = parseAndValidate(csvText, {
+    categories,
+    existingNames: existing.map((e) => e.name),
+  });
+  if (headerError) return { error: headerError };
+  if (rows.length === 0) return { error: "Aucune ligne de données détectée." };
+
+  const ok = rows.filter((r) => r.status === "ok");
+  const duplicates = rows.filter((r) => r.status === "duplicate").length;
+  const errors = rows.filter((r) => r.status === "error").length;
+  const issues = rows
+    .filter((r) => r.status !== "ok" && r.message)
+    .map((r) => ({ line: r.line, name: r.name, message: r.message! }));
+
+  if (ok.length === 0) {
+    return {
+      error: "Aucune ligne valide à importer (doublons ou erreurs uniquement).",
+    };
+  }
+
+  await db.$transaction(async (tx) => {
+    const created = await Promise.all(
+      ok.map((r) =>
+        tx.equipment.create({
+          data: {
+            name: r.name,
+            category: r.category,
+            totalQty: r.quantity,
+            condition: r.condition,
+            location: r.location ?? null,
+            notes: r.notes ?? null,
+          },
+        }),
+      ),
+    );
+    await tx.auditLog.createMany({
+      data: created.map((eq) => ({
+        action: "EQUIPMENT_CREATED",
+        userId: user.id,
+        equipmentId: eq.id,
+        metadata: JSON.stringify({ name: eq.name, import: true }),
+      })),
+    });
+  });
+
+  revalidatePath("/stock");
+  revalidatePath("/dashboard");
+
+  return {
+    error: null,
+    report: { created: ok.length, duplicates, errors, issues },
+  };
 }
 
 export async function archiveEquipment(id: string): Promise<ActionResult> {

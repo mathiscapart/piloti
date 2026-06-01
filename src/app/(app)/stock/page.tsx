@@ -1,4 +1,4 @@
-import { ChevronRight, Gift, Package, Plus, Search } from "lucide-react";
+import { ChevronRight, Gift, Package, Plus, Search, Upload } from "lucide-react";
 import Link from "next/link";
 
 import { EquipmentCard } from "@/components/equipment/EquipmentCard";
@@ -57,13 +57,22 @@ export default async function StockPage({ searchParams }: PageProps) {
             {catLabel ? ` · ${catLabel}` : ""}
           </p>
         </div>
-        <Link
-          href="/dons/nouveau"
-          className="inline-flex items-center gap-1 text-sm font-bold text-forest hover:underline"
-        >
-          <Gift className="size-4" />
-          Proposer un don
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/stock/import"
+            className="inline-flex items-center gap-1 text-sm font-bold text-forest hover:underline"
+          >
+            <Upload className="size-4" />
+            Importer
+          </Link>
+          <Link
+            href="/dons/nouveau"
+            className="inline-flex items-center gap-1 text-sm font-bold text-forest hover:underline"
+          >
+            <Gift className="size-4" />
+            Proposer un don
+          </Link>
+        </div>
       </header>
 
       <form

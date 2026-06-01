@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -22,13 +23,38 @@ const TONE: Record<ReturnCondition, string> = {
   A_REPARER: "border-brick bg-brick-soft text-brick-ink",
 };
 
-export function ReturnForm({ loanId }: { loanId: string }) {
+export function ReturnForm({
+  loanId,
+  quantity,
+}: {
+  loanId: string;
+  quantity: number;
+}) {
   const action = returnLoan.bind(null, loanId);
   const [state, formAction, pending] = useActionState(action, initialState);
   const [selected, setSelected] = useState<ReturnCondition>("BON");
 
   return (
     <form action={formAction} className="space-y-5 rounded-2xl bg-snow p-6 shadow-card">
+      {/* US-30 — quantité rendue (retours partiels). Masqué si 1 seul exemplaire. */}
+      {quantity > 1 ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="returnedQuantity">Quantité rendue</Label>
+          <Input
+            id="returnedQuantity"
+            name="returnedQuantity"
+            type="number"
+            min={1}
+            max={quantity}
+            defaultValue={quantity}
+            className="w-28"
+          />
+          <p className="text-xs text-trail">
+            {quantity} en cours. Rends-en moins pour un retour partiel (le reste
+            demeure prêté).
+          </p>
+        </div>
+      ) : null}
       <div className="space-y-2">
         <Label>État du matériel au retour</Label>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

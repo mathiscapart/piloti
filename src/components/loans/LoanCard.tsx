@@ -49,6 +49,11 @@ export function LoanCard({
             >
               {loan.equipment.name}
             </Link>
+            {loan.quantity > 1 ? (
+              <span className="rounded-full bg-sand px-2 py-0.5 text-xs font-bold text-earth">
+                ×{loan.quantity}
+              </span>
+            ) : null}
             <LoanStatusBadge status={loan.status} />
           </div>
 

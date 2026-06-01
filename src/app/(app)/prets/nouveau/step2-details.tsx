@@ -40,23 +40,41 @@ export function Step2Details({ selectedEquipment, borrowers }: Props) {
 
   return (
     <form action={formAction} className="space-y-5 rounded-2xl bg-snow p-6 shadow-card">
-      {/* Hidden equipment IDs portés depuis step 1 */}
-      {selectedEquipment.map((eq) => (
-        <input
-          key={eq.id}
-          type="hidden"
-          name="equipmentId"
-          value={eq.id}
-        />
-      ))}
-
+      {/* US-30 — chaque article porte une quantité (≤ disponible). Le champ
+          equipmentId est conservé ici et apparié à qty__<id>. */}
       <div className="rounded-xl bg-sand p-3">
         <p className="text-xs font-bold uppercase tracking-wider text-trail">
           Matériel sélectionné ({selectedEquipment.length})
         </p>
-        <ul className="mt-1 text-sm text-earth">
+        <ul className="mt-2 space-y-2">
           {selectedEquipment.map((eq) => (
-            <li key={eq.id}>• {eq.name}</li>
+            <li
+              key={eq.id}
+              className="flex items-center justify-between gap-3 rounded-lg bg-snow px-3 py-2"
+            >
+              <input type="hidden" name="equipmentId" value={eq.id} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-earth">{eq.name}</p>
+                <p className="text-xs text-trail">
+                  {eq.availableQty} disponible{eq.availableQty > 1 ? "s" : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Label htmlFor={`qty__${eq.id}`} className="text-xs text-trail">
+                  Qté
+                </Label>
+                <Input
+                  id={`qty__${eq.id}`}
+                  name={`qty__${eq.id}`}
+                  type="number"
+                  min={1}
+                  max={Math.max(1, eq.availableQty)}
+                  defaultValue={1}
+                  required
+                  className="w-20"
+                />
+              </div>
+            </li>
           ))}
         </ul>
       </div>

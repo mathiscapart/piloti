@@ -76,7 +76,7 @@ export default async function ReturnLoanPage({ params }: PageProps) {
         </div>
       </section>
 
-      <ReturnForm loanId={loan.id} />
+      <ReturnForm loanId={loan.id} quantity={loan.quantity} />
     </div>
   );
 }

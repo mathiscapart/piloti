@@ -46,11 +46,16 @@ export const CONDITION_LABEL: Record<(typeof EQUIPMENT_CONDITIONS)[number], stri
 // Loans
 // ----------------------------------------------------------------------------
 
-// Wizard step 2: creates N loans (one per equipmentId) with the same details.
+// US-30 — chaque article emprunté porte une quantité (≥ 1).
+export const loanItemSchema = z.object({
+  equipmentId: z.string().min(1),
+  quantity: z.coerce.number().int().min(1, "Quantité minimum 1."),
+});
+export type LoanItemInput = z.infer<typeof loanItemSchema>;
+
+// Wizard step 2: creates N loans (one per article) with the same details.
 export const createLoanSchema = z.object({
-  equipmentIds: z
-    .array(z.string().min(1))
-    .min(1, "Sélectionne au moins un article."),
+  items: z.array(loanItemSchema).min(1, "Sélectionne au moins un article."),
   borrowerId: z.string().min(1, "Choisis un emprunteur."),
   startDate: z.coerce.date(),
   expectedReturn: z.coerce.date(),
@@ -71,6 +76,8 @@ export const RETURN_CONDITION_LABEL: Record<ReturnCondition, string> = {
 
 export const returnLoanSchema = z.object({
   condition: z.enum(RETURN_CONDITIONS),
+  // US-30 — quantité rendue (retours partiels / pertes). Absent = tout rendre.
+  returnedQuantity: z.coerce.number().int().min(1).optional(),
   notes: optionalString,
 });
 export type ReturnLoanInput = z.infer<typeof returnLoanSchema>;

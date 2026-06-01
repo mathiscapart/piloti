@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createCategory } from "@/modules/inventory/category-actions";
+import type { CategoryRow } from "@/modules/inventory/queries";
 
 const initialState = { error: null };
 
-export function CategoryCreateForm() {
+export function CategoryCreateForm({ roots }: { roots: CategoryRow[] }) {
   const [state, formAction, pending] = useActionState(createCategory, initialState);
 
   return (
@@ -24,6 +25,28 @@ export function CategoryCreateForm() {
           placeholder="Couchage, Éclairage…"
         />
       </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="parentSlug">Catégorie parente (optionnel)</Label>
+        <select
+          id="parentSlug"
+          name="parentSlug"
+          defaultValue=""
+          className="flex h-9 w-full rounded-md border border-stone/40 bg-snow px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-forest"
+        >
+          <option value="">— Aucune (catégorie racine)</option>
+          {roots.map((c) => (
+            <option key={c.slug} value={c.slug}>
+              {c.label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-trail">
+          Laisse vide pour une catégorie principale, ou choisis un parent pour
+          créer une sous-catégorie.
+        </p>
+      </div>
+
       <div className="flex items-center gap-2">
         <input type="checkbox" id="canDry" name="canDry" className="size-4 rounded" />
         <Label htmlFor="canDry" className="cursor-pointer">

@@ -79,7 +79,15 @@ export async function listEquipment(opts: ListEquipmentOpts = {}) {
   if (opts.search && opts.search.trim().length > 0) {
     where.name = { contains: opts.search.trim() };
   }
-  if (opts.category) where.category = opts.category;
+  if (opts.category) {
+    // US-24 : filtrer par une catégorie parente inclut ses sous-catégories.
+    const children = await db.category.findMany({
+      where: { parentSlug: opts.category },
+      select: { slug: true },
+    });
+    const slugs = [opts.category, ...children.map((c) => c.slug)];
+    where.category = { in: slugs };
+  }
 
   const equipment = await db.equipment.findMany({
     where,
@@ -187,11 +195,39 @@ export type EquipmentDetail = NonNullable<
 // Categories
 // ----------------------------------------------------------------------------
 
-export async function listCategories() {
-  return db.category.findMany({ orderBy: [{ order: "asc" }, { label: "asc" }] });
+// US-31 — par défaut on masque les catégories archivées (listes de choix :
+// stock, formulaire article, prêt…). L'admin passe `includeArchived: true`.
+export async function listCategories(opts: { includeArchived?: boolean } = {}) {
+  return db.category.findMany({
+    where: opts.includeArchived ? undefined : { archived: false },
+    orderBy: [{ order: "asc" }, { label: "asc" }],
+  });
 }
 
 export type CategoryRow = Awaited<ReturnType<typeof listCategories>>[number];
+
+// US-24 — arborescence : catégories parentes (parentSlug null) triées, chacune
+// avec ses sous-catégories triées. « Autre » est repoussée en dernier (US-31).
+export async function listCategoryTree(opts: { includeArchived?: boolean } = {}) {
+  const all = await db.category.findMany({
+    where: opts.includeArchived ? undefined : { archived: false },
+    orderBy: [{ order: "asc" }, { label: "asc" }],
+  });
+
+  const roots = all.filter((c) => c.parentSlug === null);
+  const childrenOf = (slug: string) => all.filter((c) => c.parentSlug === slug);
+
+  const tree = roots
+    .map((root) => ({ ...root, children: childrenOf(root.slug) }))
+    // « Autre » (réceptacle par défaut, US-31) toujours en dernier.
+    .sort((a, b) => (a.slug === "AUTRE" ? 1 : 0) - (b.slug === "AUTRE" ? 1 : 0));
+
+  return tree;
+}
+
+export type CategoryTreeNode = Awaited<
+  ReturnType<typeof listCategoryTree>
+>[number];
 
 // ----------------------------------------------------------------------------
 // Loans — liste & détail

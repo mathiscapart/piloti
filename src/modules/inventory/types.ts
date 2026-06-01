@@ -15,7 +15,13 @@ const optionalString = z
 
 export const equipmentInputSchema = z.object({
   name: z.string().trim().min(1, "Nom requis."),
-  category: z.string().trim().min(1, "Catégorie requise."),
+  // US-31 — « Autre » est le réceptacle par défaut : un article sans catégorie
+  // choisie y est rattaché plutôt que d'être rejeté.
+  category: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : "AUTRE")),
   totalQty: z.coerce.number().int().min(1, "Quantité minimum 1."),
   condition: z.enum(EQUIPMENT_CONDITIONS).default("BON"),
   location: optionalString,

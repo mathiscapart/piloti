@@ -107,7 +107,16 @@ model Category {
   label     String
   canDry    Boolean  @default(false)
   order     Int      @default(0)
+  archived  Boolean  @default(false) // US-31 — catégorie archivée (masquée des listes de choix)
   createdAt DateTime @default(now())
+
+  // US-24 — sous-catégories : auto-relation à 1 niveau (un parent → N enfants).
+  // `onDelete: Restrict` empêche de supprimer un parent qui a encore des enfants.
+  parentSlug String?
+  parent     Category?  @relation("CategoryTree", fields: [parentSlug], references: [slug], onDelete: Restrict, onUpdate: Cascade)
+  children   Category[] @relation("CategoryTree")
+
+  @@index([parentSlug])
 }
 
 // ----------------------------------------------------------------------------

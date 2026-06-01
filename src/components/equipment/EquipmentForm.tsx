@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -50,6 +52,14 @@ export function EquipmentForm({
 }: EquipmentFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
 
+  // US-24 — regroupe les catégories par parent pour un select hiérarchique.
+  // « Autre » (réceptacle par défaut) est toujours affichée en dernier.
+  const roots = categories
+    .filter((c) => !c.parentSlug)
+    .sort((a, b) => (a.slug === "AUTRE" ? 1 : 0) - (b.slug === "AUTRE" ? 1 : 0));
+  const childrenOf = (slug: string) =>
+    categories.filter((c) => c.parentSlug === slug);
+
   return (
     <form action={formAction} className="space-y-5 rounded-2xl bg-snow p-6 shadow-card">
       <div className="space-y-1.5">
@@ -66,16 +76,33 @@ export function EquipmentForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="category">Catégorie</Label>
-          <Select name="category" defaultValue={initial?.category ?? categories[0]?.slug ?? ""}>
+          <Select name="category" defaultValue={initial?.category ?? roots[0]?.slug ?? ""}>
             <SelectTrigger id="category">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {categories.map((c) => (
-                <SelectItem key={c.slug} value={c.slug}>
-                  {c.label}
-                </SelectItem>
-              ))}
+              {roots.map((root) => {
+                const subs = childrenOf(root.slug);
+                if (subs.length === 0) {
+                  return (
+                    <SelectItem key={root.slug} value={root.slug}>
+                      {root.label}
+                    </SelectItem>
+                  );
+                }
+                return (
+                  <SelectGroup key={root.slug}>
+                    <SelectLabel>{root.label}</SelectLabel>
+                    {/* Le parent reste sélectionnable (article classé au niveau parent) */}
+                    <SelectItem value={root.slug}>{root.label} — général</SelectItem>
+                    {subs.map((sub) => (
+                      <SelectItem key={sub.slug} value={sub.slug} className="pl-8">
+                        {sub.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

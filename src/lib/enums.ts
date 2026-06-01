@@ -72,5 +72,7 @@ export const AUDIT_ACTIONS = [
   "CATEGORY_CREATED",
   "CATEGORY_UPDATED",
   "CATEGORY_DELETED",
+  "CATEGORY_ARCHIVED",
+  "CATEGORY_RESTORED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

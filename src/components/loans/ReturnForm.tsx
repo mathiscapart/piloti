@@ -26,9 +26,11 @@ const TONE: Record<ReturnCondition, string> = {
 export function ReturnForm({
   loanId,
   quantity,
+  requireWeighing = false,
 }: {
   loanId: string;
   quantity: number;
+  requireWeighing?: boolean;
 }) {
   const action = returnLoan.bind(null, loanId);
   const [state, formAction, pending] = useActionState(action, initialState);
@@ -87,6 +89,26 @@ export function ReturnForm({
           </p>
         ) : null}
       </div>
+
+      {/* US-17 — pesée obligatoire au retour si la catégorie l'exige */}
+      {requireWeighing ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="returnWeightKg">Poids au retour (kg)</Label>
+          <Input
+            id="returnWeightKg"
+            name="returnWeightKg"
+            type="number"
+            step="0.01"
+            min={0}
+            required
+            placeholder="Ex. 4.2"
+            className="w-32"
+          />
+          <p className="text-xs text-trail">
+            Cette catégorie impose de peser le matériel au retour.
+          </p>
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         <Label htmlFor="notes">Note (optionnel)</Label>

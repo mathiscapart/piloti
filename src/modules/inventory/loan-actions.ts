@@ -147,6 +147,7 @@ export async function returnLoan(
   const parsed = returnLoanSchema.safeParse({
     condition: formData.get("condition"),
     returnedQuantity: formData.get("returnedQuantity") ?? undefined,
+    returnWeightKg: formData.get("returnWeightKg") ?? undefined,
     notes: formData.get("notes"),
   });
   if (!parsed.success) {
@@ -155,11 +156,27 @@ export async function returnLoan(
 
   const loan = await db.loan.findUnique({
     where: { id: loanId },
-    select: { id: true, equipmentId: true, status: true, quantity: true },
+    select: {
+      id: true,
+      equipmentId: true,
+      status: true,
+      quantity: true,
+      equipment: { select: { category: true } },
+    },
   });
   if (!loan) return { error: "Prêt introuvable." };
   if (loan.status === "RETOURNE") {
     return { error: "Ce prêt est déjà clôturé." };
+  }
+
+  // US-17 — si la catégorie de l'article exige une pesée au retour, le poids
+  // est obligatoire.
+  const category = await db.category.findUnique({
+    where: { slug: loan.equipment.category },
+    select: { requireWeighing: true },
+  });
+  if (category?.requireWeighing && parsed.data.returnWeightKg === undefined) {
+    return { error: "Cette catégorie exige de peser le matériel au retour." };
   }
 
   // US-30 — retour total ou partiel. Sans quantité saisie : on rend tout.
@@ -178,12 +195,14 @@ export async function returnLoan(
               // Retour partiel : on décrémente la quantité en cours, le prêt
               // reste ouvert pour le reste. Le stock se réincrémente d'autant.
               quantity: loan.quantity - returnedQty,
+              returnWeightKg: parsed.data.returnWeightKg ?? undefined,
               notes: parsed.data.notes ?? undefined,
             }
           : {
               status: "RETOURNE",
               returnedAt: new Date(),
               returnedById: user.id,
+              returnWeightKg: parsed.data.returnWeightKg ?? undefined,
               notes: parsed.data.notes ?? undefined,
             },
       }),
@@ -196,6 +215,7 @@ export async function returnLoan(
         condition: parsed.data.condition,
         returnedQuantity: returnedQty,
         partial: isPartial,
+        returnWeightKg: parsed.data.returnWeightKg,
       },
     },
   );

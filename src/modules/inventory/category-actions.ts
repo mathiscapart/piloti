@@ -238,16 +238,29 @@ export async function unarchiveCategory(slug: string): Promise<ActionResult> {
   return { error: null };
 }
 
-export async function updateCategoryCanDry(
+// US-17 — comportements configurables par catégorie. Chaque option est un
+// booléen hérité par tous les articles de la catégorie (existants et futurs).
+const CATEGORY_BEHAVIORS = ["canDry", "requireWeighing"] as const;
+export type CategoryBehavior = (typeof CATEGORY_BEHAVIORS)[number];
+
+export async function updateCategoryBehavior(
   slug: string,
-  canDry: boolean,
+  behavior: CategoryBehavior,
+  value: boolean,
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!can(user, "admin.access")) return { error: "Accès refusé." };
+  if (!CATEGORY_BEHAVIORS.includes(behavior)) {
+    return { error: "Comportement inconnu." };
+  }
 
   await withAudit(
-    (tx) => tx.category.update({ where: { slug }, data: { canDry } }),
-    { action: "CATEGORY_UPDATED", userId: user.id, metadata: { slug, canDry } },
+    (tx) => tx.category.update({ where: { slug }, data: { [behavior]: value } }),
+    {
+      action: "CATEGORY_UPDATED",
+      userId: user.id,
+      metadata: { slug, behavior, value },
+    },
   );
 
   revalidatePath("/admin/categories");

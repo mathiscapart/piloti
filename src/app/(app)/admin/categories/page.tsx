@@ -1,9 +1,8 @@
 import { listCategoryTree, listCategories } from "@/modules/inventory/queries";
-import { updateCategoryCanDry } from "@/modules/inventory/category-actions";
 
 import { CategoryArchiveButton } from "./category-archive-button";
+import { CategoryBehaviorToggle } from "./category-behavior-toggle";
 import { CategoryCreateForm } from "./category-create-form";
-import { CategoryDryToggle } from "./category-dry-toggle";
 import { CategoryParentSelect } from "./category-parent-select";
 
 export default async function CategoriesPage() {
@@ -54,11 +53,16 @@ export default async function CategoriesPage() {
                     </p>
                     <p className="text-xs text-trail">{cat.slug}</p>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <CategoryDryToggle
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <CategoryBehaviorToggle
                       slug={cat.slug}
-                      canDry={cat.canDry}
-                      action={updateCategoryCanDry}
+                      behavior="canDry"
+                      active={cat.canDry}
+                    />
+                    <CategoryBehaviorToggle
+                      slug={cat.slug}
+                      behavior="requireWeighing"
+                      active={cat.requireWeighing}
                     />
                     {/* Une racine avec sous-catégories ne peut pas être déplacée */}
                     {cat.children.length === 0 && !cat.archived ? (
@@ -94,11 +98,16 @@ export default async function CategoriesPage() {
                           </p>
                           <p className="text-xs text-trail">{sub.slug}</p>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <CategoryDryToggle
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <CategoryBehaviorToggle
                             slug={sub.slug}
-                            canDry={sub.canDry}
-                            action={updateCategoryCanDry}
+                            behavior="canDry"
+                            active={sub.canDry}
+                          />
+                          <CategoryBehaviorToggle
+                            slug={sub.slug}
+                            behavior="requireWeighing"
+                            active={sub.requireWeighing}
                           />
                           {!sub.archived ? (
                             <CategoryParentSelect

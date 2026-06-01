@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { ReturnForm } from "@/components/loans/ReturnForm";
+import { db } from "@/lib/db";
 import { getLoanDetail } from "@/modules/inventory/queries";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -20,6 +21,12 @@ export default async function ReturnLoanPage({ params }: PageProps) {
   const { id } = await params;
   const loan = await getLoanDetail(id);
   if (!loan) notFound();
+
+  // US-17 — la catégorie de l'article peut imposer une pesée au retour.
+  const category = await db.category.findUnique({
+    where: { slug: loan.equipment.category },
+    select: { requireWeighing: true },
+  });
   if (loan.status === "RETOURNE") {
     return (
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-6 md:px-8 md:py-10">
@@ -76,7 +83,11 @@ export default async function ReturnLoanPage({ params }: PageProps) {
         </div>
       </section>
 
-      <ReturnForm loanId={loan.id} quantity={loan.quantity} />
+      <ReturnForm
+        loanId={loan.id}
+        quantity={loan.quantity}
+        requireWeighing={category?.requireWeighing ?? false}
+      />
     </div>
   );
 }

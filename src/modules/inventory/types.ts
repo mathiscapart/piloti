@@ -78,6 +78,8 @@ export const returnLoanSchema = z.object({
   condition: z.enum(RETURN_CONDITIONS),
   // US-30 — quantité rendue (retours partiels / pertes). Absent = tout rendre.
   returnedQuantity: z.coerce.number().int().min(1).optional(),
+  // US-17/US-18 — poids relevé au retour (kg), exigé si la catégorie l'impose.
+  returnWeightKg: z.coerce.number().positive("Poids invalide.").optional(),
   notes: optionalString,
 });
 export type ReturnLoanInput = z.infer<typeof returnLoanSchema>;

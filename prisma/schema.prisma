@@ -105,7 +105,11 @@ model Verification {
 model Category {
   slug      String   @id
   label     String
-  canDry    Boolean  @default(false)
+  // US-17 — comportements configurables hérités par tous les articles de la
+  // catégorie. `canDry` = séchage possible (US-10) ; `requireWeighing` = pesée
+  // obligatoire au retour (US-18).
+  canDry          Boolean @default(false)
+  requireWeighing Boolean @default(false)
   order     Int      @default(0)
   archived  Boolean  @default(false) // US-31 — catégorie archivée (masquée des listes de choix)
   createdAt DateTime @default(now())
@@ -159,6 +163,9 @@ model Loan {
   // Séchage (statut SECHAGE)
   dryingLocation   String?
   dryingPersonName String?
+
+  // US-17/US-18 — poids relevé au retour (kg) si la catégorie l'exige.
+  returnWeightKg Float?
 
   notes     String?
   createdAt DateTime @default(now())

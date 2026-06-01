@@ -13,6 +13,7 @@ import { notFound } from "next/navigation";
 import { CategoryChip, CategoryIcon } from "@/components/equipment/CategoryChip";
 import { ConditionBadge } from "@/components/equipment/ConditionBadge";
 import { IncidentBadge } from "@/components/equipment/IncidentBadge";
+import { NfcSection } from "@/components/equipment/NfcSection";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -101,6 +102,13 @@ export default async function EquipmentDetailPage({ params }: PageProps) {
         <StatCell label="En prêt" value={eq.stats.loanedQty} tone="sky" />
         <StatCell label="En réparation" value={eq.stats.inRepairQty} tone="fire" />
       </section>
+
+      {/* US-15 — identification NFC */}
+      <NfcSection
+        equipmentId={eq.id}
+        nfcUid={eq.nfcUid}
+        resolverBaseUrl={process.env.BETTER_AUTH_URL ?? ""}
+      />
 
       {/* Tabs */}
       <section>

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { withAudit } from "@/lib/audit";
+import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 
@@ -70,6 +71,63 @@ export async function updateEquipment(
   revalidatePath(`/stock/${id}`);
   revalidatePath("/dashboard");
   redirect(`/stock/${id}?notice=equipment-updated`);
+}
+
+// US-15 — associe (ou remplace) un tag NFC à un article. UID unique : si déjà
+// pris par un autre article, on refuse avec un message clair.
+export async function setEquipmentNfc(
+  id: string,
+  uid: string,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, "equipment.update")) {
+    return { error: "Vous n'avez pas la permission de modifier ce matériel." };
+  }
+
+  const cleanUid = uid.trim();
+  if (!cleanUid) return { error: "UID NFC vide." };
+
+  const existing = await db.equipment.findUnique({
+    where: { nfcUid: cleanUid },
+    select: { id: true, name: true },
+  });
+  if (existing && existing.id !== id) {
+    return { error: `Ce tag est déjà associé à « ${existing.name} ».` };
+  }
+
+  await withAudit(
+    (tx) => tx.equipment.update({ where: { id }, data: { nfcUid: cleanUid } }),
+    {
+      action: "EQUIPMENT_UPDATED",
+      userId: user.id,
+      equipmentId: id,
+      metadata: { nfcUid: cleanUid },
+    },
+  );
+
+  revalidatePath(`/stock/${id}`);
+  return { error: null };
+}
+
+// US-15 — dissocie le tag NFC (remplacement d'autocollant abîmé).
+export async function clearEquipmentNfc(id: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, "equipment.update")) {
+    return { error: "Vous n'avez pas la permission de modifier ce matériel." };
+  }
+
+  await withAudit(
+    (tx) => tx.equipment.update({ where: { id }, data: { nfcUid: null } }),
+    {
+      action: "EQUIPMENT_UPDATED",
+      userId: user.id,
+      equipmentId: id,
+      metadata: { nfcUid: null },
+    },
+  );
+
+  revalidatePath(`/stock/${id}`);
+  return { error: null };
 }
 
 export async function archiveEquipment(id: string): Promise<ActionResult> {

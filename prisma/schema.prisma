@@ -137,6 +137,7 @@ model Equipment {
   photo     String?
   notes     String?
   archived  Boolean  @default(false)
+  nfcUid    String?  @unique // US-15 — UID du tag NFC associé (scan → fiche article)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

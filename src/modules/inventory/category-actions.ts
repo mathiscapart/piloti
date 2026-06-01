@@ -18,6 +18,7 @@ const categorySchema = z.object({
     .min(1, "Nom requis.")
     .max(MAX_LABEL_LENGTH, `${MAX_LABEL_LENGTH} caractères max.`),
   canDry: z.coerce.boolean().optional().default(false),
+  requireWeighing: z.coerce.boolean().optional().default(false),
   // US-24 — sous-catégorie : slug du parent (vide = catégorie racine).
   parentSlug: z
     .string()
@@ -47,6 +48,7 @@ export async function createCategory(
   const parsed = categorySchema.safeParse({
     label: formData.get("label"),
     canDry: formData.get("canDry") === "on",
+    requireWeighing: formData.get("requireWeighing") === "on",
     parentSlug: formData.get("parentSlug"),
   });
   if (!parsed.success) {
@@ -83,6 +85,7 @@ export async function createCategory(
           slug,
           label: parsed.data.label,
           canDry: parsed.data.canDry,
+          requireWeighing: parsed.data.requireWeighing,
           parentSlug,
           order: (maxOrder._max.order ?? 0) + 1,
         },

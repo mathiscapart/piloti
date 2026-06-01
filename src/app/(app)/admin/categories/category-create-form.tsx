@@ -53,6 +53,17 @@ export function CategoryCreateForm({ roots }: { roots: CategoryRow[] }) {
           Peut être mis en séchage
         </Label>
       </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="requireWeighing"
+          name="requireWeighing"
+          className="size-4 rounded"
+        />
+        <Label htmlFor="requireWeighing" className="cursor-pointer">
+          Doit être pesée au retour
+        </Label>
+      </div>
       {state.error ? (
         <p className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink">
           {state.error}

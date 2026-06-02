@@ -306,17 +306,22 @@ export async function getLoanDetail(id: string) {
   });
 }
 
+// US-20 — normalise une chaîne pour une recherche insensible à la casse ET aux
+// accents (SQLite `LIKE` ne gère pas les accents). « Tenté » == « tente ».
+function normalizeSearch(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
 // Équipement sélectionnable au step 1 du wizard. Inclut tout (archived false),
 // marque comme "déjà en cours" ceux qui ont un prêt ACTIF/RETARD/SECHAGE,
 // ou qui sont HORS_SERVICE/A_REPARER.
 export async function listBorrowableEquipment(search?: string) {
-  const where: Prisma.EquipmentWhereInput = { archived: false };
-  if (search && search.trim().length > 0) {
-    where.name = { contains: search.trim() };
-  }
-
   const equipment = await db.equipment.findMany({
-    where,
+    where: { archived: false },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -333,7 +338,25 @@ export async function listBorrowableEquipment(search?: string) {
     },
   });
 
-  return equipment.map((eq) => {
+  // US-20 — recherche par nom ET catégorie (slug + libellé), insensible à la
+  // casse et aux accents. Filtré en mémoire pour le support des accents ; le
+  // volume d'inventaire d'un groupe reste modeste.
+  const term = normalizeSearch(search ?? "");
+  let rows = equipment;
+  if (term.length > 0) {
+    const categories = await db.category.findMany({
+      select: { slug: true, label: true },
+    });
+    const labelBySlug = new Map(categories.map((c) => [c.slug, c.label]));
+    rows = equipment.filter((eq) => {
+      const haystack = normalizeSearch(
+        `${eq.name} ${eq.category} ${labelBySlug.get(eq.category) ?? ""}`,
+      );
+      return haystack.includes(term);
+    });
+  }
+
+  return rows.map((eq) => {
     const loanedQty = eq.loans.reduce((sum, loan) => sum + loan.quantity, 0);
     const availableQty = Math.max(0, eq.totalQty - loanedQty);
     const isBroken =

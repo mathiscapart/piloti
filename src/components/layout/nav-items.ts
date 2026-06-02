@@ -15,16 +15,18 @@ import {
 export interface NavItem {
   href: string;
   label: string;
+  // Libellé court pour la bottom-nav mobile (espace réduit).
+  shortLabel?: string;
   icon: LucideIcon;
   adminOnly?: boolean;
 }
 
 export const MAIN_NAV: NavItem[] = [
-  { href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Tableau de bord", shortLabel: "Accueil", icon: LayoutDashboard },
   { href: "/stock", label: "Stock", icon: Package },
   { href: "/prets", label: "Prêts", icon: Truck },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
-  { href: "/communication", label: "Communication", icon: MessageSquare },
+  { href: "/communication", label: "Communication", shortLabel: "Messages", icon: MessageSquare },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

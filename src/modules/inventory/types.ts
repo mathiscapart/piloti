@@ -99,7 +99,8 @@ export type ReturnLoanInput = z.infer<typeof returnLoanSchema>;
 
 export const dryingSchema = z.object({
   dryingLocation: z.string().trim().min(1, "Indique l'endroit du séchage."),
-  dryingPersonName: optionalString,
+  // US-23 — contact référent rattaché à un compte (id User), optionnel.
+  dryingContactId: optionalString,
 });
 export type DryingInput = z.infer<typeof dryingSchema>;
 

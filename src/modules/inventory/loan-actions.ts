@@ -289,7 +289,7 @@ export async function markAsDrying(
 
   const parsed = dryingSchema.safeParse({
     dryingLocation: formData.get("dryingLocation"),
-    dryingPersonName: formData.get("dryingPersonName"),
+    dryingContactId: formData.get("dryingContactId"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
@@ -304,6 +304,20 @@ export async function markAsDrying(
     return { error: "Ce prêt est déjà clôturé." };
   }
 
+  // US-23 — le contact est un compte : on vérifie qu'il existe et on garde un
+  // snapshot du nom (dryingPersonName) pour l'affichage + le legacy.
+  let dryingContactId: string | null = null;
+  let dryingPersonName: string | null = null;
+  if (parsed.data.dryingContactId) {
+    const contact = await db.user.findUnique({
+      where: { id: parsed.data.dryingContactId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    if (!contact) return { error: "Contact de séchage introuvable." };
+    dryingContactId = contact.id;
+    dryingPersonName = `${contact.firstName} ${contact.lastName}`;
+  }
+
   await withAudit(
     (tx) =>
       tx.loan.update({
@@ -311,7 +325,8 @@ export async function markAsDrying(
         data: {
           status: "SECHAGE",
           dryingLocation: parsed.data.dryingLocation,
-          dryingPersonName: parsed.data.dryingPersonName ?? null,
+          dryingContactId,
+          dryingPersonName,
         },
       }),
     {
@@ -321,7 +336,8 @@ export async function markAsDrying(
       equipmentId: loan.equipmentId,
       metadata: {
         dryingLocation: parsed.data.dryingLocation,
-        dryingPersonName: parsed.data.dryingPersonName,
+        dryingContactId,
+        dryingPersonName,
       },
     },
   );

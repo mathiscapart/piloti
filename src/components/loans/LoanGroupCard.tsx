@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { LoanListItem } from "@/modules/inventory/queries";
 
-import { DryingDialog } from "./DryingDialog";
+import { DryingDialog, type DryingContactOption } from "./DryingDialog";
 import { LoanStatusBadge } from "./LoanStatusBadge";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -35,9 +35,11 @@ function isLoanLate(loan: LoanListItem): boolean {
 export function LoanGroupCard({
   loans,
   dryableCategories,
+  dryingContacts,
 }: {
   loans: LoanListItem[];
   dryableCategories: Set<string>;
+  dryingContacts: DryingContactOption[];
 }) {
   const head = loans[0];
   const anyLate = loans.some(isLoanLate);
@@ -118,15 +120,38 @@ export function LoanGroupCard({
                   {overdue > 0 ? ` · ${overdue} j de retard` : ""}
                 </p>
                 {loan.status === "SECHAGE" && loan.dryingLocation ? (
-                  <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-soft px-2.5 py-0.5 text-xs font-bold text-sky-ink">
+                  <p className="mt-1 inline-flex flex-wrap items-center gap-1 rounded-full bg-sky-soft px-2.5 py-0.5 text-xs font-bold text-sky-ink">
                     <Droplets className="size-3" />
                     Séchage : {loan.dryingLocation}
+                    {/* US-23 — responsable rattaché à un compte */}
+                    {loan.dryingContact ? (
+                      <>
+                        {" · "}
+                        {loan.dryingContact.firstName}{" "}
+                        {loan.dryingContact.lastName}
+                        {loan.dryingContact.phone ? (
+                          <a
+                            href={`tel:${loan.dryingContact.phone.replace(/\s/g, "")}`}
+                            className="underline"
+                          >
+                            ({loan.dryingContact.phone})
+                          </a>
+                        ) : null}
+                      </>
+                    ) : loan.dryingPersonName ? (
+                      <>
+                        {" · "}
+                        {loan.dryingPersonName}
+                      </>
+                    ) : null}
                   </p>
                 ) : null}
               </div>
 
               <div className="flex flex-wrap gap-2 sm:flex-shrink-0">
-                {canDry ? <DryingDialog loanId={loan.id} /> : null}
+                {canDry ? (
+                  <DryingDialog loanId={loan.id} contacts={dryingContacts} />
+                ) : null}
                 {loan.status !== "RETOURNE" ? (
                   <Button asChild size="sm">
                     <Link href={`/prets/${loan.id}/retour`}>

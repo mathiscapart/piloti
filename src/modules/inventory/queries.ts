@@ -277,6 +277,10 @@ export async function listLoans(filter: LoanFilter = "all") {
           phone: true,
         },
       },
+      // US-23 — contact de séchage rattaché à un compte (pour identifier/joindre).
+      dryingContact: {
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      },
     },
   });
 

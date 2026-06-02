@@ -43,6 +43,7 @@ model User {
   // Piloti relations
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
+  dryingLoans       Loan[]     @relation("LoanDryingContact")
   reportedIncidents Incident[] @relation("IncidentReporter")
   resolvedIncidents Incident[] @relation("IncidentResolver")
   auditLogs         AuditLog[]
@@ -167,6 +168,9 @@ model Loan {
 
   // Séchage (statut SECHAGE)
   dryingLocation   String?
+  // US-23 — contact de séchage rattaché à un compte (référence User).
+  // `dryingPersonName` est conservé comme snapshot/affichage et pour le legacy.
+  dryingContactId  String?
   dryingPersonName String?
 
   // US-17/US-18 — poids relevé au retour (kg) si la catégorie l'exige.
@@ -177,8 +181,9 @@ model Loan {
   updatedAt DateTime @updatedAt
 
   equipment  Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  borrower   User       @relation("LoanBorrower", fields: [borrowerId], references: [id])
-  returnedBy User?      @relation("LoanReturnedBy", fields: [returnedById], references: [id])
+  borrower     User     @relation("LoanBorrower", fields: [borrowerId], references: [id])
+  returnedBy   User?    @relation("LoanReturnedBy", fields: [returnedById], references: [id])
+  dryingContact User?   @relation("LoanDryingContact", fields: [dryingContactId], references: [id])
   auditLogs  AuditLog[]
 
   @@index([status])

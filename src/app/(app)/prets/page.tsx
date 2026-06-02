@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import {
   listLoans,
   listCategories,
+  listBorrowers,
   type LoanFilter,
   type LoanListItem,
 } from "@/modules/inventory/queries";
@@ -31,13 +32,20 @@ export default async function PretsPage({ searchParams }: PageProps) {
     ? (raw as LoanFilter)
     : "all";
 
-  const [loans, categories] = await Promise.all([
+  const [loans, categories, borrowers] = await Promise.all([
     listLoans(filter),
     listCategories(),
+    listBorrowers(),
   ]);
   const dryableCategories = new Set(
     categories.filter((c) => c.canDry).map((c) => c.slug),
   );
+  // US-23 — comptes proposés comme responsable de séchage.
+  const dryingContacts = borrowers.map((b) => ({
+    id: b.id,
+    firstName: b.firstName,
+    lastName: b.lastName,
+  }));
 
   // US-32 — regroupe les lignes par `groupId` (prêt groupé). Un prêt legacy
   // sans groupId forme son propre groupe (clé = son id). L'ordre suit celui de
@@ -103,7 +111,11 @@ export default async function PretsPage({ searchParams }: PageProps) {
         <ul className="space-y-3">
           {groupedLoans.map((group) => (
             <li key={group[0].groupId ?? group[0].id}>
-              <LoanGroupCard loans={group} dryableCategories={dryableCategories} />
+              <LoanGroupCard
+                loans={group}
+                dryableCategories={dryableCategories}
+                dryingContacts={dryingContacts}
+              />
             </li>
           ))}
         </ul>

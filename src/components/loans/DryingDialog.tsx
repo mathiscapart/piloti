@@ -15,12 +15,31 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { markAsDrying } from "@/modules/inventory/loan-actions";
 import type { ActionResult } from "@/lib/types";
 
 const initialState: ActionResult = { error: null };
 
-export function DryingDialog({ loanId }: { loanId: string }) {
+export interface DryingContactOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+export function DryingDialog({
+  loanId,
+  contacts,
+}: {
+  loanId: string;
+  contacts: DryingContactOption[];
+}) {
   const [open, setOpen] = useState(false);
   const action = markAsDrying.bind(null, loanId);
   const [state, formAction, pending] = useActionState(action, initialState);
@@ -51,14 +70,25 @@ export function DryingDialog({ loanId }: { loanId: string }) {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="dryingPersonName">
-              Personne référente (optionnel)
+            <Label htmlFor="dryingContactId">
+              Responsable du séchage (optionnel)
             </Label>
-            <Input
-              id="dryingPersonName"
-              name="dryingPersonName"
-              placeholder="Marie Dupont"
-            />
+            <Select name="dryingContactId">
+              <SelectTrigger id="dryingContactId">
+                <SelectValue placeholder="Choisir un compte…" />
+              </SelectTrigger>
+              <SelectContent>
+                {contacts.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.firstName} {c.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-trail">
+              Rattaché à un compte pour pouvoir l&apos;identifier et le
+              contacter.
+            </p>
           </div>
           {state.error ? (
             <p

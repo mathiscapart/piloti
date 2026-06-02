@@ -27,6 +27,23 @@ export default async function ReturnLoanPage({ params }: PageProps) {
     where: { slug: loan.equipment.category },
     select: { requireWeighing: true },
   });
+
+  // US-18 — poids de référence = dernière pesée connue, sinon poids de base.
+  let referenceWeight = loan.equipment.baseWeightKg;
+  if (category?.requireWeighing) {
+    const lastWeighing = await db.loan.findFirst({
+      where: {
+        equipmentId: loan.equipment.id,
+        returnWeightKg: { not: null },
+        NOT: { id: loan.id },
+      },
+      orderBy: { returnedAt: "desc" },
+      select: { returnWeightKg: true },
+    });
+    if (lastWeighing?.returnWeightKg != null) {
+      referenceWeight = lastWeighing.returnWeightKg;
+    }
+  }
   if (loan.status === "RETOURNE") {
     return (
       <div className="mx-auto max-w-2xl space-y-4 px-4 py-6 md:px-8 md:py-10">
@@ -87,7 +104,7 @@ export default async function ReturnLoanPage({ params }: PageProps) {
         loanId={loan.id}
         quantity={loan.quantity}
         requireWeighing={category?.requireWeighing ?? false}
-        baseWeightKg={loan.equipment.baseWeightKg}
+        baseWeightKg={referenceWeight}
       />
     </div>
   );

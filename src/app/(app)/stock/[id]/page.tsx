@@ -4,6 +4,7 @@ import {
   History,
   Pencil,
   Plus,
+  Scale,
   Truck,
   Wrench,
 } from "lucide-react";
@@ -50,6 +51,33 @@ export default async function EquipmentDetailPage({ params }: PageProps) {
   ]);
   const categoryLabel = categories.find((c) => c.slug === eq?.category)?.label;
   if (!eq) notFound();
+
+  // US-17/US-18 — la catégorie impose-t-elle une pesée au retour ?
+  const isWeighable =
+    categories.find((c) => c.slug === eq.category)?.requireWeighing ?? false;
+
+  // US-18 — historique des pesées : chaque retour avec un poids relevé.
+  // On calcule la consommation de chaque pesée par rapport à la précédente
+  // (poids de base pour la toute première). Le poids de référence courant =
+  // dernière pesée connue, sinon poids de base.
+  const weighingsAsc = eq.loans
+    .filter((l) => l.returnWeightKg != null && l.returnedAt != null)
+    .sort((a, b) => a.returnedAt!.getTime() - b.returnedAt!.getTime());
+  const weighings = weighingsAsc
+    .map((l, i) => {
+      // Poids de référence de cette pesée = pesée précédente, ou poids de base
+      // pour la toute première.
+      const previousWeight =
+        i === 0 ? (eq.baseWeightKg ?? null) : weighingsAsc[i - 1].returnWeightKg;
+      const consumed =
+        previousWeight != null && l.returnWeightKg != null
+          ? Math.round((previousWeight - l.returnWeightKg) * 100) / 100
+          : null;
+      return { loan: l, consumed };
+    })
+    .reverse(); // plus récente en premier pour l'affichage
+  const referenceWeight =
+    weighings[0]?.loan.returnWeightKg ?? eq.baseWeightKg ?? null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 pb-[calc(9rem_+_env(safe-area-inset-bottom))] pt-6 md:px-8 md:pt-10 md:pb-10">
@@ -102,6 +130,70 @@ export default async function EquipmentDetailPage({ params }: PageProps) {
         <StatCell label="En prêt" value={eq.stats.loanedQty} tone="sky" />
         <StatCell label="En réparation" value={eq.stats.inRepairQty} tone="fire" />
       </section>
+
+      {/* US-18 — suivi du poids (catégorie pesable uniquement) */}
+      {isWeighable ? (
+        <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
+          <div className="flex items-center gap-2">
+            <Scale className="size-5 text-trail" />
+            <h2 className="font-bold text-earth">Suivi du poids</h2>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-sand p-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-trail">
+                Poids de base
+              </p>
+              <p className="mt-1 text-2xl font-black text-earth">
+                {eq.baseWeightKg != null ? `${eq.baseWeightKg} kg` : "—"}
+              </p>
+            </div>
+            <div className="rounded-xl bg-sand p-3">
+              <p className="text-xs font-bold uppercase tracking-wider text-trail">
+                Dernière pesée
+              </p>
+              <p className="mt-1 text-2xl font-black text-earth">
+                {referenceWeight != null ? `${referenceWeight} kg` : "—"}
+              </p>
+              <p className="text-xs text-trail">référence au prochain retour</p>
+            </div>
+          </div>
+
+          {weighings.length === 0 ? (
+            <p className="rounded-xl bg-sand p-3 text-sm text-trail">
+              Aucune pesée enregistrée pour l&apos;instant. Le poids sera relevé
+              à chaque retour de prêt.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {weighings.map(({ loan, consumed }) => (
+                <li
+                  key={loan.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone/60 p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-earth">
+                      {loan.returnWeightKg} kg
+                      {consumed != null && consumed > 0 ? (
+                        <span className="ml-2 text-xs font-medium text-trail">
+                          (−{consumed} kg consommés)
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="text-xs text-trail">
+                      {loan.borrower.firstName} {loan.borrower.lastName}
+                      {loan.eventName ? ` · ${loan.eventName}` : ""}
+                    </p>
+                  </div>
+                  <time className="text-xs text-trail">
+                    {loan.returnedAt ? DATE_FMT.format(loan.returnedAt) : ""}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
       {/* US-15 — identification NFC */}
       <NfcSection

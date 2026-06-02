@@ -175,8 +175,30 @@ export async function returnLoan(
     where: { slug: loan.equipment.category },
     select: { requireWeighing: true },
   });
-  if (category?.requireWeighing && parsed.data.returnWeightKg === undefined) {
-    return { error: "Cette catégorie exige de peser le matériel au retour." };
+  if (category?.requireWeighing) {
+    if (parsed.data.returnWeightKg === undefined) {
+      return { error: "Cette catégorie exige de peser le matériel au retour." };
+    }
+    // US-18 — le poids au retour doit être inférieur au poids de référence
+    // (dernière pesée connue, sinon poids de base). Sinon → anomalie bloquante.
+    const eq = await db.equipment.findUnique({
+      where: { id: loan.equipmentId },
+      select: {
+        baseWeightKg: true,
+        loans: {
+          where: { returnWeightKg: { not: null }, NOT: { id: loanId } },
+          orderBy: { returnedAt: "desc" },
+          take: 1,
+          select: { returnWeightKg: true },
+        },
+      },
+    });
+    const reference = eq?.loans[0]?.returnWeightKg ?? eq?.baseWeightKg ?? null;
+    if (reference != null && parsed.data.returnWeightKg >= reference) {
+      return {
+        error: `Poids au retour (${parsed.data.returnWeightKg} kg) ≥ poids de référence (${reference} kg). Une bouteille utilisée doit peser moins — vérifie la pesée.`,
+      };
+    }
   }
 
   // US-30 — retour total ou partiel. Sans quantité saisie : on rend tout.

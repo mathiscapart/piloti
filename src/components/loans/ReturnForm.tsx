@@ -116,7 +116,7 @@ export function ReturnForm({
           />
           <p className="text-xs text-trail">
             {baseWeightKg != null
-              ? `Poids de base : ${baseWeightKg} kg.`
+              ? `Poids de référence : ${baseWeightKg} kg (doit être supérieur au poids rendu).`
               : "Cette catégorie impose de peser le matériel au retour."}
             {consumed != null
               ? ` Consommation estimée : ${consumed} kg.`

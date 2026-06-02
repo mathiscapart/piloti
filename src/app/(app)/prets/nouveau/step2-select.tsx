@@ -2,7 +2,7 @@
 
 import { Search } from "lucide-react";
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 
 import { CategoryIcon } from "@/components/equipment/CategoryChip";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,16 @@ import type { BorrowableEquipment } from "@/modules/inventory/queries";
 
 const initialState: ActionResult = { error: null };
 
+// US-20 — normalisation insensible à la casse ET aux accents (idem recherche
+// serveur), pour un filtrage instantané côté client.
+function normalize(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
 interface Details {
   borrowerId: string;
   startDate: string;
@@ -25,6 +35,7 @@ interface Details {
 
 interface Props {
   equipment: BorrowableEquipment[];
+  categoryLabels: Record<string, string>;
   preselected: string[];
   initialSearch: string;
   details: Details;
@@ -33,6 +44,7 @@ interface Props {
 
 export function Step2Select({
   equipment,
+  categoryLabels,
   preselected,
   initialSearch,
   details,
@@ -40,6 +52,7 @@ export function Step2Select({
 }: Props) {
   const [state, formAction, pending] = useActionState(createLoan, initialState);
   const [selected, setSelected] = useState<Set<string>>(new Set(preselected));
+  const [query, setQuery] = useState(initialSearch);
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -49,6 +62,22 @@ export function Step2Select({
       return next;
     });
   }
+
+  // US-20 — recherche instantanée par nom ET catégorie (slug + libellé),
+  // insensible à la casse/accents. Aucun rechargement → sélection préservée.
+  const term = normalize(query);
+  const filtered = useMemo(() => {
+    if (term.length === 0) return equipment;
+    // Les articles déjà cochés restent visibles (leurs champs qté/date doivent
+    // rester dans le formulaire pour être soumis), même s'ils ne matchent pas.
+    return equipment.filter(
+      (eq) =>
+        selected.has(eq.id) ||
+        normalize(
+          `${eq.name} ${eq.category} ${categoryLabels[eq.category] ?? ""}`,
+        ).includes(term),
+    );
+  }, [equipment, categoryLabels, term, selected]);
 
   // Champs cachés qui propagent l'emprunteur + les dates à l'étape de recherche
   // et à la création.
@@ -78,39 +107,30 @@ export function Step2Select({
         </Link>
       </div>
 
-      {/* Recherche (formulaire GET dédié, préserve emprunteur/dates/sélection) */}
-      <form method="GET" action="/prets/nouveau" role="search">
-        <input type="hidden" name="step" value="2" />
-        {detailFields}
-        {[...selected].map((id) => (
-          <input key={id} type="hidden" name="equipmentId" value={id} />
-        ))}
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-trail" />
-          <Input
-            type="search"
-            name="q"
-            defaultValue={initialSearch}
-            placeholder="Chercher un article (nom ou catégorie)…"
-            className="pl-9"
-          />
-          <p className="mt-1 text-xs text-trail">
-            Tape Entrée pour filtrer la liste.
-          </p>
-        </div>
-      </form>
+      {/* US-20 — recherche instantanée (filtrage client, sans rechargement) */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-trail" />
+        <Input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Chercher un article (nom ou catégorie)…"
+          className="pl-9"
+          aria-label="Rechercher un article"
+        />
+      </div>
 
       {/* Sélection + détails par article → création du prêt groupé */}
       <form action={formAction} className="space-y-4">
         {detailFields}
 
         <ul className="space-y-2">
-          {equipment.length === 0 ? (
+          {filtered.length === 0 ? (
             <li className="rounded-2xl border border-dashed border-stone p-6 text-center text-sm text-trail">
               Aucun article ne correspond.
             </li>
           ) : (
-            equipment.map((eq) => {
+            filtered.map((eq) => {
               const isSelected = selected.has(eq.id);
               return (
                 <li key={eq.id} className="space-y-2">

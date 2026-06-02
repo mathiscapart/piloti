@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   listBorrowableEquipment,
   listBorrowers,
+  listCategories,
 } from "@/modules/inventory/queries";
 
 import { Step1Details } from "./step1-details";
@@ -117,11 +118,17 @@ async function Step2Page({
     start: new Date(details.startDate),
     end: new Date(details.expectedReturn),
   };
-  const [equipment, borrowers] = await Promise.all([
-    listBorrowableEquipment(search, period),
+  // US-20 — on charge TOUT le matériel disponible sur la période ; le filtrage
+  // par recherche est instantané côté client (cf. Step2Select), sans rechargement.
+  const [equipment, borrowers, categories] = await Promise.all([
+    listBorrowableEquipment(undefined, period),
     listBorrowers(),
+    listCategories(),
   ]);
   const borrower = borrowers.find((b) => b.id === details.borrowerId);
+  const categoryLabels = Object.fromEntries(
+    categories.map((c) => [c.slug, c.label]),
+  );
 
   return (
     <>
@@ -136,6 +143,7 @@ async function Step2Page({
       </div>
       <Step2Select
         equipment={equipment}
+        categoryLabels={categoryLabels}
         preselected={preselected}
         initialSearch={search}
         details={details}

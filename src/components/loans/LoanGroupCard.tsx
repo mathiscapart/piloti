@@ -55,9 +55,13 @@ export function LoanGroupCard({
       {/* En-tête commun : emprunteur + événement + contact */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-bold text-earth">
+          {/* US-14 — nom cliquable → fiche membre (matériel détenu + contact) */}
+          <Link
+            href={`/membres/${head.borrower.id}`}
+            className="font-bold text-earth hover:text-forest"
+          >
             {head.borrower.firstName} {head.borrower.lastName}
-          </p>
+          </Link>
           <p className="text-sm text-trail">
             {head.eventName ? `${head.eventName} · ` : ""}
             {loans.length} article{loans.length > 1 ? "s" : ""}

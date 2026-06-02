@@ -422,6 +422,39 @@ export async function listBorrowers() {
 
 export type BorrowerOption = Awaited<ReturnType<typeof listBorrowers>>[number];
 
+// US-14 — fiche d'un membre + le matériel qu'il détient actuellement (prêts
+// actifs), pour le contacter rapidement.
+export async function getMemberDetail(id: string) {
+  const user = await db.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      unit: true,
+      role: true,
+      status: true,
+    },
+  });
+  if (!user) return null;
+
+  const loans = await db.loan.findMany({
+    where: { borrowerId: id, status: { in: [...ACTIVE_LOAN_STATUSES] } },
+    orderBy: [{ expectedReturn: "asc" }],
+    include: {
+      equipment: { select: { id: true, name: true, category: true } },
+    },
+  });
+
+  return { user, loans };
+}
+
+export type MemberDetail = NonNullable<
+  Awaited<ReturnType<typeof getMemberDetail>>
+>;
+
 // ----------------------------------------------------------------------------
 // Incidents — liste & détail
 // ----------------------------------------------------------------------------

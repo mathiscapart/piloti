@@ -18,6 +18,7 @@ export const ACTIONS = [
   "user.approve",
   "donation.create",
   "donation.review",
+  "member.view",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -47,6 +48,8 @@ const ADMIN_OR_CHEF = new Set<Action>([
   "loan.return.validate",
   "incident.report",
   "equipment.status.change",
+  // US-14 — consulter la fiche d'un membre et le matériel qu'il détient.
+  "member.view",
 ]);
 
 export function can(user: AuthCtx, action: Action): boolean {

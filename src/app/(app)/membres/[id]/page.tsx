@@ -11,6 +11,8 @@ import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getMemberDetail } from "@/modules/inventory/queries";
 
+import { MemberProfileForm } from "./MemberProfileForm";
+
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
   month: "short",
@@ -40,15 +42,32 @@ export default async function MemberDetailPage({ params }: PageProps) {
   const { user, loans } = member;
   const now = new Date();
 
+  // US-26 — accès à l'annuaire des compétences : RG (member.directory) ou admin.
+  const canSeeDirectory = can(currentUser, "member.directory");
+  const isAdmin = can(currentUser, "admin.access");
+  const isParent = user.role === "PARENT";
+  const hasProfile =
+    !!user.profession || !!user.skills || !!user.availability || !!user.helpNotes;
+
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <Link
-        href="/prets"
-        className="inline-flex items-center gap-1 text-sm font-bold text-trail hover:text-earth"
-      >
-        <ArrowLeft className="size-4" />
-        Retour aux prêts
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link
+          href="/prets"
+          className="inline-flex items-center gap-1 text-sm font-bold text-trail hover:text-earth"
+        >
+          <ArrowLeft className="size-4" />
+          Retour aux prêts
+        </Link>
+        {canSeeDirectory ? (
+          <Link
+            href="/membres/annuaire"
+            className="text-sm font-bold text-forest hover:underline"
+          >
+            Annuaire des compétences →
+          </Link>
+        ) : null}
+      </div>
 
       {/* Identité + contact */}
       <section className="space-y-3 rounded-2xl bg-snow p-5 shadow-card">
@@ -84,6 +103,46 @@ export default async function MemberDetailPage({ params }: PageProps) {
           </Button>
         </div>
       </section>
+
+      {/* US-26 — profil parent enrichi : édition (admin) ou lecture (RG). */}
+      {isParent && isAdmin ? (
+        <MemberProfileForm
+          userId={user.id}
+          profession={user.profession}
+          skills={user.skills}
+          availability={user.availability}
+          helpNotes={user.helpNotes}
+          skillsConsent={user.skillsConsent}
+        />
+      ) : isParent && canSeeDirectory && hasProfile ? (
+        <section className="space-y-2 rounded-2xl bg-snow p-5 shadow-card">
+          <h2 className="font-bold text-earth">Profil &amp; compétences</h2>
+          {!user.skillsConsent ? (
+            <p className="rounded-md bg-sun-soft px-3 py-2 text-xs font-medium text-sun-ink">
+              Consentement RGPD non donné — infos non publiées dans l&apos;annuaire.
+            </p>
+          ) : null}
+          {user.profession ? (
+            <p className="text-sm text-earth">
+              <span className="font-bold">Profession :</span> {user.profession}
+            </p>
+          ) : null}
+          {user.skills ? (
+            <p className="text-sm text-earth">
+              <span className="font-bold">Compétences :</span> {user.skills}
+            </p>
+          ) : null}
+          {user.availability ? (
+            <p className="text-sm text-earth">
+              <span className="font-bold">Disponibilités :</span>{" "}
+              {user.availability}
+            </p>
+          ) : null}
+          {user.helpNotes ? (
+            <p className="text-sm text-trail">{user.helpNotes}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* Matériel détenu */}
       <section className="space-y-3">

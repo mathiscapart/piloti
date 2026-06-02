@@ -130,7 +130,7 @@ export function RolesEditor({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          Casquettes{count > 0 ? ` (${count})` : ""}
+          Autres rôles{count > 0 ? ` (${count})` : ""}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">

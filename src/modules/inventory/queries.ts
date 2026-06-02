@@ -435,7 +435,14 @@ export async function getMemberDetail(id: string) {
       phone: true,
       unit: true,
       role: true,
+      roles: true,
       status: true,
+      // US-26 — profil parent enrichi
+      profession: true,
+      skills: true,
+      availability: true,
+      helpNotes: true,
+      skillsConsent: true,
     },
   });
   if (!user) return null;
@@ -454,6 +461,41 @@ export async function getMemberDetail(id: string) {
 export type MemberDetail = NonNullable<
   Awaited<ReturnType<typeof getMemberDetail>>
 >;
+
+// US-26 — annuaire des compétences : parents AYANT CONSENTI (RGPD), filtrables
+// par profession / compétences / disponibilités. Réservé aux Responsables de
+// Groupe (vérifié côté page via la permission member.directory).
+export async function listParentDirectory(search?: string) {
+  const parents = await db.user.findMany({
+    where: {
+      status: "ACTIVE",
+      role: "PARENT",
+      skillsConsent: true,
+    },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      phone: true,
+      profession: true,
+      skills: true,
+      availability: true,
+    },
+  });
+
+  const term = normalizeSearch(search ?? "");
+  if (term.length === 0) return parents;
+  return parents.filter((p) =>
+    normalizeSearch(
+      `${p.profession ?? ""} ${p.skills ?? ""} ${p.availability ?? ""}`,
+    ).includes(term),
+  );
+}
+
+export type ParentDirectoryEntry = Awaited<
+  ReturnType<typeof listParentDirectory>
+>[number];
 
 // ----------------------------------------------------------------------------
 // Incidents — liste & détail

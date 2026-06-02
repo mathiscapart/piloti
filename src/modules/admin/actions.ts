@@ -34,6 +34,24 @@ const rolesSchema = z.object({
   roles: z.array(z.enum(EXTRA_ROLES)).default([]),
 });
 
+// US-26 — profil parent enrichi (annuaire des compétences).
+const optionalText = z
+  .string()
+  .trim()
+  .optional()
+  .transform((v) => (v && v.length > 0 ? v : null));
+const memberProfileSchema = z.object({
+  userId: z.string().min(1),
+  profession: optionalText,
+  skills: optionalText,
+  availability: optionalText,
+  helpNotes: optionalText,
+  skillsConsent: z.preprocess(
+    (v) => v === "on" || v === "true" || v === true,
+    z.boolean(),
+  ),
+});
+
 const userIdSchema = z.object({
   userId: z.string().min(1),
 });
@@ -218,6 +236,42 @@ export async function setUserRoles(
   );
 
   revalidatePath("/admin/utilisateurs");
+  return { error: null };
+}
+
+// US-26 — met à jour le profil parent enrichi (profession, compétences,
+// disponibilités, infos) + le consentement RGPD. Réservé à l'admin, tracé.
+export async function updateMemberProfile(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const admin = await ensureAdmin();
+  if ("error" in admin) return admin;
+
+  const parsed = memberProfileSchema.safeParse({
+    userId: formData.get("userId"),
+    profession: formData.get("profession"),
+    skills: formData.get("skills"),
+    availability: formData.get("availability"),
+    helpNotes: formData.get("helpNotes"),
+    skillsConsent: formData.get("skillsConsent"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+
+  const { userId, ...profile } = parsed.data;
+  await withAudit(
+    (tx) => tx.user.update({ where: { id: userId }, data: profile }),
+    {
+      action: "USER_ROLE_CHANGED",
+      userId: admin.id,
+      metadata: { targetUserId: userId, profileUpdated: true },
+    },
+  );
+
+  revalidatePath(`/membres/${userId}`);
+  revalidatePath("/membres/annuaire");
   return { error: null };
 }
 

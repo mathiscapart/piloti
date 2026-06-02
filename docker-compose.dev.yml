@@ -16,6 +16,9 @@ services:
     profiles: ["never"]
 
   app:
+    # Image dédiée au dev : NE PAS réutiliser `piloti:latest` (image de prod,
+    # target runner → `node server.js`). Sinon un rebuild prod casse le dev.
+    image: piloti:dev
     build:
       target: dev
     # Port hôte 4000 (et non 3000) : sur cette machine Windows, 3000 est tombé

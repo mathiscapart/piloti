@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { passwordSchema } from "@/lib/password-policy";
 import { can } from "@/lib/permissions";
-import { ROLES } from "@/lib/enums";
+import { EXTRA_ROLES, ROLES } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -26,6 +26,12 @@ const rejectSchema = z.object({
 const roleSchema = z.object({
   userId: z.string().min(1),
   role: z.enum(ROLES),
+});
+
+// US-29 — rôles fonctionnels additionnels (multi-rôles).
+const rolesSchema = z.object({
+  userId: z.string().min(1),
+  roles: z.array(z.enum(EXTRA_ROLES)).default([]),
 });
 
 const userIdSchema = z.object({
@@ -167,6 +173,46 @@ export async function changeUserRole(
       metadata: {
         targetUserId: parsed.data.userId,
         newRole: parsed.data.role,
+      },
+    },
+  );
+
+  revalidatePath("/admin/utilisateurs");
+  return { error: null };
+}
+
+// US-29 — définit les rôles fonctionnels additionnels d'un compte (RG,
+// Trésorier, Secrétaire, Membre du local). Réservé à l'admin, tracé en audit.
+export async function setUserRoles(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const admin = await ensureAdmin();
+  if ("error" in admin) return admin;
+
+  const parsed = rolesSchema.safeParse({
+    userId: formData.get("userId"),
+    roles: formData.getAll("roles"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+
+  // Dédoublonne et garde un ordre stable.
+  const roles = [...new Set(parsed.data.roles)];
+
+  await withAudit(
+    (tx) =>
+      tx.user.update({
+        where: { id: parsed.data.userId },
+        data: { roles: JSON.stringify(roles) },
+      }),
+    {
+      action: "USER_ROLE_CHANGED",
+      userId: admin.id,
+      metadata: {
+        targetUserId: parsed.data.userId,
+        additionalRoles: roles,
       },
     },
   );

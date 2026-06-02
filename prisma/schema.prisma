@@ -30,7 +30,10 @@ model User {
   // Piloti additional fields (exposed via better-auth `additionalFields`)
   firstName      String
   lastName       String
-  role           String  @default("CHEF") // Role: ADMIN | CHEF | PARENT | SCOUT
+  role           String  @default("CHEF") // Role principal: ADMIN | CHEF | PARENT | SCOUT
+  // US-29 — rôles fonctionnels additionnels (JSON: Role[]) cumulables avec le
+  // rôle principal (ex. RESPONSABLE_GROUPE, TRESORIER, SECRETAIRE, MEMBRE_LOCAL).
+  roles          String  @default("[]")
   status         String  @default("PENDING") // AccountStatus: PENDING | ACTIVE | REJECTED | SUSPENDED
   unit           String? // Unit: BLEUS | VERTS | ROUGES | PIOS | COMPAS
   phone          String?

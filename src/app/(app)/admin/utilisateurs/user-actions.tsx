@@ -29,8 +29,10 @@ import {
   changeUserRole,
   deleteUser,
   reactivateUser,
+  setUserRoles,
   suspendUser,
 } from "@/modules/admin/actions";
+import { EXTRA_ROLES, ROLE_LABEL, type Role } from "@/lib/enums";
 
 const emptyState = { error: null } as const;
 
@@ -80,6 +82,90 @@ export function RoleSelect({
         <SelectItem value="ADMIN">Administrateur</SelectItem>
       </SelectContent>
     </Select>
+  );
+}
+
+// US-29 — attribution des rôles fonctionnels additionnels (multi-rôles).
+export function RolesEditor({
+  userId,
+  currentRoles,
+}: {
+  userId: string;
+  currentRoles: string[];
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(currentRoles),
+  );
+  const [pending, start] = useTransition();
+
+  function toggle(role: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
+  }
+
+  function save() {
+    const fd = new FormData();
+    fd.set("userId", userId);
+    for (const r of selected) fd.append("roles", r);
+    start(async () => {
+      const res = await setUserRoles(emptyState, fd);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Rôles mis à jour.");
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  const count = currentRoles.length;
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          Casquettes{count > 0 ? ` (${count})` : ""}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Rôles additionnels</DialogTitle>
+          <DialogDescription>
+            Casquettes cumulables avec le rôle principal (un parent peut aussi
+            être trésorier, etc.).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          {EXTRA_ROLES.map((role) => (
+            <label
+              key={role}
+              className="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-sand"
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(role)}
+                onChange={() => toggle(role)}
+                className="size-4 accent-forest"
+              />
+              <span className="text-sm text-earth">
+                {ROLE_LABEL[role as Role]}
+              </span>
+            </label>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button onClick={save} disabled={pending}>
+            {pending ? "Enregistrement…" : "Enregistrer"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

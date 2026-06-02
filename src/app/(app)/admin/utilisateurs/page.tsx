@@ -10,8 +10,20 @@ import {
   DeleteUserButton,
   ReactivateButton,
   RoleSelect,
+  RolesEditor,
   SuspendButton,
 } from "./user-actions";
+
+// US-29 — parse le JSON des rôles additionnels de façon défensive.
+function parseRoles(raw: unknown): string[] {
+  if (typeof raw !== "string") return [];
+  try {
+    const p = JSON.parse(raw);
+    return Array.isArray(p) ? p.map(String) : [];
+  } catch {
+    return [];
+  }
+}
 
 export default async function AdminUtilisateursPage() {
   const [currentUser, users] = await Promise.all([
@@ -78,6 +90,7 @@ export default async function AdminUtilisateursPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <RoleSelect userId={u.id} role={u.role} disabled={isSelf} />
+                    <RolesEditor userId={u.id} currentRoles={parseRoles(u.roles)} />
                     {!isSelf && (
                       suspended ? (
                         <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
@@ -131,7 +144,13 @@ export default async function AdminUtilisateursPage() {
                       </td>
                       <td className="px-4 py-3 text-trail">{u.unit ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <RoleSelect userId={u.id} role={u.role} disabled={isSelf} />
+                        <div className="flex items-center gap-2">
+                          <RoleSelect userId={u.id} role={u.role} disabled={isSelf} />
+                          <RolesEditor
+                            userId={u.id}
+                            currentRoles={parseRoles(u.roles)}
+                          />
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span

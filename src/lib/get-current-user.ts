@@ -22,6 +22,7 @@ export async function getCurrentUser() {
       firstName: true,
       lastName: true,
       role: true,
+      roles: true,
       status: true,
       unit: true,
       phone: true,

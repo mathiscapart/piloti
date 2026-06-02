@@ -2,8 +2,43 @@
 // Source unique : ce fichier. Le schéma Prisma utilise des `String` ; cette
 // liste sert pour Zod/validation, dropdowns UI, et types app-wide.
 
-export const ROLES = ["ADMIN", "CHEF", "PARENT", "SCOUT"] as const;
+// US-29 — catalogue de rôles. ADMIN/CHEF/PARENT/SCOUT = rôle « principal »
+// (champ User.role). Les rôles fonctionnels supplémentaires (RG, Trésorier…)
+// s'ajoutent en multi-rôles via User.roles (JSON). Catalogue extensible ici.
+export const ROLES = [
+  "ADMIN",
+  "CHEF",
+  "PARENT",
+  "SCOUT",
+  "RESPONSABLE_GROUPE",
+  "TRESORIER",
+  "SECRETAIRE",
+  "MEMBRE_LOCAL",
+] as const;
 export type Role = (typeof ROLES)[number];
+
+export const ROLE_LABEL: Record<Role, string> = {
+  ADMIN: "Administrateur",
+  CHEF: "Chef",
+  PARENT: "Parent",
+  SCOUT: "Jeune",
+  RESPONSABLE_GROUPE: "Responsable de groupe",
+  TRESORIER: "Trésorier",
+  SECRETAIRE: "Secrétaire",
+  MEMBRE_LOCAL: "Membre du local",
+};
+
+// Rôles « principaux » attribuables comme User.role (compat existant).
+export const PRIMARY_ROLES = ["ADMIN", "CHEF", "PARENT", "SCOUT"] as const;
+
+// Rôles fonctionnels additionnels (« casquettes ») attribuables en plus du
+// rôle principal, via User.roles. Un parent peut être aussi trésorier, etc.
+export const EXTRA_ROLES = [
+  "RESPONSABLE_GROUPE",
+  "TRESORIER",
+  "SECRETAIRE",
+  "MEMBRE_LOCAL",
+] as const;
 
 export const ACCOUNT_STATUSES = [
   "PENDING",

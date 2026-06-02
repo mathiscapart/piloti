@@ -34,6 +34,7 @@ export async function listManageableUsers() {
       firstName: true,
       lastName: true,
       role: true,
+      roles: true,
       status: true,
       unit: true,
       phone: true,

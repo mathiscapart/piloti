@@ -15,10 +15,19 @@ if (!process.env.BETTER_AUTH_SECRET) {
   );
 }
 
+// Origines de confiance supplémentaires (en plus de baseURL) — utile pour
+// accéder au dev depuis un autre appareil du LAN (ex. téléphone). Liste
+// séparée par des virgules dans TRUSTED_ORIGINS.
+const extraTrustedOrigins = (process.env.TRUSTED_ORIGINS ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 export const auth = betterAuth({
   database: prismaAdapter(db, { provider: "sqlite" }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  trustedOrigins: extraTrustedOrigins,
 
   emailAndPassword: {
     enabled: true,

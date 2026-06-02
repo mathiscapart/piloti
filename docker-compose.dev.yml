@@ -34,6 +34,8 @@ services:
       DATABASE_URL: file:/app/dev.db
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-32-chars-minimum-aaaaaa}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:4000}
+      # Accès LAN (téléphone/autre poste) — origines de confiance better-auth.
+      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
     # Remplace complètement les volumes hérités du compose de base (qui
     # montent `piloti-data:/data` et `piloti-uploads:/app/public/uploads`).
     # On garde uniquement le bind mount du code + anonymous volumes pour

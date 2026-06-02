@@ -43,6 +43,7 @@ model User {
   // Piloti relations
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
+  dryingLoans       Loan[]     @relation("LoanDryingContact")
   reportedIncidents Incident[] @relation("IncidentReporter")
   resolvedIncidents Incident[] @relation("IncidentResolver")
   auditLogs         AuditLog[]
@@ -105,9 +106,22 @@ model Verification {
 model Category {
   slug      String   @id
   label     String
-  canDry    Boolean  @default(false)
+  // US-17 — comportements configurables hérités par tous les articles de la
+  // catégorie. `canDry` = séchage possible (US-10) ; `requireWeighing` = pesée
+  // obligatoire au retour (US-18).
+  canDry          Boolean @default(false)
+  requireWeighing Boolean @default(false)
   order     Int      @default(0)
+  archived  Boolean  @default(false) // US-31 — catégorie archivée (masquée des listes de choix)
   createdAt DateTime @default(now())
+
+  // US-24 — sous-catégories : auto-relation à 1 niveau (un parent → N enfants).
+  // `onDelete: Restrict` empêche de supprimer un parent qui a encore des enfants.
+  parentSlug String?
+  parent     Category?  @relation("CategoryTree", fields: [parentSlug], references: [slug], onDelete: Restrict, onUpdate: Cascade)
+  children   Category[] @relation("CategoryTree")
+
+  @@index([parentSlug])
 }
 
 // ----------------------------------------------------------------------------
@@ -124,6 +138,8 @@ model Equipment {
   photo     String?
   notes     String?
   archived  Boolean  @default(false)
+  nfcUid    String?  @unique // US-15 — UID du tag NFC associé (scan → fiche article)
+  baseWeightKg Float? // US-17/US-18 — poids de référence (catégorie pesable, 1 exemplaire)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -137,6 +153,9 @@ model Equipment {
 
 model Loan {
   id             String    @id @default(cuid())
+  // US-32 — prêt groupé : les lignes (une par article) d'un même emprunt
+  // partagent un `groupId`. Null = ancien prêt mono-article (legacy).
+  groupId        String?
   equipmentId    String
   borrowerId     String
   quantity       Int       @default(1)
@@ -149,21 +168,29 @@ model Loan {
 
   // Séchage (statut SECHAGE)
   dryingLocation   String?
+  // US-23 — contact de séchage rattaché à un compte (référence User).
+  // `dryingPersonName` est conservé comme snapshot/affichage et pour le legacy.
+  dryingContactId  String?
   dryingPersonName String?
+
+  // US-17/US-18 — poids relevé au retour (kg) si la catégorie l'exige.
+  returnWeightKg Float?
 
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   equipment  Equipment  @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
-  borrower   User       @relation("LoanBorrower", fields: [borrowerId], references: [id])
-  returnedBy User?      @relation("LoanReturnedBy", fields: [returnedById], references: [id])
+  borrower     User     @relation("LoanBorrower", fields: [borrowerId], references: [id])
+  returnedBy   User?    @relation("LoanReturnedBy", fields: [returnedById], references: [id])
+  dryingContact User?   @relation("LoanDryingContact", fields: [dryingContactId], references: [id])
   auditLogs  AuditLog[]
 
   @@index([status])
   @@index([equipmentId])
   @@index([borrowerId])
   @@index([expectedReturn])
+  @@index([groupId])
 }
 
 model Incident {
@@ -188,6 +215,33 @@ model Incident {
   @@index([severity])
   @@index([equipmentId])
   @@index([resolvedAt])
+}
+
+// ----------------------------------------------------------------------------
+// Piloti — Dons de matériel (US-25). File d'attente : un don proposé n'entre
+// dans le stock qu'après validation admin.
+// ----------------------------------------------------------------------------
+
+model Donation {
+  id          String    @id @default(cuid())
+  category    String // slug de catégorie (choisi dans la liste existante)
+  name        String
+  quantity    Int       @default(1)
+  condition   String    @default("BON") // EquipmentCondition
+  dropoffDate DateTime? // date de dépôt prévue
+  donorName   String? // nom libre du donateur
+  donorId     String? // user ayant soumis (si connecté)
+  note        String?
+  status      String    @default("PENDING") // DonationStatus: PENDING | APPROVED | REJECTED
+  reviewedById String?
+  reviewedAt  DateTime?
+  rejectedReason String?
+  createdEquipmentId String? // article créé lors de la validation
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
 }
 
 // ----------------------------------------------------------------------------

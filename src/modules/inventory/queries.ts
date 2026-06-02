@@ -79,7 +79,15 @@ export async function listEquipment(opts: ListEquipmentOpts = {}) {
   if (opts.search && opts.search.trim().length > 0) {
     where.name = { contains: opts.search.trim() };
   }
-  if (opts.category) where.category = opts.category;
+  if (opts.category) {
+    // US-24 : filtrer par une catégorie parente inclut ses sous-catégories.
+    const children = await db.category.findMany({
+      where: { parentSlug: opts.category },
+      select: { slug: true },
+    });
+    const slugs = [opts.category, ...children.map((c) => c.slug)];
+    where.category = { in: slugs };
+  }
 
   const equipment = await db.equipment.findMany({
     where,
@@ -187,11 +195,39 @@ export type EquipmentDetail = NonNullable<
 // Categories
 // ----------------------------------------------------------------------------
 
-export async function listCategories() {
-  return db.category.findMany({ orderBy: [{ order: "asc" }, { label: "asc" }] });
+// US-31 — par défaut on masque les catégories archivées (listes de choix :
+// stock, formulaire article, prêt…). L'admin passe `includeArchived: true`.
+export async function listCategories(opts: { includeArchived?: boolean } = {}) {
+  return db.category.findMany({
+    where: opts.includeArchived ? undefined : { archived: false },
+    orderBy: [{ order: "asc" }, { label: "asc" }],
+  });
 }
 
 export type CategoryRow = Awaited<ReturnType<typeof listCategories>>[number];
+
+// US-24 — arborescence : catégories parentes (parentSlug null) triées, chacune
+// avec ses sous-catégories triées. « Autre » est repoussée en dernier (US-31).
+export async function listCategoryTree(opts: { includeArchived?: boolean } = {}) {
+  const all = await db.category.findMany({
+    where: opts.includeArchived ? undefined : { archived: false },
+    orderBy: [{ order: "asc" }, { label: "asc" }],
+  });
+
+  const roots = all.filter((c) => c.parentSlug === null);
+  const childrenOf = (slug: string) => all.filter((c) => c.parentSlug === slug);
+
+  const tree = roots
+    .map((root) => ({ ...root, children: childrenOf(root.slug) }))
+    // « Autre » (réceptacle par défaut, US-31) toujours en dernier.
+    .sort((a, b) => (a.slug === "AUTRE" ? 1 : 0) - (b.slug === "AUTRE" ? 1 : 0));
+
+  return tree;
+}
+
+export type CategoryTreeNode = Awaited<
+  ReturnType<typeof listCategoryTree>
+>[number];
 
 // ----------------------------------------------------------------------------
 // Loans — liste & détail
@@ -241,6 +277,10 @@ export async function listLoans(filter: LoanFilter = "all") {
           phone: true,
         },
       },
+      // US-23 — contact de séchage rattaché à un compte (pour identifier/joindre).
+      dryingContact: {
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      },
     },
   });
 
@@ -254,7 +294,13 @@ export async function getLoanDetail(id: string) {
     where: { id },
     include: {
       equipment: {
-        select: { id: true, name: true, category: true, condition: true },
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          condition: true,
+          baseWeightKg: true,
+        },
       },
       borrower: {
         select: { firstName: true, lastName: true, phone: true },
@@ -264,17 +310,29 @@ export async function getLoanDetail(id: string) {
   });
 }
 
-// Équipement sélectionnable au step 1 du wizard. Inclut tout (archived false),
-// marque comme "déjà en cours" ceux qui ont un prêt ACTIF/RETARD/SECHAGE,
-// ou qui sont HORS_SERVICE/A_REPARER.
-export async function listBorrowableEquipment(search?: string) {
-  const where: Prisma.EquipmentWhereInput = { archived: false };
-  if (search && search.trim().length > 0) {
-    where.name = { contains: search.trim() };
-  }
+// US-20 — normalise une chaîne pour une recherche insensible à la casse ET aux
+// accents (SQLite `LIKE` ne gère pas les accents). « Tenté » == « tente ».
+function normalizeSearch(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
 
+// Équipement sélectionnable dans le wizard. Inclut tout (archived false),
+// marque comme "déjà en cours" ceux qui sont HORS_SERVICE/A_REPARER ou dont la
+// quantité disponible est nulle.
+// US-12 — si `period` est fourni, la disponibilité est calculée pour CETTE
+// période : seuls les prêts actifs qui chevauchent [start, end] consomment du
+// stock (un article rendu avant ou prêté après reste disponible). Sans période,
+// on retombe sur "tous les prêts actifs" (comportement historique).
+export async function listBorrowableEquipment(
+  search?: string,
+  period?: { start: Date; end: Date },
+) {
   const equipment = await db.equipment.findMany({
-    where,
+    where: { archived: false },
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -285,13 +343,37 @@ export async function listBorrowableEquipment(search?: string) {
       photo: true,
       location: true,
       loans: {
-        where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
+        where: period
+          ? {
+              status: { in: [...ACTIVE_LOAN_STATUSES] },
+              startDate: { lte: period.end },
+              expectedReturn: { gte: period.start },
+            }
+          : { status: { in: [...ACTIVE_LOAN_STATUSES] } },
         select: { quantity: true },
       },
     },
   });
 
-  return equipment.map((eq) => {
+  // US-20 — recherche par nom ET catégorie (slug + libellé), insensible à la
+  // casse et aux accents. Filtré en mémoire pour le support des accents ; le
+  // volume d'inventaire d'un groupe reste modeste.
+  const term = normalizeSearch(search ?? "");
+  let rows = equipment;
+  if (term.length > 0) {
+    const categories = await db.category.findMany({
+      select: { slug: true, label: true },
+    });
+    const labelBySlug = new Map(categories.map((c) => [c.slug, c.label]));
+    rows = equipment.filter((eq) => {
+      const haystack = normalizeSearch(
+        `${eq.name} ${eq.category} ${labelBySlug.get(eq.category) ?? ""}`,
+      );
+      return haystack.includes(term);
+    });
+  }
+
+  return rows.map((eq) => {
     const loanedQty = eq.loans.reduce((sum, loan) => sum + loan.quantity, 0);
     const availableQty = Math.max(0, eq.totalQty - loanedQty);
     const isBroken =
@@ -311,7 +393,9 @@ export async function listBorrowableEquipment(search?: string) {
           ? "Hors service"
           : "À réparer"
         : availableQty <= 0
-          ? "Déjà prêté"
+          ? period
+            ? "Indispo ces dates"
+            : "Déjà prêté"
           : undefined,
     };
   });
@@ -366,3 +450,26 @@ export async function listIncidents(opts: {
 }
 
 export type IncidentListItem = Awaited<ReturnType<typeof listIncidents>>[number];
+
+// ----------------------------------------------------------------------------
+// Donations (US-25)
+// ----------------------------------------------------------------------------
+
+export type DonationStatusFilter = "pending" | "processed" | "all";
+
+export async function listDonations(filter: DonationStatusFilter = "pending") {
+  const where: Prisma.DonationWhereInput = {};
+  if (filter === "pending") where.status = "PENDING";
+  if (filter === "processed") where.status = { in: ["APPROVED", "REJECTED"] };
+
+  return db.donation.findMany({
+    where,
+    orderBy: [{ createdAt: "desc" }],
+  });
+}
+
+export type DonationListItem = Awaited<ReturnType<typeof listDonations>>[number];
+
+export async function countPendingDonations() {
+  return db.donation.count({ where: { status: "PENDING" } });
+}

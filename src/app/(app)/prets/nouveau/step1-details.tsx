@@ -1,6 +1,5 @@
 "use client";
 
-import { useActionState } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -13,57 +12,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { createLoan } from "@/modules/inventory/loan-actions";
-import type { ActionResult } from "@/lib/types";
-import type {
-  BorrowableEquipment,
-  BorrowerOption,
-} from "@/modules/inventory/queries";
-
-const initialState: ActionResult = { error: null };
+import type { BorrowerOption } from "@/modules/inventory/queries";
 
 const today = () => new Date().toISOString().slice(0, 10);
 const inDays = (n: number) =>
   new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 interface Props {
-  selectedEquipment: BorrowableEquipment[];
   borrowers: BorrowerOption[];
+  details: {
+    borrowerId: string;
+    startDate: string;
+    expectedReturn: string;
+    eventName: string;
+  };
 }
 
-export function Step2Details({ selectedEquipment, borrowers }: Props) {
-  const [state, formAction, pending] = useActionState(
-    createLoan,
-    initialState,
-  );
-
+export function Step1Details({ borrowers, details }: Props) {
+  // Formulaire GET : passe emprunteur + dates + événement à l'étape 2 via l'URL,
+  // où la disponibilité du matériel sera calculée pour cette période (US-12).
   return (
-    <form action={formAction} className="space-y-5 rounded-2xl bg-snow p-6 shadow-card">
-      {/* Hidden equipment IDs portés depuis step 1 */}
-      {selectedEquipment.map((eq) => (
-        <input
-          key={eq.id}
-          type="hidden"
-          name="equipmentId"
-          value={eq.id}
-        />
-      ))}
-
-      <div className="rounded-xl bg-sand p-3">
-        <p className="text-xs font-bold uppercase tracking-wider text-trail">
-          Matériel sélectionné ({selectedEquipment.length})
-        </p>
-        <ul className="mt-1 text-sm text-earth">
-          {selectedEquipment.map((eq) => (
-            <li key={eq.id}>• {eq.name}</li>
-          ))}
-        </ul>
-      </div>
+    <form
+      method="GET"
+      action="/prets/nouveau"
+      className="space-y-5 rounded-2xl bg-snow p-6 shadow-card"
+    >
+      <input type="hidden" name="step" value="2" />
 
       <div className="space-y-1.5">
         <Label htmlFor="borrowerId">Emprunteur</Label>
-        <Select name="borrowerId" required>
+        <Select name="borrowerId" required defaultValue={details.borrowerId || undefined}>
           <SelectTrigger id="borrowerId">
             <SelectValue placeholder="Choisir un membre…" />
           </SelectTrigger>
@@ -86,7 +64,7 @@ export function Step2Details({ selectedEquipment, borrowers }: Props) {
             name="startDate"
             type="date"
             required
-            defaultValue={today()}
+            defaultValue={details.startDate || today()}
             className="w-full"
           />
         </div>
@@ -97,9 +75,13 @@ export function Step2Details({ selectedEquipment, borrowers }: Props) {
             name="expectedReturn"
             type="date"
             required
-            defaultValue={inDays(7)}
+            defaultValue={details.expectedReturn || inDays(7)}
             className="w-full"
           />
+          <p className="text-xs text-trail">
+            Date commune ; tu pourras l&apos;ajuster par article à l&apos;étape
+            suivante.
+          </p>
         </div>
       </div>
 
@@ -108,36 +90,19 @@ export function Step2Details({ selectedEquipment, borrowers }: Props) {
         <Input
           id="eventName"
           name="eventName"
+          defaultValue={details.eventName}
           placeholder="Week-end Pios 9/10, Réunion Bleus…"
         />
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="notes">Notes (optionnel)</Label>
-        <Textarea id="notes" name="notes" rows={3} />
-      </div>
-
-      {state.error ? (
-        <p
-          role="alert"
-          className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink"
-        >
-          {state.error}
-        </p>
-      ) : null}
-
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          href="/prets/nouveau"
+          href="/prets"
           className="text-sm font-bold text-trail hover:text-earth"
         >
-          ← Modifier la sélection
+          Annuler
         </Link>
-        <Button type="submit" disabled={pending}>
-          {pending
-            ? "Création…"
-            : `Créer ${selectedEquipment.length > 1 ? `les ${selectedEquipment.length} prêts` : "le prêt"}`}
-        </Button>
+        <Button type="submit">Choisir le matériel →</Button>
       </div>
     </form>
   );

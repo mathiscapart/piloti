@@ -1,12 +1,11 @@
-import { Package, Plus, Search } from "lucide-react";
+import { ChevronRight, Gift, Package, Plus, Search, Upload } from "lucide-react";
 import Link from "next/link";
 
-import { CategoryChip } from "@/components/equipment/CategoryChip";
 import { EquipmentCard } from "@/components/equipment/EquipmentCard";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
-import { listEquipment, listCategories } from "@/modules/inventory/queries";
+import { listEquipment, listCategoryTree } from "@/modules/inventory/queries";
 
 interface PageProps {
   searchParams: Promise<{ q?: string; cat?: string }>;
@@ -16,24 +15,64 @@ export default async function StockPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const q = params.q?.trim();
 
-  const [categories, items] = await Promise.all([
-    listCategories(),
+  const [tree, items] = await Promise.all([
+    listCategoryTree(),
     listEquipment({ search: q, category: params.cat || undefined }),
   ]);
 
-  const validSlugs = new Set(categories.map((c) => c.slug));
-  const cat = params.cat && validSlugs.has(params.cat) ? params.cat : undefined;
-  const catLabel = cat ? (categories.find((c) => c.slug === cat)?.label ?? cat) : undefined;
+  // US-24 — résout la catégorie active : racine sélectionnée, ou sous-catégorie
+  // (auquel cas on remonte sa racine pour afficher la rangée de sous-catégories).
+  const rawCat = params.cat;
+  let activeRoot: (typeof tree)[number] | undefined;
+  let activeChildSlug: string | undefined;
+  if (rawCat) {
+    activeRoot = tree.find((r) => r.slug === rawCat);
+    if (activeRoot) {
+      activeChildSlug = undefined;
+    } else {
+      activeRoot = tree.find((r) => r.children.some((c) => c.slug === rawCat));
+      if (activeRoot) activeChildSlug = rawCat;
+    }
+  }
+  const cat = activeChildSlug ?? activeRoot?.slug;
+  const catLabel = activeChildSlug
+    ? activeRoot?.children.find((c) => c.slug === activeChildSlug)?.label
+    : activeRoot?.label;
+
+  const buildHref = (catSlug: string | null) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (catSlug) sp.set("cat", catSlug);
+    return sp.toString() ? `/stock?${sp.toString()}` : "/stock";
+  };
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <header>
-        <h1 className="text-3xl font-black text-earth md:text-4xl">Stock</h1>
-        <p className="text-trail">
-          {items.length} article{items.length > 1 ? "s" : ""}
-          {q ? ` correspondant à "${q}"` : ""}
-          {catLabel ? ` · ${catLabel}` : ""}
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-3xl font-black text-earth md:text-4xl">Stock</h1>
+          <p className="text-trail">
+            {items.length} article{items.length > 1 ? "s" : ""}
+            {q ? ` correspondant à "${q}"` : ""}
+            {catLabel ? ` · ${catLabel}` : ""}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/stock/import"
+            className="inline-flex items-center gap-1 text-sm font-bold text-forest hover:underline"
+          >
+            <Upload className="size-4" />
+            Importer
+          </Link>
+          <Link
+            href="/dons/nouveau"
+            className="inline-flex items-center gap-1 text-sm font-bold text-forest hover:underline"
+          >
+            <Gift className="size-4" />
+            Proposer un don
+          </Link>
+        </div>
       </header>
 
       <form
@@ -53,21 +92,48 @@ export default async function StockPage({ searchParams }: PageProps) {
         {cat ? <input type="hidden" name="cat" value={cat} /> : null}
       </form>
 
+      {/* Niveau 1 : catégories racines */}
       <nav
         aria-label="Filtres par catégorie"
         className="flex gap-2 overflow-x-auto pb-1"
       >
-        <CategoryFilterLink active={!cat} label="Tous" q={q} cat={null} />
-        {categories.map((c) => (
-          <CategoryFilterLink
-            key={c.slug}
-            active={cat === c.slug}
-            label={c.label}
-            q={q}
-            cat={c.slug}
+        <CategoryChip href={buildHref(null)} active={!cat} label="Tous" />
+        {tree.map((root) => (
+          <CategoryChip
+            key={root.slug}
+            href={buildHref(root.slug)}
+            active={activeRoot?.slug === root.slug}
+            label={root.label}
+            hasChildren={root.children.length > 0}
           />
         ))}
       </nav>
+
+      {/* Niveau 2 : sous-catégories (fil d'Ariane) si la racine active en a */}
+      {activeRoot && activeRoot.children.length > 0 ? (
+        <nav
+          aria-label={`Sous-catégories de ${activeRoot.label}`}
+          className="flex items-center gap-2 overflow-x-auto pb-1"
+        >
+          <span className="inline-flex shrink-0 items-center gap-1 text-sm font-bold text-trail">
+            {activeRoot.label}
+            <ChevronRight className="size-4" />
+          </span>
+          <CategoryChip
+            href={buildHref(activeRoot.slug)}
+            active={!activeChildSlug}
+            label="Tout"
+          />
+          {activeRoot.children.map((sub) => (
+            <CategoryChip
+              key={sub.slug}
+              href={buildHref(sub.slug)}
+              active={activeChildSlug === sub.slug}
+              label={sub.label}
+            />
+          ))}
+        </nav>
+      ) : null}
 
       {items.length === 0 ? (
         <EmptyState
@@ -98,33 +164,29 @@ export default async function StockPage({ searchParams }: PageProps) {
   );
 }
 
-function CategoryFilterLink({
+function CategoryChip({
+  href,
   active,
   label,
-  q,
-  cat,
+  hasChildren,
 }: {
+  href: string;
   active: boolean;
   label: string;
-  q: string | undefined;
-  cat: string | null;
+  hasChildren?: boolean;
 }) {
-  const urlParams = new URLSearchParams();
-  if (q) urlParams.set("q", q);
-  if (cat) urlParams.set("cat", cat);
-  const href = urlParams.toString() ? `/stock?${urlParams.toString()}` : "/stock";
-
   return (
     <Link
       href={href}
       className={cn(
-        "whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-bold transition-colors",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-bold transition-colors",
         active
           ? "bg-forest text-snow"
           : "bg-snow text-earth shadow-card hover:bg-sand",
       )}
     >
       {label}
+      {hasChildren ? <ChevronRight className="size-3.5 opacity-60" /> : null}
     </Link>
   );
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
+import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { withAudit } from "@/lib/audit";
 import { can } from "@/lib/permissions";
@@ -28,8 +29,17 @@ export async function createLoan(
     return { error: "Vous n'avez pas la permission de créer un prêt." };
   }
 
+  // US-30 — chaque article porte une quantité (`qty__<id>`).
+  // US-32 — et sa propre date de retour (`return__<id>`, défaut = date commune).
+  const equipmentIds = formData.getAll("equipmentId").map(String);
+  const items = equipmentIds.map((equipmentId) => ({
+    equipmentId,
+    quantity: formData.get(`qty__${equipmentId}`) ?? "1",
+    expectedReturn: formData.get(`return__${equipmentId}`) ?? undefined,
+  }));
+
   const parsed = createLoanSchema.safeParse({
-    equipmentIds: formData.getAll("equipmentId").map(String),
+    items,
     borrowerId: formData.get("borrowerId"),
     startDate: formData.get("startDate"),
     expectedReturn: formData.get("expectedReturn"),
@@ -43,18 +53,67 @@ export async function createLoan(
     return { error: "La date de retour doit être postérieure au départ." };
   }
 
-  // Multi-equipment : on bypass withAudit (qui gère 1 result/1 audit) et on
-  // crée tout dans une transaction explicite — N Loan rows + N AuditLog.
+  // US-12/US-30 — contrôle de disponibilité SELON LES DATES : la quantité
+  // empruntée ne peut dépasser la quantité disponible sur la période de CHAQUE
+  // article (total − quantités des prêts actifs qui chevauchent cette période).
+  const equipments = await db.equipment.findMany({
+    where: { id: { in: parsed.data.items.map((i) => i.equipmentId) } },
+    select: {
+      id: true,
+      name: true,
+      totalQty: true,
+      condition: true,
+      archived: true,
+      loans: {
+        where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
+        select: { quantity: true, startDate: true, expectedReturn: true },
+      },
+    },
+  });
+  const byId = new Map(equipments.map((eq) => [eq.id, eq]));
+  const start = parsed.data.startDate;
+
+  for (const item of parsed.data.items) {
+    const eq = byId.get(item.equipmentId);
+    if (!eq || eq.archived) {
+      return { error: "Un des articles sélectionnés est introuvable." };
+    }
+    if (eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE") {
+      return { error: `« ${eq.name} » n'est pas empruntable (en réparation / hors service).` };
+    }
+    const itemEnd = item.expectedReturn ?? parsed.data.expectedReturn;
+    if (itemEnd < start) {
+      return {
+        error: `« ${eq.name} » : la date de retour doit être postérieure au départ.`,
+      };
+    }
+    // Deux périodes se chevauchent ssi start1 <= end2 && start2 <= end1.
+    const loaned = eq.loans
+      .filter((l) => l.startDate <= itemEnd && l.expectedReturn >= start)
+      .reduce((sum, l) => sum + l.quantity, 0);
+    const available = Math.max(0, eq.totalQty - loaned);
+    if (item.quantity > available) {
+      return {
+        error: `« ${eq.name} » : ${available} disponible(s) sur cette période, ${item.quantity} demandé(s).`,
+      };
+    }
+  }
+
+  // US-32 — un seul prêt groupé : N lignes (une par article) partageant un
+  // `groupId`, chacune avec sa propre date de retour. Transaction explicite
+  // (withAudit gère 1 result/1 audit) → N Loan rows + N AuditLog.
+  const groupId = crypto.randomUUID();
   await db.$transaction(async (tx) => {
     const createdLoans = await Promise.all(
-      parsed.data.equipmentIds.map((equipmentId) =>
+      parsed.data.items.map((item) =>
         tx.loan.create({
           data: {
-            equipmentId,
+            groupId,
+            equipmentId: item.equipmentId,
             borrowerId: parsed.data.borrowerId,
-            quantity: 1,
+            quantity: item.quantity,
             startDate: parsed.data.startDate,
-            expectedReturn: parsed.data.expectedReturn,
+            expectedReturn: item.expectedReturn ?? parsed.data.expectedReturn,
             status: "ACTIF",
             eventName: parsed.data.eventName,
             notes: parsed.data.notes,
@@ -71,6 +130,7 @@ export async function createLoan(
         loanId: loan.id,
         metadata: JSON.stringify({
           borrowerId: loan.borrowerId,
+          quantity: loan.quantity,
           eventName: loan.eventName,
         }),
       })),
@@ -102,6 +162,8 @@ export async function returnLoan(
 
   const parsed = returnLoanSchema.safeParse({
     condition: formData.get("condition"),
+    returnedQuantity: formData.get("returnedQuantity") ?? undefined,
+    returnWeightKg: formData.get("returnWeightKg") ?? undefined,
     notes: formData.get("notes"),
   });
   if (!parsed.success) {
@@ -110,30 +172,89 @@ export async function returnLoan(
 
   const loan = await db.loan.findUnique({
     where: { id: loanId },
-    select: { id: true, equipmentId: true, status: true },
+    select: {
+      id: true,
+      equipmentId: true,
+      status: true,
+      quantity: true,
+      equipment: { select: { category: true } },
+    },
   });
   if (!loan) return { error: "Prêt introuvable." };
   if (loan.status === "RETOURNE") {
     return { error: "Ce prêt est déjà clôturé." };
   }
 
+  // US-17 — si la catégorie de l'article exige une pesée au retour, le poids
+  // est obligatoire.
+  const category = await db.category.findUnique({
+    where: { slug: loan.equipment.category },
+    select: { requireWeighing: true },
+  });
+  if (category?.requireWeighing) {
+    if (parsed.data.returnWeightKg === undefined) {
+      return { error: "Cette catégorie exige de peser le matériel au retour." };
+    }
+    // US-18 — le poids au retour doit être inférieur au poids de référence
+    // (dernière pesée connue, sinon poids de base). Sinon → anomalie bloquante.
+    const eq = await db.equipment.findUnique({
+      where: { id: loan.equipmentId },
+      select: {
+        baseWeightKg: true,
+        loans: {
+          where: { returnWeightKg: { not: null }, NOT: { id: loanId } },
+          orderBy: { returnedAt: "desc" },
+          take: 1,
+          select: { returnWeightKg: true },
+        },
+      },
+    });
+    const reference = eq?.loans[0]?.returnWeightKg ?? eq?.baseWeightKg ?? null;
+    if (reference != null && parsed.data.returnWeightKg >= reference) {
+      return {
+        error: `Poids au retour (${parsed.data.returnWeightKg} kg) ≥ poids de référence (${reference} kg). Une bouteille utilisée doit peser moins — vérifie la pesée.`,
+      };
+    }
+  }
+
+  // US-30 — retour total ou partiel. Sans quantité saisie : on rend tout.
+  const returnedQty = parsed.data.returnedQuantity ?? loan.quantity;
+  if (returnedQty > loan.quantity) {
+    return { error: `Quantité rendue invalide (max ${loan.quantity}).` };
+  }
+  const isPartial = returnedQty < loan.quantity;
+
   await withAudit(
     (tx) =>
       tx.loan.update({
         where: { id: loanId },
-        data: {
-          status: "RETOURNE",
-          returnedAt: new Date(),
-          returnedById: user.id,
-          notes: parsed.data.notes ?? undefined,
-        },
+        data: isPartial
+          ? {
+              // Retour partiel : on décrémente la quantité en cours, le prêt
+              // reste ouvert pour le reste. Le stock se réincrémente d'autant.
+              quantity: loan.quantity - returnedQty,
+              returnWeightKg: parsed.data.returnWeightKg ?? undefined,
+              notes: parsed.data.notes ?? undefined,
+            }
+          : {
+              status: "RETOURNE",
+              returnedAt: new Date(),
+              returnedById: user.id,
+              returnWeightKg: parsed.data.returnWeightKg ?? undefined,
+              notes: parsed.data.notes ?? undefined,
+            },
       }),
     {
       action: "LOAN_RETURNED",
       userId: user.id,
       loanId,
       equipmentId: loan.equipmentId,
-      metadata: { condition: parsed.data.condition },
+      metadata: {
+        condition: parsed.data.condition,
+        returnedQuantity: returnedQty,
+        partial: isPartial,
+        returnWeightKg: parsed.data.returnWeightKg,
+      },
     },
   );
 
@@ -168,7 +289,7 @@ export async function markAsDrying(
 
   const parsed = dryingSchema.safeParse({
     dryingLocation: formData.get("dryingLocation"),
-    dryingPersonName: formData.get("dryingPersonName"),
+    dryingContactId: formData.get("dryingContactId"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
@@ -183,6 +304,20 @@ export async function markAsDrying(
     return { error: "Ce prêt est déjà clôturé." };
   }
 
+  // US-23 — le contact est un compte : on vérifie qu'il existe et on garde un
+  // snapshot du nom (dryingPersonName) pour l'affichage + le legacy.
+  let dryingContactId: string | null = null;
+  let dryingPersonName: string | null = null;
+  if (parsed.data.dryingContactId) {
+    const contact = await db.user.findUnique({
+      where: { id: parsed.data.dryingContactId },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    if (!contact) return { error: "Contact de séchage introuvable." };
+    dryingContactId = contact.id;
+    dryingPersonName = `${contact.firstName} ${contact.lastName}`;
+  }
+
   await withAudit(
     (tx) =>
       tx.loan.update({
@@ -190,7 +325,8 @@ export async function markAsDrying(
         data: {
           status: "SECHAGE",
           dryingLocation: parsed.data.dryingLocation,
-          dryingPersonName: parsed.data.dryingPersonName ?? null,
+          dryingContactId,
+          dryingPersonName,
         },
       }),
     {
@@ -200,7 +336,8 @@ export async function markAsDrying(
       equipmentId: loan.equipmentId,
       metadata: {
         dryingLocation: parsed.data.dryingLocation,
-        dryingPersonName: parsed.data.dryingPersonName,
+        dryingContactId,
+        dryingPersonName,
       },
     },
   );

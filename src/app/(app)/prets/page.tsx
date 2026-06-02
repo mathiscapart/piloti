@@ -1,10 +1,16 @@
 import { Plus, Truck } from "lucide-react";
 import Link from "next/link";
 
-import { LoanCard } from "@/components/loans/LoanCard";
+import { LoanGroupCard } from "@/components/loans/LoanGroupCard";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
-import { listLoans, listCategories, type LoanFilter } from "@/modules/inventory/queries";
+import {
+  listLoans,
+  listCategories,
+  listBorrowers,
+  type LoanFilter,
+  type LoanListItem,
+} from "@/modules/inventory/queries";
 
 const FILTERS: { value: LoanFilter; label: string }[] = [
   { value: "all", label: "Tous" },
@@ -26,20 +32,39 @@ export default async function PretsPage({ searchParams }: PageProps) {
     ? (raw as LoanFilter)
     : "all";
 
-  const [loans, categories] = await Promise.all([
+  const [loans, categories, borrowers] = await Promise.all([
     listLoans(filter),
     listCategories(),
+    listBorrowers(),
   ]);
   const dryableCategories = new Set(
     categories.filter((c) => c.canDry).map((c) => c.slug),
   );
+  // US-23 — comptes proposés comme responsable de séchage.
+  const dryingContacts = borrowers.map((b) => ({
+    id: b.id,
+    firstName: b.firstName,
+    lastName: b.lastName,
+  }));
+
+  // US-32 — regroupe les lignes par `groupId` (prêt groupé). Un prêt legacy
+  // sans groupId forme son propre groupe (clé = son id). L'ordre suit celui de
+  // listLoans (par date de retour), via la 1re ligne rencontrée de chaque groupe.
+  const groups = new Map<string, LoanListItem[]>();
+  for (const loan of loans) {
+    const key = loan.groupId ?? loan.id;
+    const existing = groups.get(key);
+    if (existing) existing.push(loan);
+    else groups.set(key, [loan]);
+  }
+  const groupedLoans = [...groups.values()];
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <header>
         <h1 className="text-3xl font-black text-earth md:text-4xl">Prêts</h1>
         <p className="text-trail">
-          {loans.length} prêt{loans.length > 1 ? "s" : ""}
+          {groupedLoans.length} prêt{groupedLoans.length > 1 ? "s" : ""}
           {filter !== "all"
             ? ` · ${FILTERS.find((f) => f.value === filter)?.label}`
             : ""}
@@ -84,9 +109,13 @@ export default async function PretsPage({ searchParams }: PageProps) {
         />
       ) : (
         <ul className="space-y-3">
-          {loans.map((loan) => (
-            <li key={loan.id}>
-              <LoanCard loan={loan} dryableCategories={dryableCategories} />
+          {groupedLoans.map((group) => (
+            <li key={group[0].groupId ?? group[0].id}>
+              <LoanGroupCard
+                loans={group}
+                dryableCategories={dryableCategories}
+                dryingContacts={dryingContacts}
+              />
             </li>
           ))}
         </ul>

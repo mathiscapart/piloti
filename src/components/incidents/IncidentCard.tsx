@@ -1,6 +1,7 @@
 import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
+import { IncidentPhotos } from "@/components/incidents/IncidentPhotos";
 import { ResolveDialog } from "@/components/incidents/ResolveDialog";
 import { cn } from "@/lib/utils";
 import {
@@ -89,20 +90,7 @@ export function IncidentCard({
             <p className="text-sm text-earth">{incident.notes}</p>
           ) : null}
 
-          {photos.length > 0 ? (
-            <ul className="flex flex-wrap gap-2">
-              {photos.map((url) => (
-                <li key={url}>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={url}
-                    alt="Photo de l'incident"
-                    className="size-16 rounded-lg object-cover"
-                  />
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <IncidentPhotos photos={photos} />
 
           <p className="text-xs text-trail">
             Signalé par {incident.reporter.firstName}{" "}

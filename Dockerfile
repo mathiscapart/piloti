@@ -105,6 +105,14 @@ CMD ["node", "server.js"]
 FROM base AS dev
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Le client Prisma doit être généré dans node_modules avant le démarrage,
+# sinon `pnpm dev` plante avec "Cannot find module '.prisma/client/default'".
+# DATABASE_URL placeholder — `prisma generate` ne se connecte pas à la DB.
+ENV DATABASE_URL=file:/tmp/build-placeholder.db
+RUN pnpm prisma generate
 ENV NODE_ENV=development
 EXPOSE 3000
-CMD ["pnpm", "dev"]
+# Au démarrage : régénère le client Prisma (garantit qu'il colle au schéma même
+# après un down/up qui recrée le volume node_modules), applique les migrations,
+# puis lance Next. `generate` (~150ms) et `migrate deploy` sont idempotents.
+CMD ["sh", "-c", "pnpm prisma generate && pnpm prisma migrate deploy && pnpm dev"]

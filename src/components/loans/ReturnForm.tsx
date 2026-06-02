@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -22,13 +23,48 @@ const TONE: Record<ReturnCondition, string> = {
   A_REPARER: "border-brick bg-brick-soft text-brick-ink",
 };
 
-export function ReturnForm({ loanId }: { loanId: string }) {
+export function ReturnForm({
+  loanId,
+  quantity,
+  requireWeighing = false,
+  baseWeightKg = null,
+}: {
+  loanId: string;
+  quantity: number;
+  requireWeighing?: boolean;
+  baseWeightKg?: number | null;
+}) {
   const action = returnLoan.bind(null, loanId);
   const [state, formAction, pending] = useActionState(action, initialState);
   const [selected, setSelected] = useState<ReturnCondition>("BON");
+  const [weight, setWeight] = useState("");
+
+  const consumed =
+    baseWeightKg != null && weight.trim() !== ""
+      ? Math.round((baseWeightKg - Number(weight)) * 100) / 100
+      : null;
 
   return (
     <form action={formAction} className="space-y-5 rounded-2xl bg-snow p-6 shadow-card">
+      {/* US-30 — quantité rendue (retours partiels). Masqué si 1 seul exemplaire. */}
+      {quantity > 1 ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="returnedQuantity">Quantité rendue</Label>
+          <Input
+            id="returnedQuantity"
+            name="returnedQuantity"
+            type="number"
+            min={1}
+            max={quantity}
+            defaultValue={quantity}
+            className="w-28"
+          />
+          <p className="text-xs text-trail">
+            {quantity} en cours. Rends-en moins pour un retour partiel (le reste
+            demeure prêté).
+          </p>
+        </div>
+      ) : null}
       <div className="space-y-2">
         <Label>État du matériel au retour</Label>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -61,6 +97,33 @@ export function ReturnForm({ loanId }: { loanId: string }) {
           </p>
         ) : null}
       </div>
+
+      {/* US-17 — pesée obligatoire au retour si la catégorie l'exige */}
+      {requireWeighing ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="returnWeightKg">Poids au retour (kg)</Label>
+          <Input
+            id="returnWeightKg"
+            name="returnWeightKg"
+            type="number"
+            step="0.01"
+            min={0}
+            required
+            value={weight}
+            onChange={(e) => setWeight(e.target.value)}
+            placeholder="Ex. 9.2"
+            className="w-32"
+          />
+          <p className="text-xs text-trail">
+            {baseWeightKg != null
+              ? `Poids de référence : ${baseWeightKg} kg (doit être supérieur au poids rendu).`
+              : "Cette catégorie impose de peser le matériel au retour."}
+            {consumed != null
+              ? ` Consommation estimée : ${consumed} kg.`
+              : ""}
+          </p>
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         <Label htmlFor="notes">Note (optionnel)</Label>

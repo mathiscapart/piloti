@@ -18,21 +18,34 @@ services:
   app:
     build:
       target: dev
+    # Port hôte 4000 (et non 3000) : sur cette machine Windows, 3000 est tombé
+    # dans une plage réservée par Hyper-V/WinNAT (2581-3780, cf.
+    # `netsh int ipv4 show excludedportrange protocol=tcp`), Docker ne peut
+    # plus la binder. Le conteneur reste sur 3000 en interne.
     ports:
-      - "3000:3000"
+      - "4000:3000"
     environment:
       NODE_ENV: development
+      # DB dev = fichier SQLite bind-mounté depuis l'hôte (./dev.db). AUCUN
+      # accès au volume nommé `piloti-data` de la prod.
       DATABASE_URL: file:/app/dev.db
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-32-chars-minimum-aaaaaa}
-      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
-    volumes:
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:4000}
+    # Remplace complètement les volumes hérités du compose de base (qui
+    # montent `piloti-data:/data` et `piloti-uploads:/app/public/uploads`).
+    # On garde uniquement le bind mount du code + anonymous volumes pour
+    # préserver les node_modules et .next compilés dans l'image dev.
+    volumes: !override
       - ./:/app
       - /app/node_modules
       - /app/.next
-    command: ["pnpm", "dev"]
     # Annule la dépendance prod sur le service `migrate` (disabled via profil)
     depends_on: !reset null
     networks: !reset null
+    # Sans ça, le container dev hérite des labels traefik du compose de base
+    # et entre en conflit avec le router `piloti` du container prod (même
+    # règle Host) → traefik invalide tout et renvoie 404 sur la prod.
+    labels: !reset null
 
   traefik:
     profiles: ["never"]

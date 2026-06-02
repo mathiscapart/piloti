@@ -54,6 +54,7 @@ export default async function EditEquipmentPage({ params }: PageProps) {
           location: eq.location,
           photo: eq.photo,
           notes: eq.notes,
+          baseWeightKg: eq.baseWeightKg,
         }}
         submitLabel="Enregistrer"
         pendingLabel="Enregistrement…"

@@ -56,10 +56,17 @@ export const CONDITION_LABEL: Record<(typeof EQUIPMENT_CONDITIONS)[number], stri
 export const loanItemSchema = z.object({
   equipmentId: z.string().min(1),
   quantity: z.coerce.number().int().min(1, "Quantité minimum 1."),
+  // US-32 — date de retour par article (défaut = date commune du prêt).
+  expectedReturn: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.coerce.date().optional(),
+  ),
 });
 export type LoanItemInput = z.infer<typeof loanItemSchema>;
 
-// Wizard step 2: creates N loans (one per article) with the same details.
+// US-32 — wizard : crée UN prêt groupé (groupId partagé) avec une ligne par
+// article. startDate + expectedReturn sont la période commune ; chaque article
+// peut surcharger sa propre date de retour.
 export const createLoanSchema = z.object({
   items: z.array(loanItemSchema).min(1, "Sélectionne au moins un article."),
   borrowerId: z.string().min(1, "Choisis un emprunteur."),

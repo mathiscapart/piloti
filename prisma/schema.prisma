@@ -152,6 +152,9 @@ model Equipment {
 
 model Loan {
   id             String    @id @default(cuid())
+  // US-32 — prêt groupé : les lignes (une par article) d'un même emprunt
+  // partagent un `groupId`. Null = ancien prêt mono-article (legacy).
+  groupId        String?
   equipmentId    String
   borrowerId     String
   quantity       Int       @default(1)
@@ -182,6 +185,7 @@ model Loan {
   @@index([equipmentId])
   @@index([borrowerId])
   @@index([expectedReturn])
+  @@index([groupId])
 }
 
 model Incident {

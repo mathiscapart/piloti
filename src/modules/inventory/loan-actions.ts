@@ -29,11 +29,13 @@ export async function createLoan(
     return { error: "Vous n'avez pas la permission de créer un prêt." };
   }
 
-  // US-30 — chaque article sélectionné porte une quantité (champ `qty__<id>`).
+  // US-30 — chaque article porte une quantité (`qty__<id>`).
+  // US-32 — et sa propre date de retour (`return__<id>`, défaut = date commune).
   const equipmentIds = formData.getAll("equipmentId").map(String);
   const items = equipmentIds.map((equipmentId) => ({
     equipmentId,
     quantity: formData.get(`qty__${equipmentId}`) ?? "1",
+    expectedReturn: formData.get(`return__${equipmentId}`) ?? undefined,
   }));
 
   const parsed = createLoanSchema.safeParse({
@@ -51,8 +53,9 @@ export async function createLoan(
     return { error: "La date de retour doit être postérieure au départ." };
   }
 
-  // US-30 — contrôle de disponibilité : la quantité empruntée ne peut dépasser
-  // la quantité réellement disponible (total − quantités déjà prêtées actives).
+  // US-12/US-30 — contrôle de disponibilité SELON LES DATES : la quantité
+  // empruntée ne peut dépasser la quantité disponible sur la période de CHAQUE
+  // article (total − quantités des prêts actifs qui chevauchent cette période).
   const equipments = await db.equipment.findMany({
     where: { id: { in: parsed.data.items.map((i) => i.equipmentId) } },
     select: {
@@ -63,11 +66,12 @@ export async function createLoan(
       archived: true,
       loans: {
         where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
-        select: { quantity: true },
+        select: { quantity: true, startDate: true, expectedReturn: true },
       },
     },
   });
   const byId = new Map(equipments.map((eq) => [eq.id, eq]));
+  const start = parsed.data.startDate;
 
   for (const item of parsed.data.items) {
     const eq = byId.get(item.equipmentId);
@@ -77,27 +81,39 @@ export async function createLoan(
     if (eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE") {
       return { error: `« ${eq.name} » n'est pas empruntable (en réparation / hors service).` };
     }
-    const loaned = eq.loans.reduce((sum, l) => sum + l.quantity, 0);
+    const itemEnd = item.expectedReturn ?? parsed.data.expectedReturn;
+    if (itemEnd < start) {
+      return {
+        error: `« ${eq.name} » : la date de retour doit être postérieure au départ.`,
+      };
+    }
+    // Deux périodes se chevauchent ssi start1 <= end2 && start2 <= end1.
+    const loaned = eq.loans
+      .filter((l) => l.startDate <= itemEnd && l.expectedReturn >= start)
+      .reduce((sum, l) => sum + l.quantity, 0);
     const available = Math.max(0, eq.totalQty - loaned);
     if (item.quantity > available) {
       return {
-        error: `« ${eq.name} » : ${available} disponible(s), ${item.quantity} demandé(s).`,
+        error: `« ${eq.name} » : ${available} disponible(s) sur cette période, ${item.quantity} demandé(s).`,
       };
     }
   }
 
-  // Multi-equipment : on bypass withAudit (qui gère 1 result/1 audit) et on
-  // crée tout dans une transaction explicite — N Loan rows + N AuditLog.
+  // US-32 — un seul prêt groupé : N lignes (une par article) partageant un
+  // `groupId`, chacune avec sa propre date de retour. Transaction explicite
+  // (withAudit gère 1 result/1 audit) → N Loan rows + N AuditLog.
+  const groupId = crypto.randomUUID();
   await db.$transaction(async (tx) => {
     const createdLoans = await Promise.all(
       parsed.data.items.map((item) =>
         tx.loan.create({
           data: {
+            groupId,
             equipmentId: item.equipmentId,
             borrowerId: parsed.data.borrowerId,
             quantity: item.quantity,
             startDate: parsed.data.startDate,
-            expectedReturn: parsed.data.expectedReturn,
+            expectedReturn: item.expectedReturn ?? parsed.data.expectedReturn,
             status: "ACTIF",
             eventName: parsed.data.eventName,
             notes: parsed.data.notes,

@@ -316,10 +316,17 @@ function normalizeSearch(s: string): string {
     .trim();
 }
 
-// Équipement sélectionnable au step 1 du wizard. Inclut tout (archived false),
-// marque comme "déjà en cours" ceux qui ont un prêt ACTIF/RETARD/SECHAGE,
-// ou qui sont HORS_SERVICE/A_REPARER.
-export async function listBorrowableEquipment(search?: string) {
+// Équipement sélectionnable dans le wizard. Inclut tout (archived false),
+// marque comme "déjà en cours" ceux qui sont HORS_SERVICE/A_REPARER ou dont la
+// quantité disponible est nulle.
+// US-12 — si `period` est fourni, la disponibilité est calculée pour CETTE
+// période : seuls les prêts actifs qui chevauchent [start, end] consomment du
+// stock (un article rendu avant ou prêté après reste disponible). Sans période,
+// on retombe sur "tous les prêts actifs" (comportement historique).
+export async function listBorrowableEquipment(
+  search?: string,
+  period?: { start: Date; end: Date },
+) {
   const equipment = await db.equipment.findMany({
     where: { archived: false },
     orderBy: { name: "asc" },
@@ -332,7 +339,13 @@ export async function listBorrowableEquipment(search?: string) {
       photo: true,
       location: true,
       loans: {
-        where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
+        where: period
+          ? {
+              status: { in: [...ACTIVE_LOAN_STATUSES] },
+              startDate: { lte: period.end },
+              expectedReturn: { gte: period.start },
+            }
+          : { status: { in: [...ACTIVE_LOAN_STATUSES] } },
         select: { quantity: true },
       },
     },
@@ -376,7 +389,9 @@ export async function listBorrowableEquipment(search?: string) {
           ? "Hors service"
           : "À réparer"
         : availableQty <= 0
-          ? "Déjà prêté"
+          ? period
+            ? "Indispo ces dates"
+            : "Déjà prêté"
           : undefined,
     };
   });

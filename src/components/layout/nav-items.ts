@@ -5,6 +5,7 @@ import {
   History,
   LayoutDashboard,
   type LucideIcon,
+  MessageSquare,
   Package,
   Truck,
   UserPlus,
@@ -23,6 +24,7 @@ export const MAIN_NAV: NavItem[] = [
   { href: "/stock", label: "Stock", icon: Package },
   { href: "/prets", label: "Prêts", icon: Truck },
   { href: "/incidents", label: "Incidents", icon: AlertTriangle },
+  { href: "/communication", label: "Communication", icon: MessageSquare },
 ];
 
 export const ADMIN_NAV: NavItem[] = [

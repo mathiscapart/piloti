@@ -6,7 +6,6 @@ import {
   Plus,
   Scale,
   Truck,
-  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";

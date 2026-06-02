@@ -32,7 +32,9 @@ interface AuthCtx {
   role: Role | string;
   // Rôles additionnels : tableau, ou chaîne JSON (telle que stockée en base).
   roles?: string[] | string | null;
-  status: AccountStatus | string;
+  // Optionnel : `effectiveRoles`/`hasRole` n'en ont pas besoin ; `can()` exige
+  // ACTIVE (un status absent → non autorisé).
+  status?: AccountStatus | string;
 }
 
 // Ouvert à tout utilisateur ACTIVE, quel que soit le rôle.

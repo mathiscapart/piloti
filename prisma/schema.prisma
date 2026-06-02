@@ -53,6 +53,9 @@ model User {
   accounts Account[]
 
   // Piloti relations
+  messages          Message[]         @relation("MessageAuthor")
+  reactions         MessageReaction[] @relation("ReactionUser")
+  channelReads      ChannelRead[]     @relation("ChannelReadUser")
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -294,4 +297,86 @@ model Event {
   createdAt DateTime @default(now())
 
   @@index([startDate])
+}
+
+// ----------------------------------------------------------------------------
+// Communication (US-C09) — salons/canaux type Discord, messages, réactions.
+// ----------------------------------------------------------------------------
+
+model ChannelCategory {
+  id        String    @id @default(cuid())
+  name      String
+  order     Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  channels  Channel[]
+}
+
+model Channel {
+  id          String   @id @default(cuid())
+  categoryId  String?
+  name        String
+  slug        String   @unique
+  description String?
+  order       Int      @default(0)
+  archived    Boolean  @default(false)
+  // Accès : si accessRoles ET accessUnits sont vides → ouvert à tous les ACTIVE.
+  // Sinon, autorisé si le rôle ∈ accessRoles OU l'unité ∈ accessUnits.
+  // excludeUnits permet le motif « tous sauf X ». ADMIN voit tout.
+  accessRoles  String  @default("[]") // JSON Role[]
+  accessUnits  String  @default("[]") // JSON Unit[]
+  excludeUnits String  @default("[]") // JSON Unit[]
+  createdAt   DateTime @default(now())
+
+  category  ChannelCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  messages  Message[]
+  reads     ChannelRead[]
+
+  @@index([categoryId])
+  @@index([archived])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  channelId   String
+  authorId    String
+  body        String
+  attachments String    @default("[]") // JSON string[] (chemins /uploads)
+  editedAt    DateTime?
+  pinnedAt    DateTime?
+  createdAt   DateTime  @default(now())
+
+  channel   Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author    User              @relation("MessageAuthor", fields: [authorId], references: [id])
+  reactions MessageReaction[]
+
+  @@index([channelId])
+  @@index([createdAt])
+}
+
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation("ReactionUser", fields: [userId], references: [id])
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
+model ChannelRead {
+  id         String   @id @default(cuid())
+  channelId  String
+  userId     String
+  lastReadAt DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation("ChannelReadUser", fields: [userId], references: [id])
+
+  @@unique([channelId, userId])
+  @@index([userId])
 }

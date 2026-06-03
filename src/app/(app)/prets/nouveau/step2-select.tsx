@@ -221,6 +221,22 @@ export function Step2Select({
           <Textarea id="notes" name="notes" rows={3} />
         </div>
 
+        {/* US-16 — demande d'aide week-end : publie un sondage dans #général */}
+        <label className="flex items-start gap-2 rounded-xl bg-sand p-3">
+          <input
+            type="checkbox"
+            name="requestHelp"
+            className="mt-0.5 size-4 accent-forest"
+          />
+          <span className="text-sm text-earth">
+            Lancer une demande d&apos;aide dans le canal général
+            <span className="block text-xs text-trail">
+              Publie un sondage « Qui peut aider ce week-end ? » (amener /
+              ramener le matériel, renfort humain).
+            </span>
+          </span>
+        </label>
+
         {state.error ? (
           <p
             role="alert"

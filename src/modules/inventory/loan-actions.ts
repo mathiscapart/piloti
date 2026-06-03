@@ -8,6 +8,7 @@ import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { withAudit } from "@/lib/audit";
 import { can } from "@/lib/permissions";
+import { publishChannelEvent } from "@/lib/realtime";
 
 import type { ActionResult } from "@/lib/types";
 import {
@@ -136,6 +137,46 @@ export async function createLoan(
       })),
     });
   });
+
+  // US-16 — demande d'aide week-end : publie un sondage dans le canal général,
+  // lié au prêt (groupId). Best-effort : si le salon n'existe pas, on ignore.
+  if (formData.get("requestHelp") === "on") {
+    const general = await db.channel.findUnique({
+      where: { slug: "general" },
+      select: { id: true },
+    });
+    if (general) {
+      const names = parsed.data.items
+        .map((i) => byId.get(i.equipmentId)?.name)
+        .filter(Boolean)
+        .join(", ");
+      const fmt = (d: Date) =>
+        d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+      const context = `${names} · du ${fmt(parsed.data.startDate)} au ${fmt(parsed.data.expectedReturn)}`;
+      const options = [
+        "Amener le matériel",
+        "Ramener le matériel",
+        "Renfort humain (manque de monde)",
+      ].map((label) => ({ id: crypto.randomUUID().slice(0, 8), label }));
+
+      const poll = await db.poll.create({
+        data: {
+          channelId: general.id,
+          authorId: user.id,
+          question: `Qui peut aider ${parsed.data.eventName ? `pour « ${parsed.data.eventName} »` : "ce week-end"} ? (${context})`,
+          options: JSON.stringify(options),
+          allowMultiple: true,
+          loanGroupId: groupId,
+        },
+      });
+      publishChannelEvent({
+        type: "poll",
+        channelId: general.id,
+        payload: { id: poll.id },
+      });
+      revalidatePath("/communication/general");
+    }
+  }
 
   revalidatePath("/prets");
   revalidatePath("/stock");

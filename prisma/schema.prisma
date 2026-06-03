@@ -394,6 +394,8 @@ model Poll {
   allowMultiple Boolean   @default(false)
   closesAt      DateTime?
   closedAt      DateTime?
+  // US-16 — sondage généré depuis un prêt (groupId) pour traçabilité.
+  loanGroupId   String?
   createdAt     DateTime  @default(now())
 
   channel Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)

@@ -14,7 +14,12 @@ import {
   togglePin,
   toggleReaction,
 } from "@/modules/communication/actions";
+import { loadPolls } from "@/modules/communication/poll-actions";
+import type { PollWithVotes } from "@/modules/communication/poll-actions";
 import type { ActionResult } from "@/lib/types";
+
+import { CreatePollDialog } from "./CreatePollDialog";
+import { PollCard } from "./PollCard";
 
 const QUICK_EMOJIS = ["👍", "❤️", "😂", "🎉", "✅"];
 
@@ -43,17 +48,20 @@ const TIME_FMT = new Intl.DateTimeFormat("fr-FR", {
 export function ChannelView({
   channelId,
   initialMessages,
+  initialPolls,
   currentUserId,
   isStaff,
   canWrite,
 }: {
   channelId: string;
   initialMessages: Msg[];
+  initialPolls: PollWithVotes[];
   currentUserId: string;
   isStaff: boolean;
   canWrite: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
+  const [polls, setPolls] = useState<PollWithVotes[]>(initialPolls);
   const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -70,19 +78,26 @@ export function ChannelView({
     if (fresh) setMessages(fresh as unknown as Msg[]);
   }, [channelId]);
 
+  const refetchPolls = useCallback(async () => {
+    const fresh = await loadPolls(channelId);
+    if (fresh) setPolls(fresh);
+  }, [channelId]);
+
   // SSE : refetch sur tout événement du salon.
   useEffect(() => {
     const es = new EventSource(`/api/channels/${channelId}/stream`);
     es.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data);
-        if (ev.type && ev.type !== "ready") refetch();
+        if (!ev.type || ev.type === "ready") return;
+        if (ev.type === "poll") refetchPolls();
+        else refetch();
       } catch {
         // ignore
       }
     };
     return () => es.close();
-  }, [channelId, refetch]);
+  }, [channelId, refetch, refetchPolls]);
 
   // Marque lu au montage + à chaque nouveau message.
   useEffect(() => {
@@ -122,7 +137,22 @@ export function ChannelView({
       ) : null}
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-        {messages.length === 0 ? (
+        {/* US-C06 — sondages du salon (résultats temps réel) */}
+        {polls.length > 0 ? (
+          <div className="space-y-3">
+            {polls.map((p) => (
+              <PollCard
+                key={p.id}
+                poll={p}
+                currentUserId={currentUserId}
+                isStaff={isStaff}
+                onChanged={refetchPolls}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {messages.length === 0 && polls.length === 0 ? (
           <p className="py-8 text-center text-sm text-trail">
             Aucun message. Lance la discussion !
           </p>
@@ -170,6 +200,7 @@ export function ChannelView({
             </div>
           ) : null}
           <div className="flex items-end gap-2">
+            <CreatePollDialog channelId={channelId} onCreated={refetchPolls} />
             <label className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-sand text-trail hover:bg-stone">
               <ImagePlus className="size-5" />
               <input

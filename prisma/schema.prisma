@@ -56,6 +56,8 @@ model User {
   messages          Message[]         @relation("MessageAuthor")
   reactions         MessageReaction[] @relation("ReactionUser")
   channelReads      ChannelRead[]     @relation("ChannelReadUser")
+  polls             Poll[]            @relation("PollAuthor")
+  pollVotes         PollVote[]        @relation("PollVoteUser")
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -331,6 +333,7 @@ model Channel {
   category  ChannelCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   messages  Message[]
   reads     ChannelRead[]
+  polls     Poll[]
 
   @@index([categoryId])
   @@index([archived])
@@ -379,4 +382,37 @@ model ChannelRead {
 
   @@unique([channelId, userId])
   @@index([userId])
+}
+
+// US-C06 — sondage dans un salon (choix multiple / oui-non / disponibilités).
+model Poll {
+  id            String    @id @default(cuid())
+  channelId     String
+  authorId      String
+  question      String
+  options       String // JSON: { id: string; label: string }[]
+  allowMultiple Boolean   @default(false)
+  closesAt      DateTime?
+  closedAt      DateTime?
+  createdAt     DateTime  @default(now())
+
+  channel Channel    @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author  User       @relation("PollAuthor", fields: [authorId], references: [id])
+  votes   PollVote[]
+
+  @@index([channelId])
+}
+
+model PollVote {
+  id        String   @id @default(cuid())
+  pollId    String
+  userId    String
+  optionId  String
+  createdAt DateTime @default(now())
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  user User @relation("PollVoteUser", fields: [userId], references: [id])
+
+  @@unique([pollId, userId, optionId])
+  @@index([pollId])
 }

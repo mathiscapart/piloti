@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
 import { canWriteChannel } from "@/modules/communication/access";
+import { loadPolls } from "@/modules/communication/poll-actions";
 import {
   getChannelForUser,
   listChannelTree,
@@ -25,9 +26,10 @@ export default async function ChannelPage({ params }: PageProps) {
   const channel = await getChannelForUser(user, slug);
   if (!channel) notFound();
 
-  const [messages, tree] = await Promise.all([
+  const [messages, tree, polls] = await Promise.all([
     listMessages(channel.id),
     listChannelTree(user),
+    loadPolls(channel.id),
   ]);
 
   const isStaff = effectiveRoles(user).some(
@@ -72,6 +74,7 @@ export default async function ChannelPage({ params }: PageProps) {
           <ChannelView
             channelId={channel.id}
             initialMessages={messages}
+            initialPolls={polls ?? []}
             currentUserId={user.id}
             isStaff={isStaff}
             canWrite={canWrite}

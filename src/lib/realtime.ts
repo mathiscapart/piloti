@@ -5,7 +5,7 @@ import { EventEmitter } from "node:events";
 // les événements d'un salon à tous les clients SSE connectés.
 
 export interface ChannelEvent {
-  type: "message" | "reaction" | "edit" | "pin" | "delete";
+  type: "message" | "reaction" | "edit" | "pin" | "delete" | "poll";
   channelId: string;
   // Charge utile sérialisable (id de message, etc.). Le client refetch sur
   // réception ; on n'envoie que de quoi cibler le rafraîchissement.

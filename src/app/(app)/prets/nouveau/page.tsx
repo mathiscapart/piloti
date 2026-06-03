@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { requireCan } from "@/lib/require-can";
 import {
   listBorrowableEquipment,
   listBorrowers,
@@ -24,6 +25,7 @@ interface PageProps {
 }
 
 export default async function NewLoanPage({ searchParams }: PageProps) {
+  await requireCan("loan.create");
   const params = await searchParams;
   const step = params.step === "2" ? 2 : 1;
   const search = (params.q ?? "").trim();

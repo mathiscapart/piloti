@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { EquipmentForm } from "@/components/equipment/EquipmentForm";
-import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
+import { requireCan } from "@/lib/require-can";
 import { updateEquipment } from "@/modules/inventory/actions";
 import { listCategories } from "@/modules/inventory/queries";
 import { db } from "@/lib/db";
@@ -17,7 +17,7 @@ interface PageProps {
 
 export default async function EditEquipmentPage({ params }: PageProps) {
   const { id } = await params;
-  const user = await getCurrentUser();
+  const user = await requireCan("equipment.update");
   const [eq, categories] = await Promise.all([
     db.equipment.findUnique({ where: { id } }),
     listCategories(),

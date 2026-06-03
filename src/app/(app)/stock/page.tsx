@@ -5,6 +5,7 @@ import { EquipmentCard } from "@/components/equipment/EquipmentCard";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
+import { requireCan } from "@/lib/require-can";
 import { listEquipment, listCategoryTree } from "@/modules/inventory/queries";
 
 interface PageProps {
@@ -12,6 +13,7 @@ interface PageProps {
 }
 
 export default async function StockPage({ searchParams }: PageProps) {
+  await requireCan("equipment.view");
   const params = await searchParams;
   const q = params.q?.trim();
 

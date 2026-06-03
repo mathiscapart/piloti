@@ -3,12 +3,14 @@ import Link from "next/link";
 
 import { IncidentForm } from "@/components/incidents/IncidentForm";
 import { db } from "@/lib/db";
+import { requireCan } from "@/lib/require-can";
 
 interface PageProps {
   searchParams: Promise<{ equipmentId?: string; loanId?: string }>;
 }
 
 export default async function NewIncidentPage({ searchParams }: PageProps) {
+  await requireCan("incident.report");
   const params = await searchParams;
 
   const equipment = await db.equipment.findMany({

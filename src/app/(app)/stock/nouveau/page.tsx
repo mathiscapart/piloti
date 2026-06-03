@@ -2,10 +2,12 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
 import { EquipmentForm } from "@/components/equipment/EquipmentForm";
+import { requireCan } from "@/lib/require-can";
 import { createEquipment } from "@/modules/inventory/actions";
 import { listCategories } from "@/modules/inventory/queries";
 
 export default async function NewEquipmentPage() {
+  await requireCan("equipment.create");
   const categories = await listCategories();
 
   return (

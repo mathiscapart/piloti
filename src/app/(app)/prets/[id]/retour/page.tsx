@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { ReturnForm } from "@/components/loans/ReturnForm";
 import { db } from "@/lib/db";
+import { requireCan } from "@/lib/require-can";
 import { getLoanDetail } from "@/modules/inventory/queries";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -18,6 +19,7 @@ interface PageProps {
 }
 
 export default async function ReturnLoanPage({ params }: PageProps) {
+  await requireCan("loan.return.validate");
   const { id } = await params;
   const loan = await getLoanDetail(id);
   if (!loan) notFound();

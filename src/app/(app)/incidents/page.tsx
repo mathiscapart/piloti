@@ -1,5 +1,6 @@
 import { AlertTriangle, Plus } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { IncidentCard } from "@/components/incidents/IncidentCard";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -44,10 +45,10 @@ export default async function IncidentsPage({ searchParams }: PageProps) {
       ? (params.severity as IncidentSeverityFilter)
       : "all";
 
-  const [user, incidents] = await Promise.all([
-    getCurrentUser(),
-    listIncidents({ status, severity }),
-  ]);
+  const user = await getCurrentUser();
+  // Réservé au staff (consultation des incidents = données matériel + déclarants).
+  if (!can(user, "incident.report")) redirect("/dashboard");
+  const incidents = await listIncidents({ status, severity });
   const canResolve = can(user, "incident.resolve");
 
   const buildHref = (overrides: Partial<{ status: string; severity: string }>) => {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LoanGroupCard } from "@/components/loans/LoanGroupCard";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
+import { requireCan } from "@/lib/require-can";
 import {
   listLoans,
   listCategories,
@@ -26,6 +27,7 @@ interface PageProps {
 }
 
 export default async function PretsPage({ searchParams }: PageProps) {
+  await requireCan("equipment.view");
   const params = await searchParams;
   const raw = params.filter ?? "all";
   const filter: LoanFilter = VALID_FILTERS.has(raw as LoanFilter)

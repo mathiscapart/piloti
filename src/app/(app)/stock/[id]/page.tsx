@@ -22,6 +22,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { requireCan } from "@/lib/require-can";
 import { getEquipmentDetail, listCategories } from "@/modules/inventory/queries";
 import { CONDITION_LABEL } from "@/modules/inventory/types";
 
@@ -43,6 +44,7 @@ interface PageProps {
 }
 
 export default async function EquipmentDetailPage({ params }: PageProps) {
+  await requireCan("equipment.view");
   const { id } = await params;
   const [eq, categories] = await Promise.all([
     getEquipmentDetail(id),

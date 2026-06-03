@@ -47,8 +47,8 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Inventaire",
     items: [
       { href: "/stock", label: "Stock", icon: Package, requires: "equipment.view" },
-      { href: "/prets", label: "Prêts", icon: Truck, requires: "equipment.view" },
-      { href: "/incidents", label: "Incidents", icon: AlertTriangle, requires: "incident.report" },
+      { href: "/prets", label: "Prêts", icon: Truck, requires: "loan.view" },
+      { href: "/incidents", label: "Incidents", icon: AlertTriangle, requires: "incident.view" },
     ],
   },
   {
@@ -61,7 +61,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Administration",
     items: [
-      { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.review" },
+      { href: "/admin/dons", label: "Dons", icon: Gift, requires: "admin.access" },
       { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "admin.access" },
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "admin.access" },
       { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "admin.access" },

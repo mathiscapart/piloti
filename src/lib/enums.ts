@@ -11,6 +11,7 @@ export const ROLES = [
   "PARENT",
   "SCOUT",
   "RESPONSABLE_GROUPE",
+  "RESPONSABLE_MATERIEL",
   "TRESORIER",
   "SECRETAIRE",
   "MEMBRE_LOCAL",
@@ -23,6 +24,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   PARENT: "Parent",
   SCOUT: "Jeune",
   RESPONSABLE_GROUPE: "Responsable de groupe",
+  RESPONSABLE_MATERIEL: "Responsable matériel",
   TRESORIER: "Trésorier",
   SECRETAIRE: "Secrétaire",
   MEMBRE_LOCAL: "Membre du local",
@@ -35,6 +37,7 @@ export const PRIMARY_ROLES = ["ADMIN", "CHEF", "PARENT", "SCOUT"] as const;
 // rôle principal, via User.roles. Un parent peut être aussi trésorier, etc.
 export const EXTRA_ROLES = [
   "RESPONSABLE_GROUPE",
+  "RESPONSABLE_MATERIEL",
   "TRESORIER",
   "SECRETAIRE",
   "MEMBRE_LOCAL",

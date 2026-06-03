@@ -46,8 +46,8 @@ export default async function IncidentsPage({ searchParams }: PageProps) {
       : "all";
 
   const user = await getCurrentUser();
-  // Réservé au staff (consultation des incidents = données matériel + déclarants).
-  if (!can(user, "incident.report")) redirect("/dashboard");
+  // Réservé aux rôles qui peuvent consulter les incidents (matériel + déclarants).
+  if (!can(user, "incident.view")) redirect("/dashboard");
   const incidents = await listIncidents({ status, severity });
   const canResolve = can(user, "incident.resolve");
 

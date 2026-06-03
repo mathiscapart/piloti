@@ -4,27 +4,43 @@
 //
 // US-29 — moteur par rôle, multi-rôles : un compte a un rôle principal
 // (User.role) + des rôles additionnels (User.roles, JSON). `can()` évalue
-// l'UNION des rôles. ADMIN est superutilisateur (toutes les actions).
+// l'UNION des rôles (le rôle le plus permissif l'emporte). ADMIN est
+// superutilisateur (toutes les actions).
+//
+// US-32 — redéfinition de la matrice pour tous les rôles :
+//   ADMIN, RESPONSABLE_GROUPE (RG, lecture seule sur tout), CHEF,
+//   RESPONSABLE_MATERIEL, TRESORIER, SECRETAIRE, MEMBRE_LOCAL, PARENT, SCOUT.
+//   Les actions de LECTURE sont distinctes des actions de MUTATION
+//   (`*.view` vs `*.create/...`) afin de permettre le « lecture seule » du RG.
+//   Permission conditionnée par la branche : un JEUNE (SCOUT) des branches
+//   Pionniers/Compagnons peut créer un prêt.
 
 import type { AccountStatus, Role } from "@/lib/enums";
 
 export const ACTIONS = [
+  // Inventaire
   "equipment.view",
   "equipment.create",
   "equipment.update",
   "equipment.archive",
+  "equipment.status.change",
+  "category.manage",
+  // Prêts
+  "loan.view",
   "loan.create",
   "loan.return.validate",
+  // Incidents
+  "incident.view",
   "incident.report",
   "incident.resolve",
-  "equipment.status.change",
+  // Comptes / membres
   "admin.access",
   "user.approve",
+  "member.view",
+  "member.directory", // US-26 — annuaire des compétences parents (RG)
+  // Dons
   "donation.create",
   "donation.review",
-  "member.view",
-  // US-26 — annuaire des compétences parents, réservé aux responsables de groupe.
-  "member.directory",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -32,6 +48,8 @@ interface AuthCtx {
   role: Role | string;
   // Rôles additionnels : tableau, ou chaîne JSON (telle que stockée en base).
   roles?: string[] | string | null;
+  // Branche/unité — nécessaire pour les permissions conditionnées (ex. JEUNE).
+  unit?: string | null;
   // Optionnel : `effectiveRoles`/`hasRole` n'en ont pas besoin ; `can()` exige
   // ACTIVE (un status absent → non autorisé).
   status?: AccountStatus | string;
@@ -42,22 +60,38 @@ const ANY_ACTIVE = new Set<Action>(["donation.create"]);
 
 // Pour chaque action, les rôles (hors ADMIN, superutilisateur) qui l'autorisent.
 // Une action absente / à liste vide = réservée à l'ADMIN.
+// RG = lecture seule : présent sur les `*.view` / `member.directory`, absent
+// de toute mutation.
+const CHEF = "CHEF";
+const RG = "RESPONSABLE_GROUPE";
+const MAT = "RESPONSABLE_MATERIEL";
+const TRES = "TRESORIER";
+const SEC = "SECRETAIRE";
+
 const PERMISSIONS: Record<Action, Role[]> = {
-  "equipment.view": ["CHEF"],
-  "equipment.create": ["CHEF"],
-  "equipment.update": ["CHEF"],
-  "equipment.archive": [], // ADMIN only
-  "loan.create": ["CHEF"],
-  "loan.return.validate": ["CHEF"],
-  "incident.report": ["CHEF"],
-  "incident.resolve": [], // ADMIN only
-  "equipment.status.change": ["CHEF"],
-  "admin.access": [], // ADMIN only
-  "user.approve": [], // ADMIN only
+  // Inventaire — lecture : encadrants + RG (lecture) + responsable matériel.
+  "equipment.view": [CHEF, RG, MAT],
+  "equipment.create": [CHEF, MAT],
+  "equipment.update": [CHEF, MAT],
+  "equipment.archive": [CHEF, MAT],
+  "equipment.status.change": [CHEF, MAT],
+  "category.manage": [CHEF, MAT],
+  // Prêts — TRESORIER voit les prêts ; RG en lecture ; CHEF/MAT gèrent.
+  "loan.view": [CHEF, RG, MAT, TRES],
+  "loan.create": [CHEF, MAT], // + JEUNE Pios/Compas (conditionné, cf. can())
+  "loan.return.validate": [CHEF, MAT],
+  // Incidents — PARENT peut créer ; MAT crée et résout ; RG lit.
+  "incident.view": [CHEF, RG, MAT],
+  "incident.report": [CHEF, MAT, "PARENT"],
+  "incident.resolve": [MAT],
+  // Comptes / membres
+  "admin.access": [], // ADMIN only (validation inscriptions par SEC : différé)
+  "user.approve": [], // ADMIN only (différé : SEC sauf ADMIN/RG)
+  "member.view": [CHEF, RG, SEC, TRES],
+  "member.directory": [RG],
+  // Dons — MAT accepte/refuse (page sous /admin : accès différé) ; ADMIN.
   "donation.create": [], // géré par ANY_ACTIVE
-  "donation.review": [], // ADMIN only
-  "member.view": ["CHEF"],
-  "member.directory": ["RESPONSABLE_GROUPE"],
+  "donation.review": [MAT],
 };
 
 /** Union du rôle principal et des rôles additionnels (parse JSON si besoin). */
@@ -83,6 +117,16 @@ export function can(user: AuthCtx, action: Action): boolean {
   // ADMIN = superutilisateur.
   if (roles.includes("ADMIN")) return true;
   if (ANY_ACTIVE.has(action)) return true;
+
+  // US-32 — permission conditionnée par la branche : un JEUNE (SCOUT) des
+  // branches Pionniers / Compagnons peut créer un prêt.
+  if (
+    action === "loan.create" &&
+    roles.includes("SCOUT") &&
+    (user.unit === "PIOS" || user.unit === "COMPAS")
+  ) {
+    return true;
+  }
 
   const allowed = PERMISSIONS[action] ?? [];
   return roles.some((r) => (allowed as string[]).includes(r));

@@ -27,7 +27,7 @@ interface PageProps {
 }
 
 export default async function PretsPage({ searchParams }: PageProps) {
-  await requireCan("equipment.view");
+  await requireCan("loan.view");
   const params = await searchParams;
   const raw = params.filter ?? "all";
   const filter: LoanFilter = VALID_FILTERS.has(raw as LoanFilter)

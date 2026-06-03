@@ -1,6 +1,7 @@
 "use client";
 
 import { BarChart3, Check, Lock } from "lucide-react";
+import { useState } from "react";
 
 import { cn } from "@/lib/utils";
 import { closePoll, votePoll } from "@/modules/communication/poll-actions";
@@ -29,11 +30,17 @@ export function PollCard({
   // simplement closedAt (pas de calcul de date impur au rendu).
   const closed = poll.closedAt !== null;
 
+  const [showVoters, setShowVoters] = useState(false);
+
   const total = poll.votes.length;
   const countByOption = new Map<string, number>();
+  const votersByOption = new Map<string, string[]>();
   const mine = new Set<string>();
   for (const v of poll.votes) {
     countByOption.set(v.optionId, (countByOption.get(v.optionId) ?? 0) + 1);
+    const list = votersByOption.get(v.optionId) ?? [];
+    list.push(`${v.user.firstName} ${v.user.lastName}`);
+    votersByOption.set(v.optionId, list);
     if (v.userId === currentUserId) mine.add(v.optionId);
   }
 
@@ -109,13 +116,30 @@ export function PollCard({
                   </span>
                 </span>
               </button>
+
+              {/* Qui a voté (style Discord), affiché au clic sur le total */}
+              {showVoters && (votersByOption.get(opt.id)?.length ?? 0) > 0 ? (
+                <p className="px-3 pt-1 text-xs text-trail">
+                  {votersByOption.get(opt.id)!.join(", ")}
+                </p>
+              ) : null}
             </li>
           );
         })}
       </ul>
-      <p className="mt-2 text-xs text-trail">
-        {total} vote{total > 1 ? "s" : ""}
-      </p>
+
+      {total > 0 ? (
+        <button
+          type="button"
+          onClick={() => setShowVoters((v) => !v)}
+          className="mt-2 text-xs font-bold text-trail hover:text-earth hover:underline"
+        >
+          {total} vote{total > 1 ? "s" : ""} ·{" "}
+          {showVoters ? "masquer" : "voir qui a voté"}
+        </button>
+      ) : (
+        <p className="mt-2 text-xs text-trail">Aucun vote</p>
+      )}
     </div>
   );
 }

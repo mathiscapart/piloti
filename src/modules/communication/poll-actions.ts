@@ -129,7 +129,13 @@ export async function loadPolls(channelId: string) {
     orderBy: { createdAt: "desc" },
     include: {
       author: { select: { firstName: true, lastName: true } },
-      votes: { select: { optionId: true, userId: true } },
+      votes: {
+        select: {
+          optionId: true,
+          userId: true,
+          user: { select: { firstName: true, lastName: true } },
+        },
+      },
     },
   });
 

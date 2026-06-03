@@ -9,13 +9,13 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { passwordSchema } from "@/lib/password-policy";
 import { can } from "@/lib/permissions";
-import { EXTRA_ROLES, ROLES } from "@/lib/enums";
+import { ROLES } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
 
 const approveSchema = z.object({
   userId: z.string().min(1),
-  role: z.enum(ROLES),
+  roles: z.array(z.enum(ROLES)).min(1, "Attribue au moins un rôle."),
 });
 
 const rejectSchema = z.object({
@@ -23,15 +23,10 @@ const rejectSchema = z.object({
   reason: z.string().trim().min(1, "Indique une raison."),
 });
 
-const roleSchema = z.object({
-  userId: z.string().min(1),
-  role: z.enum(ROLES),
-});
-
-// US-29 — rôles fonctionnels additionnels (multi-rôles).
+// US-32 — rôles unifiés : un seul ensemble de rôles par compte (tout le catalogue).
 const rolesSchema = z.object({
   userId: z.string().min(1),
-  roles: z.array(z.enum(EXTRA_ROLES)).default([]),
+  roles: z.array(z.enum(ROLES)).default([]),
 });
 
 // US-26 — profil parent enrichi (annuaire des compétences).
@@ -86,19 +81,21 @@ export async function approveUser(
 
   const parsed = approveSchema.safeParse({
     userId: formData.get("userId"),
-    role: formData.get("role"),
+    roles: formData.getAll("role"),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
+  const roles = [...new Set(parsed.data.roles)];
   await withAudit(
     (tx) =>
       tx.user.update({
         where: { id: parsed.data.userId },
         data: {
           status: "ACTIVE",
-          role: parsed.data.role,
+          roles: JSON.stringify(roles),
+          role: roles[0], // miroir d'affichage (déprécié)
           emailVerified: true,
           rejectedReason: null,
         },
@@ -108,7 +105,7 @@ export async function approveUser(
       userId: admin.id,
       metadata: {
         targetUserId: parsed.data.userId,
-        assignedRole: parsed.data.role,
+        assignedRoles: roles,
       },
     },
   );
@@ -160,47 +157,8 @@ export async function rejectUser(
 // /admin/utilisateurs
 // ----------------------------------------------------------------------------
 
-export async function changeUserRole(
-  _prev: ActionResult,
-  formData: FormData,
-): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
-
-  const parsed = roleSchema.safeParse({
-    userId: formData.get("userId"),
-    role: formData.get("role"),
-  });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
-  }
-
-  if (parsed.data.userId === admin.id && parsed.data.role !== "ADMIN") {
-    return { error: "Tu ne peux pas te retirer le rôle ADMIN toi-même." };
-  }
-
-  await withAudit(
-    (tx) =>
-      tx.user.update({
-        where: { id: parsed.data.userId },
-        data: { role: parsed.data.role },
-      }),
-    {
-      action: "USER_ROLE_CHANGED",
-      userId: admin.id,
-      metadata: {
-        targetUserId: parsed.data.userId,
-        newRole: parsed.data.role,
-      },
-    },
-  );
-
-  revalidatePath("/admin/utilisateurs");
-  return { error: null };
-}
-
-// US-29 — définit les rôles fonctionnels additionnels d'un compte (RG,
-// Trésorier, Secrétaire, Membre du local). Réservé à l'admin, tracé en audit.
+// US-32 — définit l'ensemble unifié des rôles d'un compte (tout le catalogue).
+// Réservé à l'admin, tracé en audit.
 export async function setUserRoles(
   _prev: ActionResult,
   formData: FormData,
@@ -219,18 +177,26 @@ export async function setUserRoles(
   // Dédoublonne et garde un ordre stable.
   const roles = [...new Set(parsed.data.roles)];
 
+  // Garde-fou : un admin ne peut pas se retirer le rôle ADMIN lui-même.
+  if (parsed.data.userId === admin.id && !roles.includes("ADMIN")) {
+    return { error: "Tu ne peux pas te retirer le rôle ADMIN toi-même." };
+  }
+
   await withAudit(
     (tx) =>
       tx.user.update({
         where: { id: parsed.data.userId },
-        data: { roles: JSON.stringify(roles) },
+        data: {
+          roles: JSON.stringify(roles),
+          role: roles[0] ?? "SCOUT", // miroir d'affichage (déprécié)
+        },
       }),
     {
       action: "USER_ROLE_CHANGED",
       userId: admin.id,
       metadata: {
         targetUserId: parsed.data.userId,
-        additionalRoles: roles,
+        roles,
       },
     },
   );

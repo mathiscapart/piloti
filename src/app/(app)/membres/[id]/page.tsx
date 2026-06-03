@@ -7,7 +7,7 @@ import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getMemberDetail } from "@/modules/inventory/queries";
 
@@ -45,7 +45,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
   // US-26 — accès à l'annuaire des compétences : RG (member.directory) ou admin.
   const canSeeDirectory = can(currentUser, "member.directory");
   const isAdmin = can(currentUser, "admin.access");
-  const isParent = user.role === "PARENT";
+  const isParent = effectiveRoles(user).includes("PARENT");
   const hasProfile =
     !!user.profession || !!user.skills || !!user.availability || !!user.helpNotes;
 

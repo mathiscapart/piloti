@@ -94,20 +94,22 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "donation.review": [MAT],
 };
 
-/** Union du rôle principal et des rôles additionnels (parse JSON si besoin). */
+/**
+ * Rôles effectifs de l'utilisateur. Modèle unifié (US-32) : un compte porte un
+ * SEUL ensemble de rôles dans `roles` (JSON), n'importe quelle combinaison
+ * (ex. juste ["TRESORIER"]). Le champ `role` n'est plus qu'un miroir d'affichage.
+ */
 export function effectiveRoles(user: AuthCtx): string[] {
-  let extra: string[] = [];
-  if (Array.isArray(user.roles)) {
-    extra = user.roles;
-  } else if (typeof user.roles === "string" && user.roles.trim() !== "") {
+  if (Array.isArray(user.roles)) return user.roles.map(String);
+  if (typeof user.roles === "string" && user.roles.trim() !== "") {
     try {
       const parsed = JSON.parse(user.roles);
-      if (Array.isArray(parsed)) extra = parsed.map(String);
+      if (Array.isArray(parsed)) return parsed.map(String);
     } catch {
-      extra = [];
+      return [];
     }
   }
-  return [user.role, ...extra];
+  return [];
 }
 
 export function can(user: AuthCtx, action: Action): boolean {

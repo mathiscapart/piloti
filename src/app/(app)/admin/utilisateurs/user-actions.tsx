@@ -18,74 +18,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   changeUserPassword,
-  changeUserRole,
   deleteUser,
   reactivateUser,
   setUserRoles,
   suspendUser,
 } from "@/modules/admin/actions";
-import { EXTRA_ROLES, ROLE_LABEL, type Role } from "@/lib/enums";
+import { ROLE_LABEL, ROLES, type Role } from "@/lib/enums";
 
 const emptyState = { error: null } as const;
 
-export function RoleSelect({
-  userId,
-  role,
-  disabled,
-}: {
-  userId: string;
-  role: string;
-  disabled?: boolean;
-}) {
-  const router = useRouter();
-  const [value, setValue] = useState(role);
-  const [pending, startTransition] = useTransition();
-
-  function handleChange(newRole: string) {
-    if (newRole === value || pending) return;
-    const previous = value;
-    setValue(newRole);
-    const fd = new FormData();
-    fd.set("userId", userId);
-    fd.set("role", newRole);
-    startTransition(async () => {
-      const res = await changeUserRole(emptyState, fd);
-      if (res.error) {
-        setValue(previous);
-        toast.error(res.error);
-      } else {
-        toast.success("Rôle mis à jour.");
-        router.refresh();
-      }
-    });
-  }
-
-  return (
-    <Select
-      value={value}
-      onValueChange={handleChange}
-      disabled={disabled || pending}
-    >
-      <SelectTrigger className="h-9 w-36">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="CHEF">Chef</SelectItem>
-        <SelectItem value="ADMIN">Administrateur</SelectItem>
-      </SelectContent>
-    </Select>
-  );
-}
-
-// US-29 — attribution des rôles fonctionnels additionnels (multi-rôles).
+// US-32 — éditeur de rôles UNIFIÉ : un compte porte n'importe quelle
+// combinaison de rôles du catalogue complet (ex. juste « Trésorier »).
 export function RolesEditor({
   userId,
   currentRoles,
@@ -130,19 +74,19 @@ export function RolesEditor({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          Autres rôles{count > 0 ? ` (${count})` : ""}
+          Rôles{count > 0 ? ` (${count})` : ""}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Rôles additionnels</DialogTitle>
+          <DialogTitle>Rôles du compte</DialogTitle>
           <DialogDescription>
-            Casquettes cumulables avec le rôle principal (un parent peut aussi
-            être trésorier, etc.).
+            Coche tous les rôles de la personne (n&apos;importe quelle
+            combinaison ; ex. juste « Trésorier »).
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          {EXTRA_ROLES.map((role) => (
+          {ROLES.map((role) => (
             <label
               key={role}
               className="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-sand"

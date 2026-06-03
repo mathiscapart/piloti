@@ -466,11 +466,13 @@ export type MemberDetail = NonNullable<
 // par profession / compétences / disponibilités. Réservé aux Responsables de
 // Groupe (vérifié côté page via la permission member.directory).
 export async function listParentDirectory(search?: string) {
-  const parents = await db.user.findMany({
+  // US-32 — rôles unifiés : on filtre les comptes dont `roles` contient PARENT
+  // (JSON), en mémoire (volume modeste).
+  const candidates = await db.user.findMany({
     where: {
       status: "ACTIVE",
-      role: "PARENT",
       skillsConsent: true,
+      roles: { contains: "PARENT" },
     },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: {
@@ -478,11 +480,30 @@ export async function listParentDirectory(search?: string) {
       firstName: true,
       lastName: true,
       phone: true,
+      roles: true,
       profession: true,
       skills: true,
       availability: true,
     },
   });
+  // `contains` sur le JSON est une présélection ; on confirme l'appartenance.
+  const parents = candidates
+    .filter((p) => {
+      try {
+        return (JSON.parse(p.roles) as string[]).includes("PARENT");
+      } catch {
+        return false;
+      }
+    })
+    .map((p) => ({
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      phone: p.phone,
+      profession: p.profession,
+      skills: p.skills,
+      availability: p.availability,
+    }));
 
   const term = normalizeSearch(search ?? "");
   if (term.length === 0) return parents;

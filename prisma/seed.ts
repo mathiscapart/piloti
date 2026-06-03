@@ -39,7 +39,9 @@ async function seedUser(input: SeedUserInput) {
   return db.user.update({
     where: { email: input.email },
     data: {
+      // US-32 — rôles unifiés : `roles` est la source ; `role` reste un miroir.
       role: input.role,
+      roles: JSON.stringify([input.role]),
       status: input.status,
       emailVerified: input.status === "ACTIVE",
     },

@@ -9,7 +9,6 @@ import {
   ChangePasswordDialog,
   DeleteUserButton,
   ReactivateButton,
-  RoleSelect,
   RolesEditor,
   SuspendButton,
 } from "./user-actions";
@@ -89,7 +88,6 @@ export default async function AdminUtilisateursPage() {
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <RoleSelect userId={u.id} role={u.role} disabled={isSelf} />
                     <RolesEditor userId={u.id} currentRoles={parseRoles(u.roles)} />
                     {!isSelf && (
                       suspended ? (
@@ -144,13 +142,10 @@ export default async function AdminUtilisateursPage() {
                       </td>
                       <td className="px-4 py-3 text-trail">{u.unit ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <RoleSelect userId={u.id} role={u.role} disabled={isSelf} />
-                          <RolesEditor
-                            userId={u.id}
-                            currentRoles={parseRoles(u.roles)}
-                          />
-                        </div>
+                        <RolesEditor
+                          userId={u.id}
+                          currentRoles={parseRoles(u.roles)}
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <span

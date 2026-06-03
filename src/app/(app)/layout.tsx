@@ -35,7 +35,7 @@ export default async function AppLayout({
       <div className="flex min-h-screen flex-col md:pl-64">
         <MobileHeader user={user} />
         <main className="flex-1 pb-20 md:pb-0">{children}</main>
-        <BottomNav />
+        <BottomNav user={user} />
       </div>
     </div>
   );

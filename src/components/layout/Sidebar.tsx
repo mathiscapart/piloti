@@ -1,12 +1,14 @@
 "use client";
 
+import { LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import type { CurrentUser } from "@/lib/get-current-user";
 
-import { ADMIN_NAV, MAIN_NAV, type NavItem } from "./nav-items";
+import { NAV_SECTIONS, type NavItem } from "./nav-items";
 import { UserMenu } from "./UserMenu";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
@@ -45,20 +47,27 @@ export function Sidebar({ user }: { user: CurrentUser }) {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-        {MAIN_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
-        ))}
+        <NavLink
+          item={{ href: "/dashboard", label: "Tableau de bord", icon: LayoutDashboard }}
+          active={isActive("/dashboard")}
+        />
 
-        {user.role === "ADMIN" && (
-          <>
-            <p className="mt-6 px-3 pb-2 text-xs font-bold uppercase tracking-wider text-trail">
-              Administration
-            </p>
-            {ADMIN_NAV.map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(item.href)} />
-            ))}
-          </>
-        )}
+        {NAV_SECTIONS.map((section) => {
+          const items = section.items.filter(
+            (i) => !i.requires || can(user, i.requires),
+          );
+          if (items.length === 0) return null;
+          return (
+            <div key={section.title}>
+              <p className="mt-6 px-3 pb-2 text-xs font-bold uppercase tracking-wider text-trail">
+                {section.title}
+              </p>
+              {items.map((item) => (
+                <NavLink key={item.href} item={item} active={isActive(item.href)} />
+              ))}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="border-t border-stone/60 p-4">

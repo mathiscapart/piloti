@@ -3,26 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { can } from "@/lib/permissions";
+import type { CurrentUser } from "@/lib/get-current-user";
 import { cn } from "@/lib/utils";
 
-import { BOTTOM_NAV } from "./nav-items";
+import { MobileMenu } from "./MobileMenu";
+import { PRIMARY_NAV } from "./nav-items";
 
-export function BottomNav() {
+export function BottomNav({ user }: { user: CurrentUser }) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(`${href}/`);
 
+  // Raccourcis visibles selon le rôle (US-29) + 1 colonne pour « Menu ».
+  const items = PRIMARY_NAV.filter((i) => !i.requires || can(user, i.requires));
+  const columns = items.length + 1;
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-stone/60 bg-snow pb-[env(safe-area-inset-bottom)] md:hidden">
-      {/* Colonnes = nombre d'items (style inline car Tailwind ne génère pas les
-          classes dynamiques). Tient quel que soit le nombre d'entrées. */}
       <ul
         className="grid"
-        style={{
-          gridTemplateColumns: `repeat(${BOTTOM_NAV.length}, minmax(0, 1fr))`,
-        }}
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
-        {BOTTOM_NAV.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           return (
@@ -42,6 +45,9 @@ export function BottomNav() {
             </li>
           );
         })}
+        <li className="min-w-0">
+          <MobileMenu user={user} />
+        </li>
       </ul>
     </nav>
   );

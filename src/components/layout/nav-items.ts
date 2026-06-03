@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Contact,
   FolderOpen,
   Gift,
   History,
@@ -12,30 +13,59 @@ import {
   Users,
 } from "lucide-react";
 
+import type { Action } from "@/lib/permissions";
+
 export interface NavItem {
   href: string;
   label: string;
   // Libellé court pour la bottom-nav mobile (espace réduit).
   shortLabel?: string;
   icon: LucideIcon;
-  adminOnly?: boolean;
+  // Permission requise pour voir l'entrée (filtrage par rôle, US-29).
+  // Absente = visible par tout utilisateur actif.
+  requires?: Action;
 }
 
-export const MAIN_NAV: NavItem[] = [
+// Raccourcis affichés directement dans la bottom-nav mobile (les plus utilisés).
+// Un 5e slot « Menu » (ajouté par le composant) ouvre le reste.
+export const PRIMARY_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tableau de bord", shortLabel: "Accueil", icon: LayoutDashboard },
-  { href: "/stock", label: "Stock", icon: Package },
-  { href: "/prets", label: "Prêts", icon: Truck },
-  { href: "/incidents", label: "Incidents", icon: AlertTriangle },
+  { href: "/stock", label: "Stock", icon: Package, requires: "equipment.view" },
+  { href: "/prets", label: "Prêts", icon: Truck, requires: "equipment.view" },
   { href: "/communication", label: "Communication", shortLabel: "Messages", icon: MessageSquare },
 ];
 
-export const ADMIN_NAV: NavItem[] = [
-  { href: "/admin/dons", label: "Dons", icon: Gift, adminOnly: true },
-  { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, adminOnly: true },
-  { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, adminOnly: true },
-  { href: "/admin/categories", label: "Catégories", icon: FolderOpen, adminOnly: true },
-  { href: "/admin/audit", label: "Journal d'audit", icon: History, adminOnly: true },
-];
+// Tous les modules, groupés par domaine. Filtrés par rôle à l'affichage.
+// Pattern « barre + Menu » : scale en ajoutant des entrées ici.
+export interface NavSection {
+  title: string;
+  items: NavItem[];
+}
 
-// Items mobile : reflet de MAIN_NAV (4 entrées tiennent en bottom-nav)
-export const BOTTOM_NAV: NavItem[] = MAIN_NAV;
+export const NAV_SECTIONS: NavSection[] = [
+  {
+    title: "Inventaire",
+    items: [
+      { href: "/stock", label: "Stock", icon: Package, requires: "equipment.view" },
+      { href: "/prets", label: "Prêts", icon: Truck, requires: "equipment.view" },
+      { href: "/incidents", label: "Incidents", icon: AlertTriangle, requires: "incident.report" },
+    ],
+  },
+  {
+    title: "Vie du groupe",
+    items: [
+      { href: "/communication", label: "Communication", icon: MessageSquare },
+      { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
+    ],
+  },
+  {
+    title: "Administration",
+    items: [
+      { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.review" },
+      { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "admin.access" },
+      { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "admin.access" },
+      { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "admin.access" },
+      { href: "/admin/audit", label: "Journal d'audit", icon: History, requires: "admin.access" },
+    ],
+  },
+];

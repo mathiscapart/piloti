@@ -24,7 +24,7 @@ import { can, type Action } from "@/lib/permissions";
 // US-32 — chaque raccourci porte sa permission propre : la zone admin est
 // granulaire (SECRÉTAIRE, RESPONSABLE_MATERIEL…), plus seulement l'ADMIN.
 const ADMIN_LINKS: { href: string; label: string; icon: typeof UserPlus; requires: Action }[] = [
-  { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.review" },
+  { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.view" },
   { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "user.approve" },
   { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "user.manage" },
   { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "category.manage" },

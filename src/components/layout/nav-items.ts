@@ -64,7 +64,7 @@ export const NAV_SECTIONS: NavSection[] = [
       // US-32 — chaque rubrique est filtrée par sa permission propre :
       // dons/catégories → RESPONSABLE_MATERIEL ; inscriptions/utilisateurs →
       // SECRÉTAIRE ; journal d'audit → ADMIN.
-      { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.review" },
+      { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.view" },
       { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "user.approve" },
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "user.manage" },
       { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "category.manage" },

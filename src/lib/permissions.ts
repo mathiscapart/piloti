@@ -42,6 +42,7 @@ export const ACTIONS = [
   "member.directory", // US-26 — annuaire des compétences parents (RG)
   // Dons
   "donation.create",
+  "donation.view", // consulter les dons (RESPONSABLE_MATERIEL + RG lecture seule)
   "donation.review",
 ] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -97,8 +98,9 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "member.view": [CHEF, RG, SEC, TRES],
   // Annuaire des compétences : RG + SECRÉTAIRE (US-32) ; ADMIN superuser.
   "member.directory": [RG, SEC],
-  // Dons — MAT accepte/refuse (page sous /admin : accès différé) ; ADMIN.
+  // Dons — MAT accepte/refuse ; RG = lecture seule sur tout (consulte les dons) ; ADMIN.
   "donation.create": [], // géré par ANY_ACTIVE
+  "donation.view": [MAT, RG],
   "donation.review": [MAT],
 };
 
@@ -157,7 +159,7 @@ const ADMIN_ZONE_ACTIONS: Action[] = [
   "user.approve",
   "user.manage",
   "category.manage",
-  "donation.review",
+  "donation.view",
 ];
 
 export function canAccessAdminZone(user: AuthCtx): boolean {

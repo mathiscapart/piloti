@@ -2,6 +2,7 @@ import { Gift } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import {
@@ -39,8 +40,10 @@ interface PageProps {
 }
 
 export default async function AdminDonationsPage({ searchParams }: PageProps) {
-  // US-32 — validation des dons : RESPONSABLE_MATERIEL (+ ADMIN).
-  await requireCan("donation.review");
+  // US-32 — consultation des dons : RESPONSABLE_MATERIEL + RG (lecture seule) + ADMIN.
+  // La validation (accepter/refuser) reste réservée à `donation.review`.
+  const user = await requireCan("donation.view");
+  const canReview = can(user, "donation.review");
   const params = await searchParams;
   const filter: DonationStatusFilter =
     params.filter === "processed" || params.filter === "all"
@@ -63,7 +66,9 @@ export default async function AdminDonationsPage({ searchParams }: PageProps) {
             Dons
           </h1>
           <p className="text-trail">
-            Validez les propositions de don avant leur entrée dans le stock.
+            {canReview
+              ? "Validez les propositions de don avant leur entrée dans le stock."
+              : "Consultez les propositions de don (lecture seule)."}
           </p>
         </div>
         <Link
@@ -141,7 +146,9 @@ export default async function AdminDonationsPage({ searchParams }: PageProps) {
                 </div>
               </div>
 
-              {d.status === "PENDING" ? <DonationReviewActions id={d.id} /> : null}
+              {canReview && d.status === "PENDING" ? (
+                <DonationReviewActions id={d.id} />
+              ) : null}
             </li>
           ))}
         </ul>

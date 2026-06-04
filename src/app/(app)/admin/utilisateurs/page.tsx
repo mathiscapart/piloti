@@ -1,7 +1,9 @@
-import { Users } from "lucide-react";
+import { Lock, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
-import { getCurrentUser } from "@/lib/get-current-user";
+import { ROLE_LABEL, type Role } from "@/lib/enums";
+import { can } from "@/lib/permissions";
+import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import { listManageableUsers } from "@/modules/admin/queries";
 
@@ -11,6 +13,7 @@ import {
   ReactivateButton,
   RolesEditor,
   SuspendButton,
+  UnitEditor,
 } from "./user-actions";
 
 // US-29 — parse le JSON des rôles additionnels de façon défensive.
@@ -24,11 +27,21 @@ function parseRoles(raw: unknown): string[] {
   }
 }
 
+const PRIVILEGED_ROLES = new Set<string>(["ADMIN", "RESPONSABLE_GROUPE"]);
+
+function roleLabels(roles: string[]): string {
+  if (roles.length === 0) return "Aucun rôle";
+  return roles.map((r) => ROLE_LABEL[r as Role] ?? r).join(", ");
+}
+
 export default async function AdminUtilisateursPage() {
-  const [currentUser, users] = await Promise.all([
-    getCurrentUser(),
-    listManageableUsers(),
-  ]);
+  // US-32 — gestion des comptes & rôles : ADMIN + SECRÉTAIRE.
+  const currentUser = await requireCan("user.manage");
+  const users = await listManageableUsers();
+  // Les opérations destructrices (suspendre / réactiver / supprimer / mot de
+  // passe) restent réservées à l'ADMIN ; la SECRÉTAIRE n'attribue que les rôles
+  // (sauf ADMIN/RG, cf. canAssignRole).
+  const isAdmin = can(currentUser, "admin.access");
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -57,6 +70,10 @@ export default async function AdminUtilisateursPage() {
             {users.map((u) => {
               const isSelf = u.id === currentUser.id;
               const suspended = u.status === "SUSPENDED";
+              const roles = parseRoles(u.roles);
+              // La SECRÉTAIRE ne peut pas gérer un compte ADMIN/RG (l'ADMIN, si).
+              const canManage =
+                isAdmin || !roles.some((r) => PRIVILEGED_ROLES.has(r));
               return (
                 <li
                   key={u.id}
@@ -87,22 +104,37 @@ export default async function AdminUtilisateursPage() {
                       {suspended ? "Suspendu" : "Actif"}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <RolesEditor userId={u.id} currentRoles={parseRoles(u.roles)} />
-                    {!isSelf && (
-                      suspended ? (
-                        <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                      ) : (
-                        <SuspendButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                      )
-                    )}
-                    {!isSelf && (
-                      <ChangePasswordDialog userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                    )}
-                    {!isSelf && (
-                      <DeleteUserButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                    )}
-                  </div>
+                  {canManage ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <RolesEditor
+                        userId={u.id}
+                        currentRoles={roles}
+                        allowPrivileged={isAdmin}
+                      />
+                      <UnitEditor userId={u.id} currentUnit={u.unit} />
+                      {!isSelf && (
+                        suspended ? (
+                          <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                        ) : (
+                          <SuspendButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                        )
+                      )}
+                      {!isSelf && (
+                        <ChangePasswordDialog userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                      )}
+                      {!isSelf && (
+                        <DeleteUserButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="text-xs text-trail">{roleLabels(roles)}</p>
+                      <p className="inline-flex items-center gap-1 rounded-full bg-sand px-2 py-0.5 text-[11px] font-bold text-trail">
+                        <Lock className="size-3" />
+                        Compte protégé — réservé à l&apos;administrateur
+                      </p>
+                    </div>
+                  )}
                 </li>
               );
             })}
@@ -124,6 +156,9 @@ export default async function AdminUtilisateursPage() {
                 {users.map((u) => {
                   const isSelf = u.id === currentUser.id;
                   const suspended = u.status === "SUSPENDED";
+                  const roles = parseRoles(u.roles);
+                  const canManage =
+                    isAdmin || !roles.some((r) => PRIVILEGED_ROLES.has(r));
                   return (
                     <tr
                       key={u.id}
@@ -140,12 +175,23 @@ export default async function AdminUtilisateursPage() {
                         </p>
                         <p className="text-xs text-trail">{u.email}</p>
                       </td>
-                      <td className="px-4 py-3 text-trail">{u.unit ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <RolesEditor
-                          userId={u.id}
-                          currentRoles={parseRoles(u.roles)}
-                        />
+                        {canManage ? (
+                          <UnitEditor userId={u.id} currentUnit={u.unit} />
+                        ) : (
+                          <span className="text-trail">{u.unit ?? "—"}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {canManage ? (
+                          <RolesEditor
+                            userId={u.id}
+                            currentRoles={roles}
+                            allowPrivileged={isAdmin}
+                          />
+                        ) : (
+                          <span className="text-trail">{roleLabels(roles)}</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -159,9 +205,12 @@ export default async function AdminUtilisateursPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          {isSelf ? (
-                            <span className="text-xs text-trail">—</span>
-                          ) : (
+                          {!canManage ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-trail">
+                              <Lock className="size-3" />
+                              Protégé
+                            </span>
+                          ) : !isSelf ? (
                             <>
                               {suspended ? (
                                 <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
@@ -171,6 +220,8 @@ export default async function AdminUtilisateursPage() {
                               <ChangePasswordDialog userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
                               <DeleteUserButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
                             </>
+                          ) : (
+                            <span className="text-xs text-trail">—</span>
                           )}
                         </div>
                       </td>

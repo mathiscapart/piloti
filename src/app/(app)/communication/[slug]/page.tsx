@@ -32,9 +32,9 @@ export default async function ChannelPage({ params }: PageProps) {
     loadPolls(channel.id),
   ]);
 
-  const isStaff = effectiveRoles(user).some(
-    (r) => r === "ADMIN" || r === "CHEF",
-  );
+  const roles = effectiveRoles(user);
+  const isAdmin = roles.includes("ADMIN");
+  const isStaff = isAdmin || roles.includes("CHEF");
   const canWrite = canWriteChannel(user, channel);
 
   return (
@@ -77,6 +77,7 @@ export default async function ChannelPage({ params }: PageProps) {
             initialPolls={polls ?? []}
             currentUserId={user.id}
             isStaff={isStaff}
+            isAdmin={isAdmin}
             canWrite={canWrite}
           />
         </div>

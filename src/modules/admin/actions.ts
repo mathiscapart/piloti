@@ -8,14 +8,19 @@ import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { passwordSchema } from "@/lib/password-policy";
-import { can } from "@/lib/permissions";
-import { ROLES } from "@/lib/enums";
+import { can, canAssignRole, type Action } from "@/lib/permissions";
+import { ROLES, UNITS } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
 
 const approveSchema = z.object({
   userId: z.string().min(1),
   roles: z.array(z.enum(ROLES)).min(1, "Attribue au moins un rôle."),
+  // US-32 — la branche est attribuée à la validation ("" = aucune).
+  unit: z
+    .union([z.enum(UNITS), z.literal("")])
+    .optional()
+    .transform((v) => (v ? v : null)),
 });
 
 const rejectSchema = z.object({
@@ -27,6 +32,15 @@ const rejectSchema = z.object({
 const rolesSchema = z.object({
   userId: z.string().min(1),
   roles: z.array(z.enum(ROLES)).default([]),
+});
+
+// US-32 — édition de la branche/unité d'un membre (ADMIN + SECRÉTAIRE).
+// "" = aucune unité (on stocke null).
+const unitSchema = z.object({
+  userId: z.string().min(1),
+  unit: z
+    .union([z.enum(UNITS), z.literal("")])
+    .transform((v) => (v === "" ? null : v)),
 });
 
 // US-26 — profil parent enrichi (annuaire des compétences).
@@ -68,6 +82,63 @@ async function ensureAdmin(): Promise<{ id: string } | ActionResult> {
   return user;
 }
 
+// US-32 — garde générique : renvoie l'utilisateur courant s'il a la permission,
+// sinon une erreur. Permet à la SECRÉTAIRE d'agir sur les inscriptions/comptes.
+type Actor = Awaited<ReturnType<typeof getCurrentUser>>;
+async function ensureCan(
+  action: Action,
+): Promise<Actor | ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, action)) {
+    return { error: "Action non autorisée." };
+  }
+  return user;
+}
+
+// US-32 — empêche un acteur non-ADMIN d'attribuer des rôles sensibles
+// (ADMIN / Responsable de groupe). Renvoie une erreur le cas échéant.
+function assertAssignable(actor: Actor, roles: string[]): ActionResult | null {
+  const forbidden = roles.filter((r) => !canAssignRole(actor, r));
+  if (forbidden.length > 0) {
+    return {
+      error:
+        "Tu n'as pas le droit d'attribuer les rôles ADMIN ou Responsable de groupe.",
+    };
+  }
+  return null;
+}
+
+function parseRoles(raw: string | null | undefined): string[] {
+  try {
+    const p = JSON.parse(raw ?? "[]");
+    return Array.isArray(p) ? p.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+// US-32 — la SECRÉTAIRE gère les comptes comme un admin, MAIS ne peut pas agir
+// (suspendre / supprimer / réinitialiser / changer l'unité) sur un compte qui
+// porte ADMIN ou Responsable de groupe. L'ADMIN, lui, agit sur tout le monde.
+async function assertCanManageTarget(
+  actor: Actor,
+  targetUserId: string,
+): Promise<ActionResult | null> {
+  if (can(actor, "admin.access")) return null;
+  const target = await db.user.findUnique({
+    where: { id: targetUserId },
+    select: { roles: true },
+  });
+  const roles = parseRoles(target?.roles);
+  if (roles.some((r) => !canAssignRole(actor, r))) {
+    return {
+      error:
+        "Tu ne peux pas gérer un compte ADMIN ou Responsable de groupe.",
+    };
+  }
+  return null;
+}
+
 // ----------------------------------------------------------------------------
 // /admin/inscriptions
 // ----------------------------------------------------------------------------
@@ -76,18 +147,22 @@ export async function approveUser(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
+  const actor = await ensureCan("user.approve");
+  if ("error" in actor) return actor;
 
   const parsed = approveSchema.safeParse({
     userId: formData.get("userId"),
     roles: formData.getAll("role"),
+    unit: formData.get("unit") ?? "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
   const roles = [...new Set(parsed.data.roles)];
+  const escalation = assertAssignable(actor, roles);
+  if (escalation) return escalation;
+
   await withAudit(
     (tx) =>
       tx.user.update({
@@ -96,13 +171,14 @@ export async function approveUser(
           status: "ACTIVE",
           roles: JSON.stringify(roles),
           role: roles[0], // miroir d'affichage (déprécié)
+          unit: parsed.data.unit,
           emailVerified: true,
           rejectedReason: null,
         },
       }),
     {
       action: "USER_APPROVED",
-      userId: admin.id,
+      userId: actor.id,
       metadata: {
         targetUserId: parsed.data.userId,
         assignedRoles: roles,
@@ -119,8 +195,8 @@ export async function rejectUser(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
+  const actor = await ensureCan("user.approve");
+  if ("error" in actor) return actor;
 
   const parsed = rejectSchema.safeParse({
     userId: formData.get("userId"),
@@ -141,7 +217,7 @@ export async function rejectUser(
       }),
     {
       action: "USER_REJECTED",
-      userId: admin.id,
+      userId: actor.id,
       metadata: {
         targetUserId: parsed.data.userId,
         reason: parsed.data.reason,
@@ -158,13 +234,14 @@ export async function rejectUser(
 // ----------------------------------------------------------------------------
 
 // US-32 — définit l'ensemble unifié des rôles d'un compte (tout le catalogue).
-// Réservé à l'admin, tracé en audit.
+// ADMIN + SECRÉTAIRE ; la SECRÉTAIRE ne peut pas toucher aux rôles ADMIN/RG
+// (ni les attribuer, ni les retirer). Tracé en audit.
 export async function setUserRoles(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
 
   const parsed = rolesSchema.safeParse({
     userId: formData.get("userId"),
@@ -178,8 +255,35 @@ export async function setUserRoles(
   const roles = [...new Set(parsed.data.roles)];
 
   // Garde-fou : un admin ne peut pas se retirer le rôle ADMIN lui-même.
-  if (parsed.data.userId === admin.id && !roles.includes("ADMIN")) {
+  if (parsed.data.userId === actor.id && !roles.includes("ADMIN")) {
     return { error: "Tu ne peux pas te retirer le rôle ADMIN toi-même." };
+  }
+
+  // Anti-élévation : un acteur non-ADMIN (SECRÉTAIRE) ne peut pas attribuer
+  // ADMIN/RG…
+  const escalation = assertAssignable(actor, roles);
+  if (escalation) return escalation;
+
+  // …ni retirer un rôle sensible existant (sinon il pourrait rétrograder un
+  // ADMIN/RG). On vérifie l'état actuel de la cible.
+  if (!can(actor, "admin.access")) {
+    const target = await db.user.findUnique({
+      where: { id: parsed.data.userId },
+      select: { roles: true },
+    });
+    let current: string[] = [];
+    try {
+      const p = JSON.parse(target?.roles ?? "[]");
+      if (Array.isArray(p)) current = p.map(String);
+    } catch {
+      current = [];
+    }
+    if (current.some((r) => !canAssignRole(actor, r))) {
+      return {
+        error:
+          "Tu ne peux pas modifier les rôles d'un compte ADMIN ou Responsable de groupe.",
+      };
+    }
   }
 
   await withAudit(
@@ -193,11 +297,47 @@ export async function setUserRoles(
       }),
     {
       action: "USER_ROLE_CHANGED",
-      userId: admin.id,
+      userId: actor.id,
       metadata: {
         targetUserId: parsed.data.userId,
         roles,
       },
+    },
+  );
+
+  revalidatePath("/admin/utilisateurs");
+  return { error: null };
+}
+
+// US-32 — change la branche/unité d'un membre. ADMIN + SECRÉTAIRE ; la
+// SECRÉTAIRE ne peut pas toucher un compte ADMIN/RG. Tracé en audit.
+export async function setUserUnit(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
+
+  const parsed = unitSchema.safeParse({
+    userId: formData.get("userId"),
+    unit: formData.get("unit") ?? "",
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+
+  await withAudit(
+    (tx) =>
+      tx.user.update({
+        where: { id: parsed.data.userId },
+        data: { unit: parsed.data.unit },
+      }),
+    {
+      action: "USER_UNIT_CHANGED",
+      userId: actor.id,
+      metadata: { targetUserId: parsed.data.userId, unit: parsed.data.unit },
     },
   );
 
@@ -245,16 +385,18 @@ export async function suspendUser(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
 
   const parsed = userIdSchema.safeParse({ userId: formData.get("userId") });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
-  if (parsed.data.userId === admin.id) {
+  if (parsed.data.userId === actor.id) {
     return { error: "Tu ne peux pas te suspendre toi-même." };
   }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
 
   await withAudit(
     (tx) =>
@@ -264,7 +406,7 @@ export async function suspendUser(
       }),
     {
       action: "USER_SUSPENDED",
-      userId: admin.id,
+      userId: actor.id,
       metadata: { targetUserId: parsed.data.userId },
     },
   );
@@ -281,13 +423,15 @@ export async function reactivateUser(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
 
   const parsed = userIdSchema.safeParse({ userId: formData.get("userId") });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
 
   await withAudit(
     (tx) =>
@@ -297,7 +441,7 @@ export async function reactivateUser(
       }),
     {
       action: "USER_REACTIVATED",
-      userId: admin.id,
+      userId: actor.id,
       metadata: { targetUserId: parsed.data.userId },
     },
   );
@@ -310,16 +454,18 @@ export async function deleteUser(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
 
   const parsed = userIdSchema.safeParse({ userId: formData.get("userId") });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
-  if (parsed.data.userId === admin.id) {
+  if (parsed.data.userId === actor.id) {
     return { error: "Tu ne peux pas te supprimer toi-même." };
   }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
 
   const activeLoans = await db.loan.count({
     where: {
@@ -350,7 +496,7 @@ export async function deleteUser(
       }),
     {
       action: "USER_DELETED",
-      userId: admin.id,
+      userId: actor.id,
       metadata: {
         deletedUserId: parsed.data.userId,
         deletedEmail: target.email,
@@ -377,8 +523,8 @@ export async function changeUserPassword(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
-  if ("error" in admin) return admin;
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
 
   const parsed = changePasswordSchema.safeParse({
     userId: formData.get("userId"),
@@ -387,6 +533,8 @@ export async function changeUserPassword(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
 
   const hashed = await hashWithBetterAuth(parsed.data.password);
 
@@ -398,7 +546,7 @@ export async function changeUserPassword(
       }),
     {
       action: "USER_PASSWORD_CHANGED",
-      userId: admin.id,
+      userId: actor.id,
       metadata: { targetUserId: parsed.data.userId },
     },
   );

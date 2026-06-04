@@ -2,6 +2,7 @@ import { Gift } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import {
   listCategories,
@@ -38,6 +39,8 @@ interface PageProps {
 }
 
 export default async function AdminDonationsPage({ searchParams }: PageProps) {
+  // US-32 — validation des dons : RESPONSABLE_MATERIEL (+ ADMIN).
+  await requireCan("donation.review");
   const params = await searchParams;
   const filter: DonationStatusFilter =
     params.filter === "processed" || params.filter === "all"

@@ -54,6 +54,14 @@ export async function createLoan(
     return { error: "La date de retour doit être postérieure au départ." };
   }
 
+  // US-32 — un jeune (loan.create accordé par la branche Pios/Compas, mais sans
+  // loan.view) ne peut créer un prêt QUE pour lui-même. Les gestionnaires
+  // (chef / responsable matériel / admin) empruntent pour n'importe qui.
+  const isLoanManager = can(user, "loan.view");
+  if (!isLoanManager && parsed.data.borrowerId !== user.id) {
+    return { error: "Tu ne peux créer un prêt que pour toi-même." };
+  }
+
   // US-12/US-30 — contrôle de disponibilité SELON LES DATES : la quantité
   // empruntée ne peut dépasser la quantité disponible sur la période de CHAQUE
   // article (total − quantités des prêts actifs qui chevauchent cette période).
@@ -181,7 +189,13 @@ export async function createLoan(
   revalidatePath("/prets");
   revalidatePath("/stock");
   revalidatePath("/dashboard");
-  redirect("/prets?notice=loan-created");
+  // #4 — pas de cul-de-sac : un jeune n'a pas accès à /prets, on le ramène au
+  // dashboard ; les gestionnaires vont sur la liste des prêts.
+  redirect(
+    isLoanManager
+      ? "/prets?notice=loan-created"
+      : "/dashboard?notice=loan-created",
+  );
 }
 
 // ----------------------------------------------------------------------------

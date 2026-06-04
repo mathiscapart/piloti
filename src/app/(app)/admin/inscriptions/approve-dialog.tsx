@@ -15,37 +15,60 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ROLE_LABEL, ROLES, UNIT_LABEL, UNITS, type Role } from "@/lib/enums";
 import { approveUser } from "@/modules/admin/actions";
 
 const emptyState = { error: null } as const;
 
+// US-32 — la SECRÉTAIRE attribue tous les rôles sauf ADMIN / Responsable de
+// groupe (garde-fou anti-élévation : ces options ne lui sont pas proposées).
+const PRIVILEGED_ROLES = new Set<string>(["ADMIN", "RESPONSABLE_GROUPE"]);
+
 interface Props {
   userId: string;
   fullName: string;
+  allowPrivileged?: boolean;
 }
 
-export function ApproveDialog({ userId, fullName }: Props) {
+export function ApproveDialog({ userId, fullName, allowPrivileged = true }: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [unit, setUnit] = useState<string>("");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
-  function onSubmit(formData: FormData) {
+  const visibleRoles = ROLES.filter(
+    (r) => allowPrivileged || !PRIVILEGED_ROLES.has(r),
+  );
+
+  function toggle(role: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
+      return next;
+    });
+  }
+
+  function onSubmit() {
+    if (selected.size === 0) {
+      setError("Attribue au moins un rôle.");
+      return;
+    }
     setError(null);
+    const fd = new FormData();
+    fd.set("userId", userId);
+    for (const r of selected) fd.append("role", r);
+    fd.set("unit", unit);
     startTransition(async () => {
-      const res = await approveUser(emptyState, formData);
+      const res = await approveUser(emptyState, fd);
       if (res.error) {
         setError(res.error);
       } else {
         setOpen(false);
+        setSelected(new Set());
+        setUnit("");
         toast.success(`${fullName} validé.`);
         router.refresh();
       }
@@ -56,7 +79,11 @@ export function ApproveDialog({ userId, fullName }: Props) {
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setError(null);
+        if (!next) {
+          setError(null);
+          setSelected(new Set());
+        setUnit("");
+        }
         setOpen(next);
       }}
     >
@@ -70,40 +97,58 @@ export function ApproveDialog({ userId, fullName }: Props) {
         <DialogHeader>
           <DialogTitle>Valider l&apos;inscription</DialogTitle>
           <DialogDescription>
-            {fullName} pourra se connecter avec le rôle choisi.
+            {fullName} pourra se connecter avec le(s) rôle(s) choisi(s).
           </DialogDescription>
         </DialogHeader>
-        <form action={onSubmit} className="space-y-4">
-          <input type="hidden" name="userId" value={userId} />
-          <div className="space-y-1.5">
-            <Label htmlFor={`role-${userId}`}>Rôle attribué</Label>
-            <Select name="role" defaultValue="CHEF">
-              <SelectTrigger id={`role-${userId}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="CHEF">Chef</SelectItem>
-                <SelectItem value="ADMIN">Administrateur</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-trail">
-              Les rôles PARENT et SCOUT arriveront en V2.
-            </p>
-          </div>
-          {error ? (
-            <p
-              role="alert"
-              className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink"
+        <div className="space-y-2">
+          {visibleRoles.map((role) => (
+            <label
+              key={role}
+              className="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-sand"
             >
-              {error}
-            </p>
-          ) : null}
-          <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Validation…" : "Confirmer"}
-            </Button>
-          </DialogFooter>
-        </form>
+              <input
+                type="checkbox"
+                checked={selected.has(role)}
+                onChange={() => toggle(role)}
+                className="size-4 accent-forest"
+              />
+              <span className="text-sm text-earth">
+                {ROLE_LABEL[role as Role]}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor={`unit-${userId}`} className="text-sm font-bold text-earth">
+            Branche / unité
+          </label>
+          <select
+            id={`unit-${userId}`}
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            className="w-full rounded-lg border border-stone bg-snow px-3 py-2 text-sm text-earth"
+          >
+            <option value="">Aucune</option>
+            {UNITS.map((u) => (
+              <option key={u} value={u}>
+                {UNIT_LABEL[u]}
+              </option>
+            ))}
+          </select>
+        </div>
+        {error ? (
+          <p
+            role="alert"
+            className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink"
+          >
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button type="button" onClick={onSubmit} disabled={pending}>
+            {pending ? "Validation…" : "Confirmer"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -1,12 +1,14 @@
 "use client";
 
-import { ImagePlus, Pin, Send, SmilePlus } from "lucide-react";
+import { ImagePlus, Pin, Send, SmilePlus, Trash2 } from "lucide-react";
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  deleteMessage,
   editMessage,
   loadMessages,
   markChannelRead,
@@ -51,6 +53,7 @@ export function ChannelView({
   initialPolls,
   currentUserId,
   isStaff,
+  isAdmin,
   canWrite,
 }: {
   channelId: string;
@@ -58,6 +61,7 @@ export function ChannelView({
   initialPolls: PollWithVotes[];
   currentUserId: string;
   isStaff: boolean;
+  isAdmin: boolean;
   canWrite: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
@@ -164,6 +168,7 @@ export function ChannelView({
               mine={m.author.id === currentUserId}
               currentUserId={currentUserId}
               isStaff={isStaff}
+              isAdmin={isAdmin}
               onChanged={refetch}
             />
           ))
@@ -238,15 +243,20 @@ function MessageRow({
   mine,
   currentUserId,
   isStaff,
+  isAdmin,
   onChanged,
 }: {
   msg: Msg;
   mine: boolean;
   currentUserId: string;
   isStaff: boolean;
+  isAdmin: boolean;
   onChanged: () => void;
 }) {
   const [showEmoji, setShowEmoji] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(msg.body);
+  const [busy, setBusy] = useState(false);
   const attachments: string[] = (() => {
     try {
       const p = JSON.parse(msg.attachments);
@@ -270,16 +280,46 @@ function MessageRow({
     await toggleReaction(msg.id, emoji);
     onChanged();
   }
-  async function handleEdit() {
-    const next = window.prompt("Modifier le message :", msg.body);
-    if (next === null) return;
-    await editMessage(msg.id, next);
+  function startEdit() {
+    setDraft(msg.body);
+    setEditing(true);
+  }
+  async function saveEdit() {
+    const next = draft.trim();
+    if (next.length === 0) {
+      toast.error("Le message ne peut pas être vide.");
+      return;
+    }
+    if (next === msg.body) {
+      setEditing(false);
+      return;
+    }
+    setBusy(true);
+    const res = await editMessage(msg.id, next);
+    setBusy(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
+    setEditing(false);
+    onChanged();
+  }
+  async function handleDelete() {
+    if (!window.confirm("Supprimer ce message ?")) return;
+    setBusy(true);
+    const res = await deleteMessage(msg.id);
+    setBusy(false);
+    if (res.error) {
+      toast.error(res.error);
+      return;
+    }
     onChanged();
   }
   async function handlePin() {
     await togglePin(msg.id);
     onChanged();
   }
+  const canDelete = mine || isAdmin;
 
   return (
     <div className="group rounded-xl px-2 py-1 hover:bg-sand/50">
@@ -292,7 +332,7 @@ function MessageRow({
           {msg.editedAt ? " · modifié" : ""}
           {msg.pinnedAt ? " · 📌" : ""}
         </time>
-        <span className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <span className="ml-auto flex items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
           <button
             type="button"
             onClick={() => setShowEmoji((v) => !v)}
@@ -314,16 +354,57 @@ function MessageRow({
           {mine ? (
             <button
               type="button"
-              onClick={handleEdit}
+              onClick={startEdit}
               className="rounded px-1 text-xs text-trail hover:bg-stone"
             >
               Éditer
             </button>
           ) : null}
+          {canDelete ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={busy}
+              className="rounded p-1 text-trail hover:bg-brick-soft hover:text-brick-ink disabled:opacity-50"
+              title="Supprimer"
+            >
+              <Trash2 className="size-4" />
+            </button>
+          ) : null}
         </span>
       </div>
 
-      {msg.body ? (
+      {editing ? (
+        <div className="mt-1 space-y-2">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={2}
+            autoFocus
+            className="resize-none text-sm"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void saveEdit();
+              }
+              if (e.key === "Escape") setEditing(false);
+            }}
+          />
+          <div className="flex gap-2">
+            <Button size="sm" onClick={saveEdit} disabled={busy}>
+              {busy ? "…" : "Enregistrer"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setEditing(false)}
+              disabled={busy}
+            >
+              Annuler
+            </Button>
+          </div>
+        </div>
+      ) : msg.body ? (
         <p className="whitespace-pre-wrap break-words text-sm text-earth">
           {msg.body}
         </p>

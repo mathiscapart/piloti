@@ -18,6 +18,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import {
   listAuditActions,
@@ -39,6 +40,7 @@ const ACTION_LABEL: Record<string, string> = {
   USER_REJECTED: "Compte refusé",
   USER_SUSPENDED: "Compte suspendu",
   USER_ROLE_CHANGED: "Rôle modifié",
+  USER_UNIT_CHANGED: "Unité modifiée",
   EQUIPMENT_CREATED: "Article créé",
   EQUIPMENT_UPDATED: "Article modifié",
   EQUIPMENT_ARCHIVED: "Article archivé",
@@ -73,6 +75,7 @@ const ACTION_TONE: Record<string, string> = {
   USER_REJECTED: "bg-brick-soft text-brick-ink",
   USER_SUSPENDED: "bg-fire-soft text-fire-ink",
   USER_ROLE_CHANGED: "bg-sky-soft text-sky-ink",
+  USER_UNIT_CHANGED: "bg-sky-soft text-sky-ink",
   EQUIPMENT_CREATED: "bg-forest-soft text-forest-ink",
   EQUIPMENT_UPDATED: "bg-sand text-earth",
   EQUIPMENT_ARCHIVED: "bg-stone text-earth",
@@ -93,6 +96,8 @@ interface PageProps {
 }
 
 export default async function AdminAuditPage({ searchParams }: PageProps) {
+  // US-32 — journal d'audit en lecture : ADMIN + RG (lecture seule).
+  await requireCan("audit.view");
   const params = await searchParams;
   const page = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
 

@@ -61,11 +61,14 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Administration",
     items: [
-      { href: "/admin/dons", label: "Dons", icon: Gift, requires: "admin.access" },
-      { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "admin.access" },
-      { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "admin.access" },
-      { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "admin.access" },
-      { href: "/admin/audit", label: "Journal d'audit", icon: History, requires: "admin.access" },
+      // US-32 — chaque rubrique est filtrée par sa permission propre :
+      // dons/catégories → RESPONSABLE_MATERIEL ; inscriptions/utilisateurs →
+      // SECRÉTAIRE ; journal d'audit → ADMIN.
+      { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.review" },
+      { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "user.approve" },
+      { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "user.manage" },
+      { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "category.manage" },
+      { href: "/admin/audit", label: "Journal d'audit", icon: History, requires: "audit.view" },
     ],
   },
 ];

@@ -1,3 +1,4 @@
+import { requireCan } from "@/lib/require-can";
 import { listCategoryTree, listCategories } from "@/modules/inventory/queries";
 
 import { CategoryArchiveButton } from "./category-archive-button";
@@ -6,6 +7,8 @@ import { CategoryCreateForm } from "./category-create-form";
 import { CategoryParentSelect } from "./category-parent-select";
 
 export default async function CategoriesPage() {
+  // US-32 — gestion des catégories : CHEF + RESPONSABLE_MATERIEL (+ ADMIN).
+  await requireCan("category.manage");
   const [tree, all] = await Promise.all([
     listCategoryTree({ includeArchived: true }),
     listCategories({ includeArchived: true }),

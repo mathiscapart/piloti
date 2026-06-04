@@ -17,25 +17,33 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import {
   changeUserPassword,
   deleteUser,
   reactivateUser,
   setUserRoles,
+  setUserUnit,
   suspendUser,
 } from "@/modules/admin/actions";
-import { ROLE_LABEL, ROLES, type Role } from "@/lib/enums";
+import { ROLE_LABEL, ROLES, UNIT_LABEL, UNITS, type Role } from "@/lib/enums";
 
 const emptyState = { error: null } as const;
 
 // US-32 — éditeur de rôles UNIFIÉ : un compte porte n'importe quelle
 // combinaison de rôles du catalogue complet (ex. juste « Trésorier »).
+// `allowPrivileged` : seul l'ADMIN peut attribuer ADMIN / Responsable de groupe
+// (garde-fou anti-élévation ; la SECRÉTAIRE ne voit pas ces options).
+const PRIVILEGED_ROLES = new Set<string>(["ADMIN", "RESPONSABLE_GROUPE"]);
+
 export function RolesEditor({
   userId,
   currentRoles,
+  allowPrivileged = true,
 }: {
   userId: string;
   currentRoles: string[];
+  allowPrivileged?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -43,6 +51,12 @@ export function RolesEditor({
     new Set(currentRoles),
   );
   const [pending, start] = useTransition();
+
+  // Catalogue attribuable : sans ADMIN/RG si l'acteur n'est pas ADMIN, sauf si
+  // le compte cible les porte déjà (on les affiche alors en lecture, cochés).
+  const visibleRoles = ROLES.filter(
+    (r) => allowPrivileged || !PRIVILEGED_ROLES.has(r) || currentRoles.includes(r),
+  );
 
   function toggle(role: string) {
     setSelected((prev) => {
@@ -86,20 +100,125 @@ export function RolesEditor({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
-          {ROLES.map((role) => (
+          {visibleRoles.map((role) => {
+            // Rôle sensible affiché à un acteur non-admin (car déjà porté) :
+            // visible mais verrouillé.
+            const locked = !allowPrivileged && PRIVILEGED_ROLES.has(role);
+            return (
+              <label
+                key={role}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg p-2",
+                  locked
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer hover:bg-sand",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(role)}
+                  onChange={() => toggle(role)}
+                  disabled={locked}
+                  className="size-4 accent-forest"
+                />
+                <span className="text-sm text-earth">
+                  {ROLE_LABEL[role as Role]}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+        <DialogFooter>
+          <Button onClick={save} disabled={pending}>
+            {pending ? "Enregistrement…" : "Enregistrer"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// US-32 — éditeur d'unité/branche (ADMIN + SECRÉTAIRE). "" = aucune unité.
+const UNIT_SHORT: Record<string, string> = {
+  BLEUS: "Bleus",
+  VERTS: "Verts",
+  ROUGES: "Rouges",
+  PIOS: "Pios",
+  COMPAS: "Compas",
+  VIOLETS: "Violets",
+};
+
+export function UnitEditor({
+  userId,
+  currentUnit,
+}: {
+  userId: string;
+  currentUnit: string | null;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string>(currentUnit ?? "");
+  const [pending, start] = useTransition();
+
+  function save() {
+    const fd = new FormData();
+    fd.set("userId", userId);
+    fd.set("unit", selected);
+    start(async () => {
+      const res = await setUserUnit(emptyState, fd);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Unité mise à jour.");
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setSelected(currentUnit ?? "");
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          {currentUnit ? (UNIT_SHORT[currentUnit] ?? currentUnit) : "Unité —"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Unité / branche</DialogTitle>
+          <DialogDescription>
+            Choisis la branche de la personne (ou « Aucune »).
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-sand">
+            <input
+              type="radio"
+              name={`unit-${userId}`}
+              checked={selected === ""}
+              onChange={() => setSelected("")}
+              className="size-4 accent-forest"
+            />
+            <span className="text-sm text-earth">Aucune unité</span>
+          </label>
+          {UNITS.map((u) => (
             <label
-              key={role}
+              key={u}
               className="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-sand"
             >
               <input
-                type="checkbox"
-                checked={selected.has(role)}
-                onChange={() => toggle(role)}
+                type="radio"
+                name={`unit-${userId}`}
+                checked={selected === u}
+                onChange={() => setSelected(u)}
                 className="size-4 accent-forest"
               />
-              <span className="text-sm text-earth">
-                {ROLE_LABEL[role as Role]}
-              </span>
+              <span className="text-sm text-earth">{UNIT_LABEL[u]}</span>
             </label>
           ))}
         </div>

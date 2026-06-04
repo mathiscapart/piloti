@@ -43,7 +43,7 @@ export async function createCategory(
   formData: FormData,
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!can(user, "admin.access")) return { error: "Accès refusé." };
+  if (!can(user, "category.manage")) return { error: "Accès refusé." };
 
   const parsed = categorySchema.safeParse({
     label: formData.get("label"),
@@ -111,7 +111,7 @@ export async function setCategoryParent(
   parentSlug: string | null,
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!can(user, "admin.access")) return { error: "Accès refusé." };
+  if (!can(user, "category.manage")) return { error: "Accès refusé." };
 
   const category = await db.category.findUnique({
     where: { slug },
@@ -167,7 +167,7 @@ export async function setCategoryParent(
 //   - elle ne contient plus aucun article actif (non archivé).
 export async function archiveCategory(slug: string): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!can(user, "admin.access")) return { error: "Accès refusé." };
+  if (!can(user, "category.manage")) return { error: "Accès refusé." };
 
   if (slug === "AUTRE") {
     return { error: "La catégorie « Autre » ne peut pas être archivée." };
@@ -214,7 +214,7 @@ export async function archiveCategory(slug: string): Promise<ActionResult> {
 // lui-même archivé, on demande de restaurer le parent d'abord (cohérence).
 export async function unarchiveCategory(slug: string): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!can(user, "admin.access")) return { error: "Accès refusé." };
+  if (!can(user, "category.manage")) return { error: "Accès refusé." };
 
   const category = await db.category.findUnique({
     where: { slug },
@@ -252,7 +252,7 @@ export async function updateCategoryBehavior(
   value: boolean,
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!can(user, "admin.access")) return { error: "Accès refusé." };
+  if (!can(user, "category.manage")) return { error: "Accès refusé." };
   if (!CATEGORY_BEHAVIORS.includes(behavior)) {
     return { error: "Comportement inconnu." };
   }

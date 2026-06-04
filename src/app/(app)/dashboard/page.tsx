@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Clock,
+  Gift,
   Package,
   Phone,
   Plus,
@@ -12,7 +13,9 @@ import { KpiCard } from "@/components/dashboard/KpiCard";
 import { WaterFootprint } from "@/components/dashboard/WaterFootprint";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { ROLE_LABEL, type Role } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { can, effectiveRoles } from "@/lib/permissions";
 import { getDashboardData } from "@/modules/inventory/queries";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -27,77 +30,109 @@ function daysOverdue(expectedReturn: Date): number {
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
-  const {
-    availableArticleCount,
-    activeLoanCount,
-    openIncidentCount,
-    lateLoans,
-  } = await getDashboardData();
+
+  // US-32 — chaque widget est filtré par sa permission, comme sa page dédiée.
+  // Les prêts en retard exposent nom + téléphone de l'emprunteur (PII) → gardés
+  // derrière loan.view (jamais visibles d'un parent / jeune).
+  const canStock = can(user, "equipment.view");
+  const canLoans = can(user, "loan.view");
+  const canIncidents = can(user, "incident.view");
+  const isStaff = canStock || canLoans || canIncidents;
+  const data = isStaff ? await getDashboardData() : null;
+  const lateLoans = canLoans ? (data?.lateLoans ?? []) : [];
+
+  const roles = effectiveRoles(user);
+  const roleLabel =
+    roles.length > 0 ? (ROLE_LABEL[roles[0] as Role] ?? roles[0]) : "Membre";
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <header className="space-y-1">
         <p className="text-xs font-bold uppercase tracking-wider text-trail">
-          {user.role === "ADMIN" ? "Administrateur" : `Chef${user.unit ? ` · ${user.unit}` : ""}`}
+          {roleLabel}
+          {user.unit ? ` · ${user.unit}` : ""}
         </p>
         <h1 className="text-3xl font-black text-earth md:text-4xl">
           Salut, {user.firstName} !
         </h1>
-        <p className="text-trail">Voici l&apos;état du matériel aujourd&apos;hui.</p>
+        <p className="text-trail">
+          {isStaff
+            ? "Voici l'état du matériel aujourd'hui."
+            : "Ravi de te voir !"}
+        </p>
       </header>
 
       {/* Empreinte eau IA */}
       <WaterFootprint />
 
-      {/* Actions rapides */}
-      <section className="grid gap-3 md:grid-cols-3">
-        <Button asChild size="lg" variant="success" className="w-full">
-          <Link href="/prets/nouveau">
-            <Plus className="size-4" />
-            Nouveau prêt
-          </Link>
-        </Button>
-        <Button asChild size="lg" variant="destructive" className="w-full">
-          <Link href="/incidents/nouveau">
-            <AlertTriangle className="size-4" />
-            Signaler incident
-          </Link>
-        </Button>
-        <Button asChild size="lg" variant="info" className="w-full">
-          <Link href="/stock">
-            <Package className="size-4" />
-            Voir le stock
+      {/* Actions rapides — filtrées par rôle ; « Faire un don » ouvert à tous. */}
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {can(user, "loan.create") ? (
+          <Button asChild size="lg" variant="success" className="w-full">
+            <Link href="/prets/nouveau">
+              <Plus className="size-4" />
+              Nouveau prêt
+            </Link>
+          </Button>
+        ) : null}
+        {can(user, "incident.report") ? (
+          <Button asChild size="lg" variant="destructive" className="w-full">
+            <Link href="/incidents/nouveau">
+              <AlertTriangle className="size-4" />
+              Signaler incident
+            </Link>
+          </Button>
+        ) : null}
+        {can(user, "equipment.view") ? (
+          <Button asChild size="lg" variant="info" className="w-full">
+            <Link href="/stock">
+              <Package className="size-4" />
+              Voir le stock
+            </Link>
+          </Button>
+        ) : null}
+        <Button asChild size="lg" className="w-full">
+          <Link href="/dons/nouveau">
+            <Gift className="size-4" />
+            Faire un don
           </Link>
         </Button>
       </section>
 
-      {/* KPIs */}
-      <section className="grid grid-cols-2 gap-3 md:gap-4">
-        <KpiCard
-          label="Articles disponibles"
-          value={availableArticleCount}
-          icon={Package}
-          tone="forest"
-        />
-        <KpiCard
-          label="Prêts en cours"
-          value={activeLoanCount}
-          icon={Truck}
-          tone="sky"
-        />
-      </section>
+      {/* KPIs — chacun selon la permission de sa page. */}
+      {canStock || canLoans ? (
+        <section className="grid grid-cols-2 gap-3 md:gap-4">
+          {canStock ? (
+            <KpiCard
+              label="Articles disponibles"
+              value={data?.availableArticleCount ?? 0}
+              icon={Package}
+              tone="forest"
+            />
+          ) : null}
+          {canLoans ? (
+            <KpiCard
+              label="Prêts en cours"
+              value={data?.activeLoanCount ?? 0}
+              icon={Truck}
+              tone="sky"
+            />
+          ) : null}
+        </section>
+      ) : null}
 
-      {/* Incidents ouverts — bordure rouge */}
+      {/* Incidents ouverts — bordure rouge (réservé à incident.view) */}
+      {canIncidents ? (
       <section
         className={
-          openIncidentCount > 0
+          (data?.openIncidentCount ?? 0) > 0
             ? "flex items-center gap-4 rounded-2xl border-l-4 border-brick bg-snow p-5 shadow-card"
             : "flex items-center gap-4 rounded-2xl bg-snow p-5 shadow-card"
         }
       >
         <div
           className={
-            openIncidentCount > 0
+            (data?.openIncidentCount ?? 0) > 0
               ? "rounded-xl bg-brick-soft p-3 text-brick-ink"
               : "rounded-xl bg-forest-soft p-3 text-forest-ink"
           }
@@ -109,21 +144,23 @@ export default async function DashboardPage() {
             Incidents
           </p>
           <p className="font-bold text-earth">
-            {openIncidentCount === 0
+            {(data?.openIncidentCount ?? 0) === 0
               ? "Aucun incident en cours"
-              : openIncidentCount === 1
+              : data?.openIncidentCount === 1
                 ? "1 incident ouvert"
-                : `${openIncidentCount} incidents ouverts`}
+                : `${data?.openIncidentCount} incidents ouverts`}
           </p>
         </div>
-        {openIncidentCount > 0 ? (
+        {(data?.openIncidentCount ?? 0) > 0 ? (
           <Button asChild variant="outline" size="sm">
             <Link href="/incidents">Voir</Link>
           </Button>
         ) : null}
       </section>
+      ) : null}
 
-      {/* Attention requise — prêts en retard */}
+      {/* Attention requise — prêts en retard (PII : réservé à loan.view) */}
+      {canLoans ? (
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-bold text-earth">Attention requise</h2>
@@ -178,6 +215,18 @@ export default async function DashboardPage() {
           </ul>
         )}
       </section>
+      ) : null}
+
+      {/* Utilisateur sans rôle métier (parent / jeune / membre du local). */}
+      {!isStaff ? (
+        <section className="rounded-2xl bg-snow p-6 shadow-card">
+          <h2 className="font-bold text-earth">Bienvenue sur Piloti</h2>
+          <p className="mt-1 text-sm text-trail">
+            Retrouve les annonces du groupe dans la messagerie, et propose du
+            matériel via « Faire un don ».
+          </p>
+        </section>
+      ) : null}
 
     </div>
   );

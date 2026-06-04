@@ -19,7 +19,9 @@ const inDays = (n: number) =>
   new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 interface Props {
-  borrowers: BorrowerOption[];
+  // null = mode « jeune » : emprunteur forcé à soi-même (pas d'annuaire).
+  borrowers: BorrowerOption[] | null;
+  self: { id: string; label: string };
   details: {
     borrowerId: string;
     startDate: string;
@@ -28,7 +30,7 @@ interface Props {
   };
 }
 
-export function Step1Details({ borrowers, details }: Props) {
+export function Step1Details({ borrowers, self, details }: Props) {
   // Formulaire GET : passe emprunteur + dates + événement à l'étape 2 via l'URL,
   // où la disponibilité du matériel sera calculée pour cette période (US-12).
   return (
@@ -39,22 +41,33 @@ export function Step1Details({ borrowers, details }: Props) {
     >
       <input type="hidden" name="step" value="2" />
 
-      <div className="space-y-1.5">
-        <Label htmlFor="borrowerId">Emprunteur</Label>
-        <Select name="borrowerId" required defaultValue={details.borrowerId || undefined}>
-          <SelectTrigger id="borrowerId">
-            <SelectValue placeholder="Choisir un membre…" />
-          </SelectTrigger>
-          <SelectContent>
-            {borrowers.map((b) => (
-              <SelectItem key={b.id} value={b.id}>
-                {b.firstName} {b.lastName}
-                {b.unit ? ` · ${b.unit}` : ""}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      {borrowers === null ? (
+        // Jeune : emprunteur = lui-même, non modifiable.
+        <div className="space-y-1.5">
+          <Label>Emprunteur</Label>
+          <input type="hidden" name="borrowerId" value={self.id} />
+          <p className="rounded-lg bg-sand px-3 py-2 text-sm font-medium text-earth">
+            {self.label} (toi)
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <Label htmlFor="borrowerId">Emprunteur</Label>
+          <Select name="borrowerId" required defaultValue={details.borrowerId || undefined}>
+            <SelectTrigger id="borrowerId">
+              <SelectValue placeholder="Choisir un membre…" />
+            </SelectTrigger>
+            <SelectContent>
+              {borrowers.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.firstName} {b.lastName}
+                  {b.unit ? ` · ${b.unit}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="min-w-0 space-y-1.5">

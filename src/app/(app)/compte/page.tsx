@@ -1,0 +1,56 @@
+import { UserCog } from "lucide-react";
+
+import { ROLE_LABEL, UNIT_LABEL, type Role, type Unit } from "@/lib/enums";
+import { getCurrentUser } from "@/lib/get-current-user";
+import { effectiveRoles } from "@/lib/permissions";
+
+import { PasswordForm, ProfileForm } from "./account-forms";
+
+export default async function AccountPage() {
+  const user = await getCurrentUser();
+  const roles = effectiveRoles(user);
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
+      <header>
+        <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-trail">
+          <UserCog className="size-3.5" />
+          Mon compte
+        </p>
+        <h1 className="text-3xl font-black text-earth md:text-4xl">
+          {user.firstName} {user.lastName}
+        </h1>
+        <p className="text-trail">{user.email}</p>
+      </header>
+
+      {/* Rôles & branche — lecture seule (attribués par l'administration). */}
+      <section className="space-y-2 rounded-2xl bg-snow p-5 shadow-card">
+        <h2 className="font-bold text-earth">Rôles &amp; branche</h2>
+        <p className="text-sm text-earth">
+          <span className="font-bold">Rôle(s) :</span>{" "}
+          {roles.length > 0
+            ? roles.map((r) => ROLE_LABEL[r as Role] ?? r).join(", ")
+            : "Aucun"}
+        </p>
+        <p className="text-sm text-earth">
+          <span className="font-bold">Branche :</span>{" "}
+          {user.unit ? (UNIT_LABEL[user.unit as Unit] ?? user.unit) : "—"}
+        </p>
+        <p className="text-xs text-trail">
+          Ces informations sont gérées par un responsable. Contacte
+          l&apos;administration pour toute modification.
+        </p>
+      </section>
+
+      {/* Coordonnées — éditable par l'utilisateur. */}
+      <ProfileForm
+        firstName={user.firstName}
+        lastName={user.lastName}
+        phone={user.phone ?? ""}
+      />
+
+      {/* Mot de passe — auto-service via better-auth. */}
+      <PasswordForm />
+    </div>
+  );
+}

@@ -61,6 +61,15 @@ export const UNITS = [
 ] as const;
 export type Unit = (typeof UNITS)[number];
 
+export const UNIT_LABEL: Record<Unit, string> = {
+  BLEUS: "Bleus (8-11 ans)",
+  VERTS: "Verts (8-11 ans)",
+  ROUGES: "Rouges (8-11 ans)",
+  PIOS: "Pionniers (14-17 ans)",
+  COMPAS: "Compagnons (17-21 ans)",
+  VIOLETS: "Violets (chefs et responsables)",
+};
+
 export const EQUIPMENT_CONDITIONS = [
   "NEUF",
   "BON",
@@ -99,6 +108,8 @@ export const AUDIT_ACTIONS = [
   "USER_REJECTED",
   "USER_SUSPENDED",
   "USER_ROLE_CHANGED",
+  "USER_UNIT_CHANGED",
+  "USER_PROFILE_UPDATED",
   "USER_DELETED",
   "USER_PASSWORD_CHANGED",
   "EQUIPMENT_CREATED",

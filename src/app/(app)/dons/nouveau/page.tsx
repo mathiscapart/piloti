@@ -20,11 +20,11 @@ export default async function NewDonationPage({ searchParams }: PageProps) {
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <header className="space-y-2">
         <Link
-          href="/stock"
+          href="/dashboard"
           className="inline-flex items-center gap-1 text-sm font-bold text-trail hover:text-earth"
         >
           <ArrowLeft className="size-4" />
-          Retour au stock
+          Retour
         </Link>
         <h1 className="flex items-center gap-2 text-3xl font-black text-earth">
           <Gift className="size-7 text-forest" />

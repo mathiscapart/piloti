@@ -35,7 +35,9 @@ export const ACTIONS = [
   "incident.resolve",
   // Comptes / membres
   "admin.access",
-  "user.approve",
+  "audit.view", // journal d'audit en lecture (ADMIN + RG, lecture seule)
+  "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
+  "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "member.view",
   "member.directory", // US-26 — annuaire des compétences parents (RG)
   // Dons
@@ -85,10 +87,16 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "incident.report": [CHEF, MAT, "PARENT"],
   "incident.resolve": [MAT],
   // Comptes / membres
-  "admin.access": [], // ADMIN only (validation inscriptions par SEC : différé)
-  "user.approve": [], // ADMIN only (différé : SEC sauf ADMIN/RG)
+  "admin.access": [], // ADMIN only (zone technique)
+  // US-32 — RG = « lecture seule sur tout » : accès au journal d'audit en lecture.
+  "audit.view": [RG],
+  // US-32 — la SECRÉTAIRE valide les inscriptions et attribue les rôles
+  // (sauf ADMIN/RG : garde-fou anti-élévation, cf. canAssignRole).
+  "user.approve": [SEC],
+  "user.manage": [SEC],
   "member.view": [CHEF, RG, SEC, TRES],
-  "member.directory": [RG],
+  // Annuaire des compétences : RG + SECRÉTAIRE (US-32) ; ADMIN superuser.
+  "member.directory": [RG, SEC],
   // Dons — MAT accepte/refuse (page sous /admin : accès différé) ; ADMIN.
   "donation.create": [], // géré par ANY_ACTIVE
   "donation.review": [MAT],
@@ -137,4 +145,36 @@ export function can(user: AuthCtx, action: Action): boolean {
 /** Pratique pour l'UI : l'utilisateur possède-t-il ce rôle (principal ou additionnel) ? */
 export function hasRole(user: AuthCtx, role: Role): boolean {
   return effectiveRoles(user).includes(role);
+}
+
+// US-32 — la zone /admin n'est plus 100 % ADMIN : différentes rubriques sont
+// ouvertes à la SECRÉTAIRE (inscriptions, comptes), au RESPONSABLE_MATERIEL
+// (catégories, dons) et au CHEF (catégories). L'accès à la zone est accordé
+// dès qu'au moins une rubrique est accessible ; chaque page se reprotège.
+const ADMIN_ZONE_ACTIONS: Action[] = [
+  "admin.access",
+  "audit.view",
+  "user.approve",
+  "user.manage",
+  "category.manage",
+  "donation.review",
+];
+
+export function canAccessAdminZone(user: AuthCtx): boolean {
+  return ADMIN_ZONE_ACTIONS.some((a) => can(user, a));
+}
+
+// US-32 — garde-fou anti-élévation de privilèges : seul l'ADMIN peut attribuer
+// les rôles sensibles (ADMIN, RESPONSABLE_GROUPE). La SECRÉTAIRE attribue tous
+// les autres rôles.
+const PRIVILEGED_ROLES = new Set<string>(["ADMIN", "RESPONSABLE_GROUPE"]);
+
+export function canAssignRole(actor: AuthCtx, role: string): boolean {
+  if (can(actor, "admin.access")) return true; // ADMIN attribue tout
+  return !PRIVILEGED_ROLES.has(role);
+}
+
+/** Liste des rôles que `actor` est autorisé à attribuer (pour filtrer l'UI). */
+export function assignableRoles(actor: AuthCtx, catalog: readonly string[]): string[] {
+  return catalog.filter((r) => canAssignRole(actor, r));
 }

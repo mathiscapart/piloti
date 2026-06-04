@@ -4,20 +4,34 @@ import { ChevronDown, Droplets, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 // Methodology:
-// ~500 AI interactions to build this app × ~5 ml/interaction (server cooling)
-// = ~2.5 L ≈ 10 glasses of 25 cl water
-// Source: Microsoft 2023 Sustainability Report (GPT-4 inference ≈ 0.5 L / 100 queries)
-const INTERACTIONS = 500;
-const ML_PER_INTERACTION = 5;
+// Mesuré sur les sessions de développement Claude Code de ce dépôt :
+// ~160 prompts humains → ~3400 requêtes au modèle (chaque appel = 1 inférence).
+// Base GPT-4 ≈ 5 ml/requête (Microsoft 2023 ≈ 0.5 L / 100 requêtes), MAIS le
+// projet a surtout tourné sous Claude Opus 4.7 — modèle bien plus volumineux,
+// avec de longs contextes agentiques (lectures de fichiers, longue conversation)
+// → on retient ~3× la base, soit ~15 ml/requête (estimation, non publiée).
+// 3400 × 15 ml = ~51 L ≈ 204 verres de 25 cl.
+const PROMPTS = 160;
+const INTERACTIONS = 3400;
+const ML_PER_INTERACTION = 15;
 const GLASS_ML = 250;
+// La visualisation plafonne le nombre d'icônes affichées (le total réel reste
+// indiqué en chiffres).
+const MAX_GLASSES_SHOWN = 40;
 const total_ml = INTERACTIONS * ML_PER_INTERACTION;
 const glasses = Math.round(total_ml / GLASS_ML);
 const liters = (total_ml / 1000).toFixed(1);
 
+// Comparaisons en verres de 25 cl (1 verre = 0,25 L), choisies pour ENCADRER
+// l'empreinte de l'appli (~51 L). Usages d'eau domestiques courants + le
+// streaming vidéo (eau des data centers + production d'électricité : 2 à 12 L/h
+// selon le MIT Energy Initiative ; estimation basse retenue → film 2 h ≈ 4 L).
 const comparisons = [
-  { label: "1 douche de 2 min", glasses: 80 },
-  { label: "rincer la vaisselle", glasses: 20 },
-  { label: "se brosser les dents", glasses: 8 },
+  { label: "un bain (≈ 150 L)", glasses: 600 },
+  { label: "une douche de 5 min (≈ 60 L)", glasses: 240 },
+  { label: "un cycle de lave-linge (≈ 50 L)", glasses: 200 },
+  { label: "une chasse d'eau (≈ 9 L)", glasses: 36 },
+  { label: "regarder un film en streaming, 2 h (≈ 4 L)", glasses: 16 },
 ];
 
 function Glass({ filled = true }: { filled?: boolean }) {
@@ -112,7 +126,10 @@ export function WaterFootprint() {
             </div>
             <p className="mt-2 text-sm font-medium text-trail">
               Pour construire cette application avec l&apos;IA
-              <span className="text-trail/70"> · {liters} L · {INTERACTIONS} échanges</span>
+              <span className="text-trail/70">
+                {" "}
+                · {liters} L · {PROMPTS} prompts → {INTERACTIONS.toLocaleString("fr-FR")} requêtes IA
+              </span>
             </p>
           </div>
 
@@ -128,11 +145,13 @@ export function WaterFootprint() {
         {/* Visualization — row of glasses */}
         <div className="relative px-6 pb-6">
           <div className="flex flex-wrap items-end gap-1.5 rounded-2xl bg-snow/70 p-4 backdrop-blur-sm">
-            {Array.from({ length: glasses }).map((_, i) => (
-              <Glass key={i} filled />
-            ))}
+            {Array.from({ length: Math.min(glasses, MAX_GLASSES_SHOWN) }).map(
+              (_, i) => (
+                <Glass key={i} filled />
+              ),
+            )}
             <span className="ml-2 text-xs font-bold text-sky-ink">
-              = {glasses} × 25 cl
+              {glasses > MAX_GLASSES_SHOWN ? "… " : ""}= {glasses} × 25 cl
             </span>
           </div>
         </div>
@@ -209,10 +228,16 @@ export function WaterFootprint() {
                 Méthodologie ↗
               </summary>
               <p className="mt-2 rounded-xl bg-snow/80 p-3 text-xs leading-relaxed text-trail">
-                {INTERACTIONS} échanges × {ML_PER_INTERACTION} ml = {liters} L
-                ÷ {GLASS_ML} ml = <strong>{glasses} verres</strong> de{" "}
-                {GLASS_ML} ml. Source : rapport de durabilité Microsoft 2023
-                (inference GPT-4 ≈ 0,5 L / 100 requêtes).
+                Mesuré sur les sessions de développement : {PROMPTS} prompts ont
+                déclenché {INTERACTIONS.toLocaleString("fr-FR")} requêtes au
+                modèle × {ML_PER_INTERACTION} ml = {liters} L ÷ {GLASS_ML} ml ={" "}
+                <strong>{glasses} verres</strong> de {GLASS_ML} ml. La base GPT-4
+                ≈ 5 ml/requête (Microsoft 2023, ≈ 0,5 L / 100 requêtes) est
+                pondérée ×3 car le projet a surtout tourné sous{" "}
+                <strong>Claude Opus 4.7</strong> (modèle plus volumineux, longs
+                contextes) → ~15 ml/requête (estimation). Streaming : 2 à 12 L
+                d&apos;eau par heure (MIT Energy Initiative) — estimation basse
+                retenue pour le film.
               </p>
             </details>
           </div>

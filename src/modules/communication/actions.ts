@@ -108,6 +108,24 @@ export async function editMessage(
   return { error: null };
 }
 
+export async function deleteMessage(messageId: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  const message = await db.message.findUnique({ where: { id: messageId } });
+  if (!message) return { error: "Message introuvable." };
+  // L'auteur supprime ses propres messages ; l'ADMIN supprime n'importe lequel.
+  if (message.authorId !== user.id && !effectiveRoles(user).includes("ADMIN")) {
+    return { error: "Tu ne peux supprimer que tes propres messages." };
+  }
+  // Réactions supprimées en cascade (onDelete: Cascade au schéma).
+  await db.message.delete({ where: { id: messageId } });
+  publishChannelEvent({
+    type: "delete",
+    channelId: message.channelId,
+    payload: { messageId },
+  });
+  return { error: null };
+}
+
 export async function togglePin(messageId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!isStaff(user)) return { error: "Réservé aux chefs." };

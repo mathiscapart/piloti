@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, History, LogOut, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { FolderOpen, Gift, History, LogOut, ShieldCheck, UserCog, UserPlus, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -19,12 +19,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/lib/auth-client";
 import type { CurrentUser } from "@/lib/get-current-user";
+import { can, type Action } from "@/lib/permissions";
 
-const ADMIN_LINKS = [
-  { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus },
-  { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users },
-  { href: "/admin/categories", label: "Catégories", icon: FolderOpen },
-  { href: "/admin/audit", label: "Journal d'audit", icon: History },
+// US-32 — chaque raccourci porte sa permission propre : la zone admin est
+// granulaire (SECRÉTAIRE, RESPONSABLE_MATERIEL…), plus seulement l'ADMIN.
+const ADMIN_LINKS: { href: string; label: string; icon: typeof UserPlus; requires: Action }[] = [
+  { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.review" },
+  { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "user.approve" },
+  { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "user.manage" },
+  { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "category.manage" },
+  { href: "/admin/audit", label: "Journal d'audit", icon: History, requires: "audit.view" },
 ];
 
 const ROLE_LABEL: Record<string, string> = {
@@ -39,6 +43,7 @@ export function UserMenu({ user, compact }: { user: CurrentUser; compact?: boole
   const [pending, startTransition] = useTransition();
 
   const initials = `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
+  const adminLinks = ADMIN_LINKS.filter((l) => can(user, l.requires));
 
   function handleSignOut() {
     startTransition(async () => {
@@ -71,14 +76,21 @@ export function UserMenu({ user, compact }: { user: CurrentUser; compact?: boole
       <DropdownMenuContent align="end" side="top" className="w-56">
         <DropdownMenuLabel>{user.email}</DropdownMenuLabel>
 
-        {compact && user.role === "ADMIN" && (
+        <DropdownMenuItem asChild>
+          <Link href="/compte" className="flex items-center gap-2">
+            <UserCog className="size-4 text-trail" />
+            Mon compte
+          </Link>
+        </DropdownMenuItem>
+
+        {compact && adminLinks.length > 0 && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-trail">
               <ShieldCheck className="size-3.5" />
               Administration
             </DropdownMenuLabel>
-            {ADMIN_LINKS.map(({ href, label, icon: Icon }) => (
+            {adminLinks.map(({ href, label, icon: Icon }) => (
               <DropdownMenuItem key={href} asChild>
                 <Link href={href} className="flex items-center gap-2">
                   <Icon className="size-4 text-trail" />

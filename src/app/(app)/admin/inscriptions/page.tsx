@@ -1,6 +1,8 @@
 import { UserPlus } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { can } from "@/lib/permissions";
+import { requireCan } from "@/lib/require-can";
 import { listPendingUsers } from "@/modules/admin/queries";
 
 import { ApproveDialog } from "./approve-dialog";
@@ -13,6 +15,9 @@ const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
 });
 
 export default async function AdminInscriptionsPage() {
+  // US-32 — ADMIN + SECRÉTAIRE valident les inscriptions.
+  const currentUser = await requireCan("user.approve");
+  const canAssignPrivileged = can(currentUser, "admin.access");
   const users = await listPendingUsers();
 
   return (
@@ -63,6 +68,7 @@ export default async function AdminInscriptionsPage() {
                 <ApproveDialog
                   userId={u.id}
                   fullName={`${u.firstName} ${u.lastName}`}
+                  allowPrivileged={canAssignPrivileged}
                 />
               </div>
             </li>

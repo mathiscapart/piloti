@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import {
   listBorrowableEquipment,
@@ -11,6 +12,12 @@ import {
 
 import { Step1Details } from "./step1-details";
 import { Step2Select } from "./step2-select";
+
+// Emprunteur courant (jeune : prêt pour lui-même uniquement).
+interface SelfBorrower {
+  id: string;
+  label: string;
+}
 
 interface PageProps {
   searchParams: Promise<{
@@ -25,7 +32,15 @@ interface PageProps {
 }
 
 export default async function NewLoanPage({ searchParams }: PageProps) {
-  await requireCan("loan.create");
+  const user = await requireCan("loan.create");
+  // US-32 — un gestionnaire (loan.view) emprunte pour n'importe qui ; un jeune
+  // (loan.create via sa branche) emprunte uniquement pour lui-même.
+  const isManager = can(user, "loan.view");
+  const self: SelfBorrower = {
+    id: user.id,
+    label: `${user.firstName} ${user.lastName}`,
+  };
+
   const params = await searchParams;
   const step = params.step === "2" ? 2 : 1;
   const search = (params.q ?? "").trim();
@@ -37,7 +52,8 @@ export default async function NewLoanPage({ searchParams }: PageProps) {
       : [];
 
   const details = {
-    borrowerId: params.borrowerId ?? "",
+    // Jeune : l'emprunteur est forcé à lui-même (on ignore l'URL).
+    borrowerId: isManager ? (params.borrowerId ?? "") : self.id,
     startDate: params.startDate ?? "",
     expectedReturn: params.expectedReturn ?? "",
     eventName: params.eventName ?? "",
@@ -67,9 +83,15 @@ export default async function NewLoanPage({ searchParams }: PageProps) {
       </header>
 
       {step === 1 ? (
-        <Step1Page details={details} />
+        <Step1Page details={details} isManager={isManager} self={self} />
       ) : (
-        <Step2Page search={search} preselected={selectedIds} details={details} />
+        <Step2Page
+          search={search}
+          preselected={selectedIds}
+          details={details}
+          isManager={isManager}
+          self={self}
+        />
       )}
     </div>
   );
@@ -77,6 +99,8 @@ export default async function NewLoanPage({ searchParams }: PageProps) {
 
 async function Step1Page({
   details,
+  isManager,
+  self,
 }: {
   details: {
     borrowerId: string;
@@ -84,20 +108,24 @@ async function Step1Page({
     expectedReturn: string;
     eventName: string;
   };
+  isManager: boolean;
+  self: SelfBorrower;
 }) {
-  const borrowers = await listBorrowers();
+  // Jeune : pas d'accès à l'annuaire des membres → on ne charge pas la liste.
+  const borrowers = isManager ? await listBorrowers() : null;
   return (
     <>
       <div>
         <h2 className="text-lg font-bold text-earth">
-          Étape 1 — Emprunteur &amp; dates
+          {isManager ? "Étape 1 — Emprunteur & dates" : "Étape 1 — Dates"}
         </h2>
         <p className="text-sm text-trail">
-          Renseigne qui emprunte et pour quelle période. La disponibilité du
-          matériel sera calculée sur ces dates.
+          {isManager
+            ? "Renseigne qui emprunte et pour quelle période. La disponibilité du matériel sera calculée sur ces dates."
+            : "Choisis la période. Le prêt sera créé à ton nom."}
         </p>
       </div>
-      <Step1Details borrowers={borrowers} details={details} />
+      <Step1Details borrowers={borrowers} details={details} self={self} />
     </>
   );
 }
@@ -106,6 +134,8 @@ async function Step2Page({
   search,
   preselected,
   details,
+  isManager,
+  self,
 }: {
   search: string;
   preselected: string[];
@@ -115,6 +145,8 @@ async function Step2Page({
     expectedReturn: string;
     eventName: string;
   };
+  isManager: boolean;
+  self: SelfBorrower;
 }) {
   const period = {
     start: new Date(details.startDate),
@@ -122,12 +154,18 @@ async function Step2Page({
   };
   // US-20 — on charge TOUT le matériel disponible sur la période ; le filtrage
   // par recherche est instantané côté client (cf. Step2Select), sans rechargement.
+  // Jeune : on ne charge pas l'annuaire (emprunteur = lui-même).
   const [equipment, borrowers, categories] = await Promise.all([
     listBorrowableEquipment(undefined, period),
-    listBorrowers(),
+    isManager ? listBorrowers() : Promise.resolve(null),
     listCategories(),
   ]);
-  const borrower = borrowers.find((b) => b.id === details.borrowerId);
+  const borrowerLabel = isManager
+    ? (() => {
+        const b = borrowers?.find((x) => x.id === details.borrowerId);
+        return b ? `${b.firstName} ${b.lastName}` : "";
+      })()
+    : self.label;
   const categoryLabels = Object.fromEntries(
     categories.map((c) => [c.slug, c.label]),
   );
@@ -149,9 +187,7 @@ async function Step2Page({
         preselected={preselected}
         initialSearch={search}
         details={details}
-        borrowerLabel={
-          borrower ? `${borrower.firstName} ${borrower.lastName}` : ""
-        }
+        borrowerLabel={borrowerLabel}
       />
     </>
   );

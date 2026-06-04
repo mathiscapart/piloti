@@ -61,7 +61,13 @@ export async function createIncident(
   revalidatePath("/incidents");
   revalidatePath("/dashboard");
   revalidatePath(`/stock/${parsed.data.equipmentId}`);
-  redirect("/incidents");
+  // #4 — un parent (incident.report sans incident.view) n'accède pas à la liste
+  // des incidents ; on le ramène au dashboard avec un accusé.
+  redirect(
+    can(user, "incident.view")
+      ? "/incidents"
+      : "/dashboard?notice=incident-reported",
+  );
 }
 
 export async function resolveIncident(

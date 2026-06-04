@@ -2,6 +2,7 @@ import { ArrowLeft, Hash } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
 import { canWriteChannel } from "@/modules/communication/access";
@@ -13,6 +14,7 @@ import {
 } from "@/modules/communication/queries";
 
 import { ChannelSidebar } from "../ChannelSidebar";
+import { ChannelMuteButton } from "./ChannelMuteButton";
 import { ChannelView } from "./ChannelView";
 
 interface PageProps {
@@ -26,10 +28,14 @@ export default async function ChannelPage({ params }: PageProps) {
   const channel = await getChannelForUser(user, slug);
   if (!channel) notFound();
 
-  const [messages, tree, polls] = await Promise.all([
+  const [messages, tree, polls, mute] = await Promise.all([
     listMessages(channel.id),
     listChannelTree(user),
     loadPolls(channel.id),
+    db.channelMute.findUnique({
+      where: { channelId_userId: { channelId: channel.id, userId: user.id } },
+      select: { id: true },
+    }),
   ]);
 
   const roles = effectiveRoles(user);
@@ -60,7 +66,7 @@ export default async function ChannelPage({ params }: PageProps) {
             <ArrowLeft className="size-5" />
           </Link>
           <Hash className="size-4 text-trail" />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate font-bold text-earth">{channel.name}</h1>
             {channel.description ? (
               <p className="truncate text-xs text-trail">
@@ -68,6 +74,7 @@ export default async function ChannelPage({ params }: PageProps) {
               </p>
             ) : null}
           </div>
+          <ChannelMuteButton channelId={channel.id} initialMuted={Boolean(mute)} />
         </header>
 
         <div className="min-h-0 flex-1">

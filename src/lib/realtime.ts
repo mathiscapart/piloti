@@ -40,3 +40,33 @@ export function subscribeChannel(
     emitter.off(t, listener);
   };
 }
+
+// ----------------------------------------------------------------------------
+// Flux par utilisateur — alimente la cloche de notifications in-app (SSE).
+// Un événement signale au client qu'une nouvelle notification est arrivée ; le
+// client refetch alors son compteur + sa liste (même pattern que les salons).
+// ----------------------------------------------------------------------------
+
+export interface UserEvent {
+  type: "notification";
+  payload?: Record<string, unknown>;
+}
+
+function userTopic(userId: string): string {
+  return `user:${userId}`;
+}
+
+export function publishUserEvent(userId: string, event: UserEvent): void {
+  emitter.emit(userTopic(userId), event);
+}
+
+export function subscribeUser(
+  userId: string,
+  listener: (event: UserEvent) => void,
+): () => void {
+  const t = userTopic(userId);
+  emitter.on(t, listener);
+  return () => {
+    emitter.off(t, listener);
+  };
+}

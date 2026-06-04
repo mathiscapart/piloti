@@ -100,6 +100,16 @@ export type DonationStatus = (typeof DONATION_STATUSES)[number];
 export const EVENT_TYPES = ["REUNION", "WEEK_END", "CAMP", "SERVICE"] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
+// Types de notification (cloche in-app + email + push). Extensible : chaque
+// nouveau déclencheur (annonce, mention, alerte retard…) ajoute une valeur ici.
+export const NOTIFICATION_TYPES = [
+  "CHANNEL_MESSAGE", // nouveau(x) message(s) dans un salon accessible
+  "ANNOUNCEMENT", // US-C01 — annonce publiée
+  "MENTION", // US-C04 — mention directe
+  "LOAN_OVERDUE", // US-07 — prêt en retard
+] as const;
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
 // Canonical audit action names. Every withAudit() call should use one of these.
 export const AUDIT_ACTIONS = [
   "USER_REGISTERED",

@@ -5,6 +5,7 @@ import { MobileHeader } from "@/components/layout/MobileHeader";
 import { NoticeHandler } from "@/components/layout/NoticeHandler";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { getNotificationSnapshot } from "@/modules/notifications/queries";
 
 // Force dynamic sur tout le segment (app) : ces pages affichent des données
 // utilisateur (incidents, prêts, audit) et doivent toujours être recalculées.
@@ -25,15 +26,16 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const user = await getCurrentUser();
+  const notifications = await getNotificationSnapshot(user.id);
 
   return (
     <div className="min-h-screen">
       <Suspense fallback={null}>
         <NoticeHandler />
       </Suspense>
-      <Sidebar user={user} />
+      <Sidebar user={user} notifications={notifications} />
       <div className="flex min-h-screen flex-col md:pl-64">
-        <MobileHeader user={user} />
+        <MobileHeader user={user} notifications={notifications} />
         <main className="flex-1 pb-20 md:pb-0">{children}</main>
         <BottomNav user={user} />
       </div>

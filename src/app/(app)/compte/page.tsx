@@ -1,14 +1,21 @@
 import { UserCog } from "lucide-react";
 
+import { NotificationSettings } from "@/components/notifications/NotificationSettings";
+import { db } from "@/lib/db";
 import { ROLE_LABEL, UNIT_LABEL, type Role, type Unit } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
+import { vapidPublicKey } from "@/lib/push";
 
 import { PasswordForm, ProfileForm } from "./account-forms";
 
 export default async function AccountPage() {
   const user = await getCurrentUser();
   const roles = effectiveRoles(user);
+  const pref = await db.notificationPreference.findUnique({
+    where: { userId: user.id },
+    select: { emailEnabled: true, pushEnabled: true },
+  });
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -51,6 +58,13 @@ export default async function AccountPage() {
 
       {/* Mot de passe — auto-service via better-auth. */}
       <PasswordForm />
+
+      {/* Préférences de notification — email / push (US notification & communication). */}
+      <NotificationSettings
+        emailEnabled={pref?.emailEnabled ?? true}
+        pushEnabled={pref?.pushEnabled ?? true}
+        vapidPublicKey={vapidPublicKey()}
+      />
     </div>
   );
 }

@@ -5,8 +5,63 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
 import { publishChannelEvent } from "@/lib/realtime";
 import type { ActionResult } from "@/lib/types";
+import { notifyMany } from "@/modules/notifications/notify";
 
 import { canAccessChannel, canWriteChannel } from "./access";
+
+interface ChannelLike {
+  id: string;
+  name: string;
+  slug: string;
+  accessRoles: string;
+  accessUnits: string;
+  excludeUnits: string;
+  archived?: boolean;
+}
+
+// US-C09 — notifie les membres d'un salon d'un nouveau message : tous les ACTIVE
+// qui ont accès au salon, sauf l'auteur et ceux qui l'ont mis en sourdine.
+async function notifyChannelMessage(
+  channel: ChannelLike,
+  author: { id: string; firstName: string },
+  body: string,
+  messageId: string,
+): Promise<void> {
+  const [users, mutes] = await Promise.all([
+    db.user.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, role: true, roles: true, unit: true },
+    }),
+    db.channelMute.findMany({
+      where: { channelId: channel.id },
+      select: { userId: true },
+    }),
+  ]);
+  const muted = new Set(mutes.map((m) => m.userId));
+
+  const recipients = users
+    .filter((u) => u.id !== author.id)
+    .filter((u) => !muted.has(u.id))
+    .filter((u) => canAccessChannel(u, channel))
+    .map((u) => u.id);
+  if (recipients.length === 0) return;
+
+  const snippet =
+    body.trim().length > 0
+      ? body.trim().slice(0, 120)
+      : "📎 a envoyé une pièce jointe";
+  const link = `/communication/${channel.slug}`;
+
+  await notifyMany(recipients, (userId) => ({
+    userId,
+    type: "CHANNEL_MESSAGE",
+    title: `#${channel.name}`,
+    body: `${author.firstName} : ${snippet}`,
+    link,
+    channelId: channel.id,
+    messageId,
+  }));
+}
 
 // Note : les messages de chat ne sont PAS tracés dans AuditLog (volume élevé,
 // non sensible ; ils portent déjà auteur + horodatage). L'audit reste réservé
@@ -46,6 +101,11 @@ export async function postMessage(
     },
   });
   publishChannelEvent({ type: "message", channelId, payload: { id: msg.id } });
+
+  // Notifie les membres du salon (in-app temps réel + email/push selon prefs).
+  // Fire-and-forget : ne bloque pas la réponse à l'auteur en cas de lenteur.
+  void notifyChannelMessage(channel, user, body, msg.id);
+
   return { error: null };
 }
 

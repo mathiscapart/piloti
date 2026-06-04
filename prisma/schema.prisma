@@ -56,8 +56,12 @@ model User {
   messages          Message[]         @relation("MessageAuthor")
   reactions         MessageReaction[] @relation("ReactionUser")
   channelReads      ChannelRead[]     @relation("ChannelReadUser")
+  channelMutes      ChannelMute[]     @relation("ChannelMuteUser")
   polls             Poll[]            @relation("PollAuthor")
   pollVotes         PollVote[]        @relation("PollVoteUser")
+  notifications     Notification[]    @relation("UserNotification")
+  pushSubscriptions PushSubscription[]
+  notificationPref  NotificationPreference?
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -333,10 +337,26 @@ model Channel {
   category  ChannelCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   messages  Message[]
   reads     ChannelRead[]
+  mutes     ChannelMute[]
   polls     Poll[]
 
   @@index([categoryId])
   @@index([archived])
+}
+
+// US-C09 — salon coupé (mute) pour un utilisateur : plus de notification de
+// nouveaux messages pour ce salon (il reste visible et lisible).
+model ChannelMute {
+  id        String   @id @default(cuid())
+  channelId String
+  userId    String
+  createdAt DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation("ChannelMuteUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([userId])
 }
 
 model Message {
@@ -417,4 +437,59 @@ model PollVote {
 
   @@unique([pollId, userId, optionId])
   @@index([pollId])
+}
+
+// ----------------------------------------------------------------------------
+// Notifications (modèle transverse) — alimentent la cloche in-app temps réel,
+// + canaux email (Resend) et push web (VAPID). Une notification appartient à un
+// destinataire (User). `count` permet la coalescence (ex. « 3 nouveaux messages
+// dans #général » au lieu de 3 lignes). Non audité (artefact système dérivé,
+// comme ChannelRead / MessageReaction).
+// ----------------------------------------------------------------------------
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String // NotificationType (cf. src/lib/enums.ts)
+  title     String
+  body      String
+  link      String? // route in-app à ouvrir au clic
+  channelId String? // contexte salon (coalescence des messages)
+  messageId String?
+  count     Int       @default(1) // nb d'occurrences coalescées
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user User @relation("UserNotification", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+// Abonnement Web Push (un par navigateur/appareil). Supprimé si l'endpoint
+// renvoie 404/410 à l'envoi.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// Préférences de notification par utilisateur. L'in-app est toujours actif ;
+// email et push sont désactivables. Le mute par salon vit dans ChannelMute.
+model NotificationPreference {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  emailEnabled Boolean  @default(true)
+  pushEnabled  Boolean  @default(true)
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

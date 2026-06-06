@@ -16,11 +16,15 @@ const globalForRT = globalThis as unknown as {
   __pilotiEmitter?: EventEmitter;
 };
 
+// Singleton process-wide stocké sur globalThis — INDISPENSABLE en prod aussi :
+// en build standalone, l'action serveur (publish) et la route SSE (subscribe)
+// peuvent être dans des bundles distincts. Sans cache global partagé, chacun
+// créerait son propre EventEmitter → les événements n'atteignent jamais les
+// abonnés (messages non instantanés, notifications jamais reçues). Un seul
+// conteneur Node = un seul process = un seul émetteur partagé, ce qui est voulu.
 const emitter = globalForRT.__pilotiEmitter ?? new EventEmitter();
 emitter.setMaxListeners(0); // beaucoup d'abonnés SSE possibles
-if (process.env.NODE_ENV !== "production") {
-  globalForRT.__pilotiEmitter = emitter;
-}
+globalForRT.__pilotiEmitter = emitter;
 
 function topic(channelId: string): string {
   return `channel:${channelId}`;

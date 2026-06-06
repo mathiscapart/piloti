@@ -6,6 +6,7 @@ import {
   History,
   LayoutDashboard,
   type LucideIcon,
+  Megaphone,
   MessageSquare,
   Package,
   Truck,
@@ -54,6 +55,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Vie du groupe",
     items: [
+      { href: "/annonces", label: "Annonces", icon: Megaphone },
       { href: "/communication", label: "Communication", icon: MessageSquare },
       { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
     ],

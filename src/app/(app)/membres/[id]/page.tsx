@@ -42,9 +42,10 @@ export default async function MemberDetailPage({ params }: PageProps) {
   const { user, loans } = member;
   const now = new Date();
 
-  // US-26 — accès à l'annuaire des compétences : RG (member.directory) ou admin.
-  const canSeeDirectory = can(currentUser, "member.directory");
-  const isAdmin = can(currentUser, "admin.access");
+  // US-26 — annuaire des compétences : RG (member.directory) ou admin peuvent
+  // CONSULTER et ÉDITER le profil parent ; les autres rôles avec member.view le
+  // voient en lecture seule.
+  const canManageProfile = can(currentUser, "member.directory");
   const isParent = effectiveRoles(user).includes("PARENT");
   const hasProfile =
     !!user.profession || !!user.skills || !!user.availability || !!user.helpNotes;
@@ -59,7 +60,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
           <ArrowLeft className="size-4" />
           Retour aux prêts
         </Link>
-        {canSeeDirectory ? (
+        {canManageProfile ? (
           <Link
             href="/membres/annuaire"
             className="text-sm font-bold text-forest hover:underline"
@@ -104,8 +105,8 @@ export default async function MemberDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      {/* US-26 — profil parent enrichi : édition (admin) ou lecture (RG). */}
-      {isParent && isAdmin ? (
+      {/* US-26 — profil parent enrichi : édition (RG/admin) ou lecture seule. */}
+      {isParent && canManageProfile ? (
         <MemberProfileForm
           userId={user.id}
           profession={user.profession}
@@ -114,7 +115,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
           helpNotes={user.helpNotes}
           skillsConsent={user.skillsConsent}
         />
-      ) : isParent && canSeeDirectory && hasProfile ? (
+      ) : isParent && hasProfile ? (
         <section className="space-y-2 rounded-2xl bg-snow p-5 shadow-card">
           <h2 className="font-bold text-earth">Profil &amp; compétences</h2>
           {!user.skillsConsent ? (

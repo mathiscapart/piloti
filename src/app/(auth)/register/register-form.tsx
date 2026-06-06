@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UNITS } from "@/lib/enums";
+import { cn } from "@/lib/utils";
 
 import { signUpAction, type SignUpActionResult } from "./actions";
 
@@ -28,8 +29,11 @@ const UNIT_LABELS: Record<(typeof UNITS)[number], string> = {
   VIOLETS: "Violets (chefs et responsables)",
 };
 
+type ProfileType = "UNIT" | "PARENT";
+
 export function RegisterForm() {
   const [state, action, pending] = useActionState(signUpAction, initialState);
+  const [profileType, setProfileType] = useState<ProfileType>("UNIT");
 
   if (state.success) {
     return (
@@ -99,21 +103,57 @@ export function RegisterForm() {
         />
       </div>
 
+      {/* US-26 — type de profil : parent (sans unité) ou membre d'une unité. */}
       <div className="space-y-1.5">
-        <Label htmlFor="unit">Unité (optionnel)</Label>
-        <Select name="unit">
-          <SelectTrigger id="unit">
-            <SelectValue placeholder="Choisir une unité…" />
-          </SelectTrigger>
-          <SelectContent>
-            {UNITS.map((u) => (
-              <SelectItem key={u} value={u}>
-                {UNIT_LABELS[u]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Label>Vous êtes</Label>
+        <input type="hidden" name="profileType" value={profileType} />
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              { value: "UNIT", label: "Membre d'une unité", hint: "Jeune ou chef" },
+              { value: "PARENT", label: "Parent", hint: "Parent d'un jeune" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setProfileType(opt.value)}
+              className={cn(
+                "rounded-xl border p-3 text-left transition-colors",
+                profileType === opt.value
+                  ? "border-forest bg-forest-soft"
+                  : "border-stone bg-snow hover:bg-sand",
+              )}
+            >
+              <span className="block text-sm font-bold text-earth">{opt.label}</span>
+              <span className="block text-xs text-trail">{opt.hint}</span>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {profileType === "UNIT" ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="unit">Unité (optionnel)</Label>
+          <Select name="unit">
+            <SelectTrigger id="unit">
+              <SelectValue placeholder="Choisir une unité…" />
+            </SelectTrigger>
+            <SelectContent>
+              {UNITS.map((u) => (
+                <SelectItem key={u} value={u}>
+                  {UNIT_LABELS[u]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : (
+        <p className="rounded-lg bg-sand px-3 py-2 text-xs text-trail">
+          En tant que parent, vous pourrez renseigner vos compétences et
+          disponibilités pour aider le groupe une fois votre compte validé.
+        </p>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="phone">Téléphone (optionnel)</Label>

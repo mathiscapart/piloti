@@ -38,6 +38,9 @@ model User {
   unit           String? // Unit: BLEUS | VERTS | ROUGES | PIOS | COMPAS
   phone          String?
   rejectedReason String?
+  // US-26 — profil demandé à l'inscription (ex. "PARENT") : simple indication
+  // pour aider l'admin à attribuer le bon rôle à la validation. Non privilégié.
+  requestedRole  String?
 
   // US-26 — profil parent enrichi (annuaire des compétences pour aider le
   // groupe). Champs facultatifs ; `skillsConsent` = consentement RGPD pour
@@ -62,6 +65,7 @@ model User {
   notifications     Notification[]    @relation("UserNotification")
   pushSubscriptions PushSubscription[]
   notificationPref  NotificationPreference?
+  announcements     Announcement[]    @relation("AnnouncementAuthor")
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -492,4 +496,23 @@ model NotificationPreference {
   updatedAt    DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// US-C01 / US-C05 — annonce du groupe (titre, texte, pièces jointes) ciblée par
+// audience, avec notification push + email. `urgent` (US-C05) force la diffusion
+// en contournant les préférences de notification du destinataire.
+model Announcement {
+  id          String   @id @default(cuid())
+  authorId    String
+  title       String
+  body        String
+  attachments String   @default("[]") // JSON string[] (chemins /uploads)
+  audience    String   @default("ALL") // ALL | PARENTS | <Unit> (cf. enums.ts)
+  urgent      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author User @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+
+  @@index([createdAt])
 }

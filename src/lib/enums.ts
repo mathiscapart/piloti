@@ -110,6 +110,17 @@ export const NOTIFICATION_TYPES = [
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
+// US-C01 — audience d'une annonce : tout le groupe, les parents, ou une branche.
+// Stockée en `Announcement.audience` ("ALL" | "PARENTS" | <Unit>).
+export const ANNOUNCEMENT_AUDIENCES = ["ALL", "PARENTS", ...UNITS] as const;
+export type AnnouncementAudience = (typeof ANNOUNCEMENT_AUDIENCES)[number];
+
+export const ANNOUNCEMENT_AUDIENCE_LABEL: Record<string, string> = {
+  ALL: "Tout le groupe",
+  PARENTS: "Les parents",
+  ...UNIT_LABEL,
+};
+
 // Canonical audit action names. Every withAudit() call should use one of these.
 export const AUDIT_ACTIONS = [
   "USER_REGISTERED",
@@ -139,5 +150,7 @@ export const AUDIT_ACTIONS = [
   "DONATION_SUBMITTED",
   "DONATION_APPROVED",
   "DONATION_REJECTED",
+  "ANNOUNCEMENT_PUBLISHED",
+  "ANNOUNCEMENT_DELETED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

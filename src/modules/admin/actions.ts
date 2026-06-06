@@ -74,14 +74,6 @@ async function hashWithBetterAuth(plaintext: string): Promise<string> {
   return ctx.password.hash(plaintext);
 }
 
-async function ensureAdmin(): Promise<{ id: string } | ActionResult> {
-  const user = await getCurrentUser();
-  if (!can(user, "admin.access")) {
-    return { error: "Accès réservé aux administrateurs." };
-  }
-  return user;
-}
-
 // US-32 — garde générique : renvoie l'utilisateur courant s'il a la permission,
 // sinon une erreur. Permet à la SECRÉTAIRE d'agir sur les inscriptions/comptes.
 type Actor = Awaited<ReturnType<typeof getCurrentUser>>;
@@ -351,7 +343,8 @@ export async function updateMemberProfile(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const admin = await ensureAdmin();
+  // US-26 — géré par l'équipe de groupe (RG) ou l'admin (annuaire des compétences).
+  const admin = await ensureCan("member.directory");
   if ("error" in admin) return admin;
 
   const parsed = memberProfileSchema.safeParse({

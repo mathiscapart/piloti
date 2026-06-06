@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
 import { passwordSchema } from "@/lib/password-policy";
 
@@ -19,6 +20,8 @@ const schema = z
     email: z.string().email("Email invalide."),
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Veuillez confirmer le mot de passe."),
+    // US-26 — profil : parent (sans unité) ou membre d'une unité.
+    profileType: z.enum(["UNIT", "PARENT"]).default("UNIT"),
     unit: z
       .union([z.enum(UNITS), z.literal("")])
       .optional()
@@ -45,6 +48,8 @@ export async function signUpAction(
     };
   }
 
+  const isParent = parsed.data.profileType === "PARENT";
+
   try {
     await auth.api.signUpEmail({
       body: {
@@ -53,11 +58,20 @@ export async function signUpAction(
         name: `${parsed.data.firstName} ${parsed.data.lastName}`,
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
-        unit: parsed.data.unit,
+        // Un parent n'est pas rattaché à une unité (branche).
+        unit: isParent ? undefined : parsed.data.unit,
         phone: parsed.data.phone,
       },
       headers: await headers(),
     });
+    // US-26 — mémorise le profil demandé pour guider l'admin à la validation
+    // (rôle non attribué ici : l'admin reste seul à valider, cf. US-32).
+    if (isParent) {
+      await db.user.update({
+        where: { email: parsed.data.email },
+        data: { requestedRole: "PARENT" },
+      });
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message.toLowerCase() : "";
     if (msg.includes("already") || msg.includes("exist")) {

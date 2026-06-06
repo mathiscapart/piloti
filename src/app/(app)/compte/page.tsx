@@ -7,15 +7,30 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
 import { vapidPublicKey } from "@/lib/push";
 
-import { PasswordForm, ProfileForm } from "./account-forms";
+import { PasswordForm, ProfileForm, SkillsProfileForm } from "./account-forms";
 
 export default async function AccountPage() {
   const user = await getCurrentUser();
   const roles = effectiveRoles(user);
-  const pref = await db.notificationPreference.findUnique({
-    where: { userId: user.id },
-    select: { emailEnabled: true, pushEnabled: true },
-  });
+  const isParent = roles.includes("PARENT");
+  const [pref, profile] = await Promise.all([
+    db.notificationPreference.findUnique({
+      where: { userId: user.id },
+      select: { emailEnabled: true, pushEnabled: true },
+    }),
+    isParent
+      ? db.user.findUnique({
+          where: { id: user.id },
+          select: {
+            profession: true,
+            skills: true,
+            availability: true,
+            helpNotes: true,
+            skillsConsent: true,
+          },
+        })
+      : Promise.resolve(null),
+  ]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -55,6 +70,17 @@ export default async function AccountPage() {
         lastName={user.lastName}
         phone={user.phone ?? ""}
       />
+
+      {/* US-26 — compétences renseignées par le parent lui-même. */}
+      {isParent ? (
+        <SkillsProfileForm
+          profession={profile?.profession ?? ""}
+          skills={profile?.skills ?? ""}
+          availability={profile?.availability ?? ""}
+          helpNotes={profile?.helpNotes ?? ""}
+          skillsConsent={profile?.skillsConsent ?? false}
+        />
+      ) : null}
 
       {/* Mot de passe — auto-service via better-auth. */}
       <PasswordForm />

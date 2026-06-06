@@ -518,6 +518,47 @@ export type ParentDirectoryEntry = Awaited<
   ReturnType<typeof listParentDirectory>
 >[number];
 
+// US-26 — gestion : TOUS les parents actifs (consentement ou non), pour que
+// l'équipe de groupe puisse atteindre un parent et compléter/relancer son profil.
+// N'expose pas les compétences (juste un état) — réservé aux member.directory.
+export async function listAllParents() {
+  const candidates = await db.user.findMany({
+    where: { status: "ACTIVE", roles: { contains: "PARENT" } },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      roles: true,
+      skillsConsent: true,
+      profession: true,
+      skills: true,
+      availability: true,
+      helpNotes: true,
+    },
+  });
+  return candidates
+    .filter((p) => {
+      try {
+        return (JSON.parse(p.roles) as string[]).includes("PARENT");
+      } catch {
+        return false;
+      }
+    })
+    .map((p) => ({
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      consent: p.skillsConsent,
+      hasProfile:
+        !!p.profession || !!p.skills || !!p.availability || !!p.helpNotes,
+    }));
+}
+
+export type ParentManagementEntry = Awaited<
+  ReturnType<typeof listAllParents>
+>[number];
+
 // ----------------------------------------------------------------------------
 // Incidents — liste & détail
 // ----------------------------------------------------------------------------

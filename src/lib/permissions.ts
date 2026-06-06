@@ -44,6 +44,8 @@ export const ACTIONS = [
   "donation.create",
   "donation.view", // consulter les dons (RESPONSABLE_MATERIEL + RG lecture seule)
   "donation.review",
+  // Communication
+  "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -102,6 +104,8 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "donation.create": [], // géré par ANY_ACTIVE
   "donation.view": [MAT, RG],
   "donation.review": [MAT],
+  // Communication — publier une annonce / diffusion urgente : encadrants.
+  "announcement.publish": [CHEF, RG],
 };
 
 /**

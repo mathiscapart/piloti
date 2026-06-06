@@ -12,6 +12,7 @@ const SUCCESS_MESSAGES: Record<string, string> = {
   "loan-returned": "Retour validé.",
   "loan-drying": "Article mis en séchage.",
   "incident-reported": "Incident signalé. Merci !",
+  "announcement-published": "Annonce publiée.",
 };
 
 /**

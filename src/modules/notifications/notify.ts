@@ -14,6 +14,9 @@ export interface NotifyInput {
   link?: string | null;
   channelId?: string | null;
   messageId?: string | null;
+  // US-C05 — diffusion urgente : force l'envoi email + push en contournant les
+  // préférences du destinataire.
+  force?: boolean;
 }
 
 function absoluteUrl(link?: string | null): string {
@@ -97,8 +100,8 @@ export async function notify(input: NotifyInput): Promise<void> {
     });
     if (!user) return;
 
-    const emailEnabled = user.notificationPref?.emailEnabled ?? true;
-    const pushEnabled = user.notificationPref?.pushEnabled ?? true;
+    const emailEnabled = input.force || (user.notificationPref?.emailEnabled ?? true);
+    const pushEnabled = input.force || (user.notificationPref?.pushEnabled ?? true);
     const url = absoluteUrl(input.link);
 
     const tasks: Promise<unknown>[] = [];

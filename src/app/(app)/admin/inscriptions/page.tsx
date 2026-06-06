@@ -56,6 +56,7 @@ export default async function AdminInscriptionsPage() {
                 <p className="text-sm text-trail">{u.email}</p>
                 <p className="mt-1 text-xs text-trail">
                   Demande le {DATE_FMT.format(u.createdAt)}
+                  {u.requestedRole === "PARENT" ? " · 👪 Parent" : ""}
                   {u.unit ? ` · unité ${u.unit}` : ""}
                   {u.phone ? ` · ${u.phone}` : ""}
                 </p>
@@ -69,6 +70,7 @@ export default async function AdminInscriptionsPage() {
                   userId={u.id}
                   fullName={`${u.firstName} ${u.lastName}`}
                   allowPrivileged={canAssignPrivileged}
+                  requestedRole={u.requestedRole}
                 />
               </div>
             </li>

@@ -28,12 +28,21 @@ interface Props {
   userId: string;
   fullName: string;
   allowPrivileged?: boolean;
+  // US-26 — rôle demandé à l'inscription (ex. "PARENT") : pré-sélectionné.
+  requestedRole?: string | null;
 }
 
-export function ApproveDialog({ userId, fullName, allowPrivileged = true }: Props) {
+export function ApproveDialog({
+  userId,
+  fullName,
+  allowPrivileged = true,
+  requestedRole = null,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(requestedRole ? [requestedRole] : []),
+  );
   const [unit, setUnit] = useState<string>("");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -81,8 +90,8 @@ export function ApproveDialog({ userId, fullName, allowPrivileged = true }: Prop
       onOpenChange={(next) => {
         if (!next) {
           setError(null);
-          setSelected(new Set());
-        setUnit("");
+          setSelected(new Set(requestedRole ? [requestedRole] : []));
+          setUnit("");
         }
         setOpen(next);
       }}
@@ -100,6 +109,11 @@ export function ApproveDialog({ userId, fullName, allowPrivileged = true }: Prop
             {fullName} pourra se connecter avec le(s) rôle(s) choisi(s).
           </DialogDescription>
         </DialogHeader>
+        {requestedRole ? (
+          <p className="rounded-lg bg-sky-soft px-3 py-2 text-xs font-medium text-sky-ink">
+            Inscrit comme <strong>{ROLE_LABEL[requestedRole as Role] ?? requestedRole}</strong> — rôle pré-sélectionné.
+          </p>
+        ) : null}
         <div className="space-y-2">
           {visibleRoles.map((role) => (
             <label

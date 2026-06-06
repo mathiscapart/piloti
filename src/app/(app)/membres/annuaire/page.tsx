@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
-import { listParentDirectory } from "@/modules/inventory/queries";
+import { cn } from "@/lib/utils";
+import { listAllParents, listParentDirectory } from "@/modules/inventory/queries";
 
 interface PageProps {
   searchParams: Promise<{ q?: string }>;
@@ -19,7 +20,10 @@ export default async function ParentDirectoryPage({ searchParams }: PageProps) {
 
   const { q } = await searchParams;
   const search = (q ?? "").trim();
-  const parents = await listParentDirectory(search);
+  const [parents, allParents] = await Promise.all([
+    listParentDirectory(search),
+    listAllParents(),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -101,6 +105,50 @@ export default async function ParentDirectoryPage({ searchParams }: PageProps) {
           ))}
         </ul>
       )}
+
+      {/* US-26 — gestion : atteindre tout parent pour compléter/relancer son
+          profil (y compris ceux sans consentement, non listés ci-dessus). */}
+      {allParents.length > 0 ? (
+        <section className="space-y-3 border-t border-stone/60 pt-6">
+          <div>
+            <h2 className="font-bold text-earth">Gérer les parents</h2>
+            <p className="text-sm text-trail">
+              Tous les parents du groupe. Cliquez pour compléter un profil ou
+              relancer un parent qui n&apos;a pas encore renseigné ses
+              compétences.
+            </p>
+          </div>
+          <ul className="divide-y divide-stone/40 overflow-hidden rounded-2xl bg-snow shadow-card">
+            {allParents.map((p) => {
+              const label = !p.hasProfile
+                ? { text: "À compléter", tone: "bg-sun-soft text-sun-ink" }
+                : !p.consent
+                  ? { text: "Consentement manquant", tone: "bg-brick-soft text-brick-ink" }
+                  : { text: "Publié", tone: "bg-forest-soft text-forest-ink" };
+              return (
+                <li key={p.id}>
+                  <Link
+                    href={`/membres/${p.id}`}
+                    className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-sand"
+                  >
+                    <span className="min-w-0 truncate font-bold text-earth">
+                      {p.firstName} {p.lastName}
+                    </span>
+                    <span
+                      className={cn(
+                        "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold",
+                        label.tone,
+                      )}
+                    >
+                      {label.text}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

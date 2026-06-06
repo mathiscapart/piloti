@@ -17,6 +17,7 @@ export async function listPendingUsers() {
       lastName: true,
       unit: true,
       phone: true,
+      requestedRole: true,
       createdAt: true,
     },
   });

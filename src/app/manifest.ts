@@ -6,7 +6,7 @@ import type { MetadataRoute } from "next";
 // navigation interne reste dans l'app.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Piloti — Gestion matériel scout",
+    name: "Piloti",
     short_name: "Piloti",
     description:
       "Application de gestion du matériel pour les Scouts et Guides de France.",

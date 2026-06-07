@@ -63,7 +63,13 @@ services:
       start_period: 15s
       retries: 3
     networks:
+      # `internal` : chemin app↔traefik (isolé d'Internet). Traefik route via ce
+      # réseau (cf. label traefik.docker.network ci-dessous).
       - internal
+      # `tunnel` (non-internal) : SORTIE Internet nécessaire aux notifications
+      # push (passerelles Apple/Google/Mozilla) et aux emails (Resend). Aucun
+      # port n'est publié → l'ENTRÉE reste uniquement via Traefik→cloudflared.
+      - tunnel
     restart: unless-stopped
     labels:
       - "traefik.enable=true"

@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
-import { publishChannelEvent } from "@/lib/realtime";
+import { publishChannelEvent, publishUserEvent } from "@/lib/realtime";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
@@ -233,4 +233,18 @@ export async function markChannelRead(channelId: string): Promise<void> {
     create: { channelId, userId: user.id, lastReadAt: new Date() },
     update: { lastReadAt: new Date() },
   });
+  // Marque aussi la notification de cloche du salon comme lue (sinon les
+  // messages suivants se coalescent dessus → plus de push).
+  const cleared = await db.notification.updateMany({
+    where: {
+      userId: user.id,
+      type: "CHANNEL_MESSAGE",
+      channelId,
+      readAt: null,
+    },
+    data: { readAt: new Date() },
+  });
+  if (cleared.count > 0) {
+    publishUserEvent(user.id, { type: "notification" });
+  }
 }

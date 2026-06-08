@@ -91,11 +91,29 @@ export async function markConversationRead(otherId: string): Promise<void> {
     where: { conversationId: convo.id, senderId: otherId, readAt: null },
     data: { readAt: new Date() },
   });
+
+  // Marque aussi la notification de cloche correspondante comme lue. Sans ça,
+  // elle resterait non lue et les DM suivants se coalesceraient dessus
+  // (isNew=false) → plus aucun push tant que la conversation n'est pas rouverte.
+  const cleared = await db.notification.updateMany({
+    where: {
+      userId: user.id,
+      type: "DIRECT_MESSAGE",
+      channelId: convo.id,
+      readAt: null,
+    },
+    data: { readAt: new Date() },
+  });
+
   if (res.count > 0) {
     // Accusé de lecture en direct côté expéditeur + maj de ma propre liste
     // (le compteur de non-lus retombe à 0).
     publishUserEvent(otherId, { type: "dm", payload: { read: true } });
     publishUserEvent(user.id, { type: "dm", payload: { readSelf: true } });
+  }
+  if (cleared.count > 0) {
+    // Rafraîchit ma cloche (la notification est maintenant lue).
+    publishUserEvent(user.id, { type: "notification" });
   }
 }
 

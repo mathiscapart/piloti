@@ -13,13 +13,16 @@ import {
   type LoanListItem,
 } from "@/modules/inventory/queries";
 
+// « En cours » est le défaut (masque les prêts terminés). « Tous » les inclut.
 const FILTERS: { value: LoanFilter; label: string }[] = [
-  { value: "all", label: "Tous" },
+  { value: "actifs", label: "En cours" },
   { value: "retard", label: "En retard" },
   { value: "bientot", label: "Bientôt dus" },
   { value: "sechage", label: "Séchage" },
+  { value: "all", label: "Tous" },
 ];
 
+const DEFAULT_FILTER: LoanFilter = "actifs";
 const VALID_FILTERS = new Set<LoanFilter>(FILTERS.map((f) => f.value));
 
 interface PageProps {
@@ -29,10 +32,10 @@ interface PageProps {
 export default async function PretsPage({ searchParams }: PageProps) {
   await requireCan("loan.view");
   const params = await searchParams;
-  const raw = params.filter ?? "all";
+  const raw = params.filter ?? DEFAULT_FILTER;
   const filter: LoanFilter = VALID_FILTERS.has(raw as LoanFilter)
     ? (raw as LoanFilter)
-    : "all";
+    : DEFAULT_FILTER;
 
   const [loans, categories, borrowers] = await Promise.all([
     listLoans(filter),
@@ -67,9 +70,7 @@ export default async function PretsPage({ searchParams }: PageProps) {
         <h1 className="text-3xl font-black text-earth md:text-4xl">Prêts</h1>
         <p className="text-trail">
           {groupedLoans.length} prêt{groupedLoans.length > 1 ? "s" : ""}
-          {filter !== "all"
-            ? ` · ${FILTERS.find((f) => f.value === filter)?.label}`
-            : ""}
+          {` · ${FILTERS.find((f) => f.value === filter)?.label}`}
         </p>
       </header>
 
@@ -83,7 +84,7 @@ export default async function PretsPage({ searchParams }: PageProps) {
           return (
             <Link
               key={f.value}
-              href={f.value === "all" ? "/prets" : `/prets?filter=${f.value}`}
+              href={f.value === DEFAULT_FILTER ? "/prets" : `/prets?filter=${f.value}`}
               className={cn(
                 "whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-bold transition-colors",
                 active
@@ -102,11 +103,15 @@ export default async function PretsPage({ searchParams }: PageProps) {
       {loans.length === 0 ? (
         <EmptyState
           icon={Truck}
-          title={filter === "all" ? "Aucun prêt enregistré" : "Aucun prêt dans ce filtre"}
+          title={
+            filter === DEFAULT_FILTER
+              ? "Aucun prêt en cours"
+              : "Aucun prêt dans ce filtre"
+          }
           description={
-            filter === "all"
+            filter === DEFAULT_FILTER
               ? "Enregistre un prêt depuis le bouton « Nouveau prêt »."
-              : "Essaie un autre filtre."
+              : "Essaie un autre filtre (« Tous » inclut les prêts terminés)."
           }
         />
       ) : (

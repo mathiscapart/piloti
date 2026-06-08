@@ -266,7 +266,9 @@ export async function listLoans(filter: LoanFilter = "all") {
 
   const loans = await db.loan.findMany({
     where,
-    orderBy: [{ expectedReturn: "asc" }],
+    // Les derniers prêts créés en premier (les lignes d'un même prêt groupé
+    // partagent leur createdAt → elles restent ensemble).
+    orderBy: [{ createdAt: "desc" }],
     include: {
       equipment: { select: { id: true, name: true, category: true } },
       borrower: {

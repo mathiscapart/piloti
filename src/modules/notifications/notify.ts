@@ -31,14 +31,18 @@ function absoluteUrl(link?: string | null): string {
 async function upsertNotification(
   input: NotifyInput,
 ): Promise<{ id: string; isNew: boolean; count: number; body: string }> {
-  const coalesces = input.type === "CHANNEL_MESSAGE" && Boolean(input.channelId);
+  // Coalescence des messages d'un même fil (salon ou conversation) : on regroupe
+  // les notifications non lues en une seule ligne (« 3 nouveaux messages »).
+  const coalesces =
+    (input.type === "CHANNEL_MESSAGE" || input.type === "DIRECT_MESSAGE") &&
+    Boolean(input.channelId);
 
   if (coalesces) {
     const existing = await db.notification.findFirst({
       where: {
         userId: input.userId,
         channelId: input.channelId,
-        type: "CHANNEL_MESSAGE",
+        type: input.type,
         readAt: null,
       },
       orderBy: { createdAt: "desc" },

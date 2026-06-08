@@ -52,7 +52,8 @@ export function subscribeChannel(
 // ----------------------------------------------------------------------------
 
 export interface UserEvent {
-  type: "notification";
+  // "notification" → rafraîchit la cloche ; "dm" → rafraîchit la messagerie.
+  type: "notification" | "dm";
   payload?: Record<string, unknown>;
 }
 

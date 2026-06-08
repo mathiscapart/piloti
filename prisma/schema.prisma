@@ -67,6 +67,9 @@ model User {
   notificationPref  NotificationPreference?
   announcements     Announcement[]    @relation("AnnouncementAuthor")
   announcementReads AnnouncementRead[] @relation("AnnouncementReadUser")
+  conversationsA    Conversation[]    @relation("ConversationUserA")
+  conversationsB    Conversation[]    @relation("ConversationUserB")
+  sentDirectMessages DirectMessage[]  @relation("DirectMessageSender")
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -532,4 +535,40 @@ model AnnouncementRead {
 
   @@unique([announcementId, userId])
   @@index([announcementId])
+}
+
+// US-C04 — messagerie directe 1-to-1. Une conversation par paire d'utilisateurs ;
+// les ids sont rangés de façon canonique (userAId < userBId) pour garantir
+// l'unicité quel que soit l'ordre d'ouverture.
+model Conversation {
+  id        String   @id @default(cuid())
+  userAId   String
+  userBId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt // remontée à chaque message (tri de la liste)
+
+  userA    User            @relation("ConversationUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB    User            @relation("ConversationUserB", fields: [userBId], references: [id], onDelete: Cascade)
+  messages DirectMessage[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId])
+  @@index([userBId])
+  @@index([updatedAt])
+}
+
+// US-C04 — message direct. `readAt` = accusé de lecture (lu par le destinataire,
+// l'unique autre participant de la conversation 1-to-1).
+model DirectMessage {
+  id             String    @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("DirectMessageSender", fields: [senderId], references: [id])
+
+  @@index([conversationId, createdAt])
 }

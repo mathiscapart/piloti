@@ -105,7 +105,8 @@ export type EventType = (typeof EVENT_TYPES)[number];
 export const NOTIFICATION_TYPES = [
   "CHANNEL_MESSAGE", // nouveau(x) message(s) dans un salon accessible
   "ANNOUNCEMENT", // US-C01 — annonce publiée
-  "MENTION", // US-C04 — mention directe
+  "DIRECT_MESSAGE", // US-C04 — message privé reçu
+  "MENTION", // mention directe
   "LOAN_OVERDUE", // US-07 — prêt en retard
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

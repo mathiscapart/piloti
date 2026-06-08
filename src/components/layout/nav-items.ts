@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Megaphone,
+  MessageCircle,
   MessageSquare,
   Package,
   Truck,
@@ -57,6 +58,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/annonces", label: "Annonces", icon: Megaphone },
       { href: "/communication", label: "Communication", icon: MessageSquare },
+      { href: "/messages", label: "Messages", icon: MessageCircle },
       { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
     ],
   },

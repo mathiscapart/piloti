@@ -68,8 +68,12 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Le 1er motif exclut déjà `uploads` ET tout fichier à extension : les images
+  // uploadées (annonces, photos d'incidents) sont servies comme des fichiers
+  // statiques (chemins en UUID aléatoire, non devinables). NE PAS rajouter
+  // "/uploads/:path*" ici : ça forçait le middleware sur ces requêtes → 307 vers
+  // /login → images jamais affichées.
   matcher: [
     "/((?!api|_next/static|_next/image|favicon.ico|uploads|.*\\.[\\w]+).*)",
-    "/uploads/:path*",
   ],
 };

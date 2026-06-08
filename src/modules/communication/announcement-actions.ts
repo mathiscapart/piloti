@@ -12,6 +12,9 @@ import { can, effectiveRoles } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
+import { audienceUserIds } from "./audience";
+import { getAnnouncementReaders, type ReaderEntry } from "./announcement-queries";
+
 const createSchema = z.object({
   title: z.string().trim().min(1, "Titre requis.").max(140),
   body: z.string().trim().min(1, "Message requis."),
@@ -19,13 +22,6 @@ const createSchema = z.object({
   urgent: z.boolean(),
   attachments: z.array(z.string()).default([]),
 });
-
-interface RecipientUser {
-  id: string;
-  role: string;
-  roles: string | string[] | null;
-  unit: string | null;
-}
 
 // Résout les destinataires d'une annonce selon son audience (ACTIVE, hors auteur).
 async function resolveRecipients(
@@ -36,12 +32,7 @@ async function resolveRecipients(
     where: { status: "ACTIVE" },
     select: { id: true, role: true, roles: true, unit: true },
   });
-  const match = (u: RecipientUser) => {
-    if (audience === "ALL") return true;
-    if (audience === "PARENTS") return effectiveRoles(u).includes("PARENT");
-    return u.unit === audience; // une branche précise
-  };
-  return users.filter((u) => u.id !== excludeUserId && match(u)).map((u) => u.id);
+  return audienceUserIds(users, audience, excludeUserId);
 }
 
 // US-C01 / US-C05 — publie une annonce et notifie les destinataires (in-app +
@@ -135,4 +126,76 @@ export async function deleteAnnouncement(
 
   revalidatePath("/annonces");
   return { error: null };
+}
+
+// US-C03 — marque comme lues les annonces affichées à l'utilisateur (appelé au
+// chargement du fil). Idempotent (skipDuplicates). Non audité (volume, dérivé).
+export async function markAnnouncementsRead(ids: string[]): Promise<void> {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+  const user = await getCurrentUser();
+  // SQLite ne supporte pas `createMany(skipDuplicates)` via Prisma → upserts
+  // idempotents (l'`update` vide préserve le `readAt` de la 1re lecture).
+  await Promise.all(
+    ids.slice(0, 100).map((announcementId) =>
+      db.announcementRead
+        .upsert({
+          where: { announcementId_userId: { announcementId, userId: user.id } },
+          create: { announcementId, userId: user.id },
+          update: {},
+        })
+        .catch(() => {}),
+    ),
+  );
+}
+
+// US-C03 — détail lecteurs / non-lecteurs (pour le dialog). Auteur ou ADMIN.
+export async function fetchAnnouncementReaders(
+  announcementId: string,
+): Promise<ReaderEntry[]> {
+  const user = await getCurrentUser();
+  const announcement = await db.announcement.findUnique({
+    where: { id: announcementId },
+    select: { authorId: true },
+  });
+  if (!announcement) return [];
+  const isAdmin = effectiveRoles(user).includes("ADMIN");
+  if (announcement.authorId !== user.id && !isAdmin) return [];
+  return getAnnouncementReaders(announcementId);
+}
+
+// US-C03 — relance les destinataires qui n'ont pas lu l'annonce (notification
+// ciblée). Réservé à l'auteur ou à un ADMIN.
+export async function remindUnreadAnnouncement(
+  announcementId: string,
+): Promise<ActionResult & { reminded?: number }> {
+  const user = await getCurrentUser();
+  const announcement = await db.announcement.findUnique({
+    where: { id: announcementId },
+    select: { id: true, authorId: true, title: true, audience: true },
+  });
+  if (!announcement) return { error: "Annonce introuvable." };
+
+  const isAdmin = effectiveRoles(user).includes("ADMIN");
+  if (announcement.authorId !== user.id && !isAdmin) {
+    return { error: "Tu ne peux relancer que tes propres annonces." };
+  }
+
+  const recipients = await resolveRecipients(announcement.audience, announcement.authorId);
+  const reads = await db.announcementRead.findMany({
+    where: { announcementId },
+    select: { userId: true },
+  });
+  const readers = new Set(reads.map((r) => r.userId));
+  const unread = recipients.filter((id) => !readers.has(id));
+  if (unread.length === 0) return { error: null, reminded: 0 };
+
+  await notifyMany(unread, (userId) => ({
+    userId,
+    type: "ANNOUNCEMENT",
+    title: `🔔 Rappel · ${announcement.title}`,
+    body: "Tu n'as pas encore lu cette annonce.",
+    link: "/annonces",
+  }));
+
+  return { error: null, reminded: unread.length };
 }

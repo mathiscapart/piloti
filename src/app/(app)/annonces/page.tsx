@@ -8,7 +8,11 @@ import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { listAnnouncementsForUser } from "@/modules/communication/announcement-queries";
 
-import { DeleteAnnouncementButton } from "./AnnouncementActions";
+import {
+  DeleteAnnouncementButton,
+  MarkAnnouncementsRead,
+  ReadStatsButton,
+} from "./AnnouncementActions";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +64,8 @@ export default async function AnnouncementsPage() {
         />
       ) : (
         <ul className="space-y-4">
+          {/* US-C03 — marque les annonces affichées comme lues. */}
+          <MarkAnnouncementsRead ids={announcements.map((a) => a.id)} />
           {announcements.map((a) => (
             <li
               key={a.id}
@@ -96,10 +102,20 @@ export default async function AnnouncementsPage() {
                 </div>
               ) : null}
 
-              <p className="pt-1 text-xs text-trail">
-                {a.authorName} · {DATE_FMT.format(a.createdAt)} ·{" "}
-                {ANNOUNCEMENT_AUDIENCE_LABEL[a.audience] ?? a.audience}
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <p className="text-xs text-trail">
+                  {a.authorName} · {DATE_FMT.format(a.createdAt)} ·{" "}
+                  {ANNOUNCEMENT_AUDIENCE_LABEL[a.audience] ?? a.audience}
+                </p>
+                {/* US-C03 — taux de lecture + relance (auteur / admin). */}
+                {a.stats ? (
+                  <ReadStatsButton
+                    id={a.id}
+                    read={a.stats.read}
+                    total={a.stats.total}
+                  />
+                ) : null}
+              </div>
             </li>
           ))}
         </ul>

@@ -66,6 +66,7 @@ model User {
   pushSubscriptions PushSubscription[]
   notificationPref  NotificationPreference?
   announcements     Announcement[]    @relation("AnnouncementAuthor")
+  announcementReads AnnouncementRead[] @relation("AnnouncementReadUser")
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -512,7 +513,23 @@ model Announcement {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  author User @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  author User              @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+  reads  AnnouncementRead[]
 
   @@index([createdAt])
+}
+
+// US-C03 — suivi de lecture d'une annonce (qui l'a lue, quand). Une ligne par
+// (annonce, lecteur) ; alimente le taux de lecture et la relance des non-lecteurs.
+model AnnouncementRead {
+  id             String   @id @default(cuid())
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  user         User         @relation("AnnouncementReadUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([announcementId, userId])
+  @@index([announcementId])
 }

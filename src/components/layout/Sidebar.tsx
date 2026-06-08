@@ -39,8 +39,10 @@ export function Sidebar({
   notifications: NotificationSnapshot;
 }) {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string, aliases?: string[]) =>
+    [href, ...(aliases ?? [])].some(
+      (h) => pathname === h || pathname.startsWith(`${h}/`),
+    );
 
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-stone/60 bg-snow md:flex">
@@ -72,7 +74,11 @@ export function Sidebar({
                 {section.title}
               </p>
               {items.map((item) => (
-                <NavLink key={item.href} item={item} active={isActive(item.href)} />
+                <NavLink
+                  key={item.href}
+                  item={item}
+                  active={isActive(item.href, item.aliases)}
+                />
               ))}
             </div>
           );

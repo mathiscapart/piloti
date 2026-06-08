@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { listChannelTree } from "@/modules/communication/queries";
 
 import { ChannelSidebar } from "./ChannelSidebar";
+import { MessagingTabs } from "./MessagingTabs";
 
 export default async function CommunicationPage() {
   const user = await getCurrentUser();
@@ -12,10 +13,9 @@ export default async function CommunicationPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <header>
-        <h1 className="text-3xl font-black text-earth md:text-4xl">
-          Communication
-        </h1>
+      <header className="space-y-3">
+        <h1 className="text-3xl font-black text-earth md:text-4xl">Messagerie</h1>
+        <MessagingTabs active="salons" />
         <p className="text-trail">Salons de discussion du groupe.</p>
       </header>
 

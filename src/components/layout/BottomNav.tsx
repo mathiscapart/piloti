@@ -12,8 +12,10 @@ import { PRIMARY_NAV } from "./nav-items";
 
 export function BottomNav({ user }: { user: CurrentUser }) {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (item: { href: string; aliases?: string[] }) =>
+    [item.href, ...(item.aliases ?? [])].some(
+      (h) => pathname === h || pathname.startsWith(`${h}/`),
+    );
 
   // Raccourcis visibles selon le rôle (US-29) + 1 colonne pour « Menu ».
   const items = PRIMARY_NAV.filter((i) => !i.requires || can(user, i.requires));
@@ -27,7 +29,7 @@ export function BottomNav({ user }: { user: CurrentUser }) {
       >
         {items.map((item) => {
           const Icon = item.icon;
-          const active = isActive(item.href);
+          const active = isActive(item);
           return (
             <li key={item.href} className="min-w-0">
               <Link

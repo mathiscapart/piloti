@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Megaphone,
-  MessageCircle,
   MessageSquare,
   Package,
   Truck,
@@ -26,6 +25,9 @@ export interface NavItem {
   // Permission requise pour voir l'entrée (filtrage par rôle, US-29).
   // Absente = visible par tout utilisateur actif.
   requires?: Action;
+  // Chemins additionnels qui activent (surlignent) cette entrée — ex. la
+  // Messagerie regroupe /communication (salons) ET /messages (privés).
+  aliases?: string[];
 }
 
 // Raccourcis affichés directement dans la bottom-nav mobile (les plus utilisés).
@@ -34,7 +36,7 @@ export const PRIMARY_NAV: NavItem[] = [
   { href: "/dashboard", label: "Tableau de bord", shortLabel: "Accueil", icon: LayoutDashboard },
   { href: "/stock", label: "Stock", icon: Package, requires: "equipment.view" },
   { href: "/prets", label: "Prêts", icon: Truck, requires: "equipment.view" },
-  { href: "/communication", label: "Communication", shortLabel: "Messages", icon: MessageSquare },
+  { href: "/communication", label: "Messagerie", shortLabel: "Messages", icon: MessageSquare, aliases: ["/messages"] },
 ];
 
 // Tous les modules, groupés par domaine. Filtrés par rôle à l'affichage.
@@ -57,8 +59,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: "Vie du groupe",
     items: [
       { href: "/annonces", label: "Annonces", icon: Megaphone },
-      { href: "/communication", label: "Communication", icon: MessageSquare },
-      { href: "/messages", label: "Messages", icon: MessageCircle },
+      { href: "/communication", label: "Messagerie", icon: MessageSquare, aliases: ["/messages"] },
       { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
     ],
   },

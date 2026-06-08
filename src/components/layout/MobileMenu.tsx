@@ -54,9 +54,9 @@ export function MobileMenu({ user }: { user: CurrentUser }) {
               <ul className="mt-2 grid grid-cols-2 gap-2">
                 {section.items.map((item) => {
                   const Icon = item.icon;
-                  const active =
-                    pathname === item.href ||
-                    pathname.startsWith(`${item.href}/`);
+                  const active = [item.href, ...(item.aliases ?? [])].some(
+                    (h) => pathname === h || pathname.startsWith(`${h}/`),
+                  );
                   return (
                     <li key={item.href}>
                       <Link

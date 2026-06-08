@@ -20,6 +20,8 @@ import type {
   ConversationSummary,
 } from "@/modules/communication/dm-queries";
 
+import { MessagingTabs } from "../communication/MessagingTabs";
+
 function timeAgo(date: Date): string {
   const s = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
   if (s < 60) return "à l'instant";
@@ -77,12 +79,12 @@ export function ConversationList({
 
   return (
     <div className="space-y-5">
-      <header className="flex items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-3xl font-black text-earth">
-          <MessageCircle className="size-7 text-forest" />
-          Messages
-        </h1>
-        <NewMessageDialog contacts={contacts} onPick={(id) => router.push(`/messages/${id}`)} />
+      <header className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-3xl font-black text-earth md:text-4xl">Messagerie</h1>
+          <NewMessageDialog contacts={contacts} onPick={(id) => router.push(`/messages/${id}`)} />
+        </div>
+        <MessagingTabs active="prives" />
       </header>
 
       {conversations.length === 0 ? (

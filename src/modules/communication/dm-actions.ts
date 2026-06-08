@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { publishUserEvent } from "@/lib/realtime";
@@ -59,15 +61,19 @@ export async function sendDirectMessage(
   publishUserEvent(otherId, { type: "dm", payload: { from: user.id } });
   publishUserEvent(user.id, { type: "dm", payload: { to: otherId } });
 
-  // Notification (cloche + email + push), coalescée par conversation.
-  void notify({
-    userId: otherId,
-    type: "DIRECT_MESSAGE",
-    title: `${user.firstName} ${user.lastName}`,
-    body: text.slice(0, 160),
-    link: `/messages/${user.id}`,
-    channelId: convo.id,
-  });
+  // Notification (cloche + email + push), coalescée par conversation. `after()`
+  // garantit l'exécution APRÈS la réponse (un `void` non-attendu pouvait être
+  // coupé avant l'envoi push/email).
+  after(() =>
+    notify({
+      userId: otherId,
+      type: "DIRECT_MESSAGE",
+      title: `${user.firstName} ${user.lastName}`,
+      body: text.slice(0, 160),
+      link: `/messages/${user.id}`,
+      channelId: convo.id,
+    }),
+  );
 
   return { error: null };
 }

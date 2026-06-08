@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
@@ -103,8 +105,9 @@ export async function postMessage(
   publishChannelEvent({ type: "message", channelId, payload: { id: msg.id } });
 
   // Notifie les membres du salon (in-app temps réel + email/push selon prefs).
-  // Fire-and-forget : ne bloque pas la réponse à l'auteur en cas de lenteur.
-  void notifyChannelMessage(channel, user, body, msg.id);
+  // `after()` exécute le fan-out APRÈS la réponse de façon garantie (un `void`
+  // non-attendu pouvait être coupé avant l'envoi push/email).
+  after(() => notifyChannelMessage(channel, user, body, msg.id));
 
   return { error: null };
 }

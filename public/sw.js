@@ -14,6 +14,10 @@ self.addEventListener("push", (event) => {
     icon: "/icon.png",
     badge: "/icon.png",
     tag: data.tag || undefined,
+    // Ré-alerte (bannière + son) même quand une notif du même tag existe déjà.
+    // Sans ça, iOS remplace silencieusement la précédente (jamais balayée du
+    // centre de notifications) → aucune alerte pour le nouveau message.
+    renotify: data.tag ? true : undefined,
     data: { url: data.url || "/" },
   };
   event.waitUntil(self.registration.showNotification(title, options));

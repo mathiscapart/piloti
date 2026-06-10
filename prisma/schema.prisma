@@ -302,13 +302,17 @@ model AuditLog {
 // ----------------------------------------------------------------------------
 
 model Event {
-  id        String   @id @default(cuid())
-  name      String
-  type      String // EventType: REUNION | WEEK_END | CAMP | SERVICE
-  startDate DateTime
-  endDate   DateTime
-  unit      String? // Unit
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  name        String
+  type        String // EventType: REUNION | WEEK_END | CAMP | SERVICE
+  startDate   DateTime
+  endDate     DateTime
+  unit        String? // Unit — null = tout le groupe
+  location    String?
+  description String?
+  createdById String? // auteur (chef) — null si compte supprimé
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 
   @@index([startDate])
 }

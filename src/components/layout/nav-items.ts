@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  CalendarDays,
   Contact,
   FolderOpen,
   Gift,
@@ -58,6 +59,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Vie du groupe",
     items: [
+      { href: "/planning", label: "Planning", icon: CalendarDays, requires: "event.view" },
       { href: "/annonces", label: "Annonces", icon: Megaphone },
       { href: "/communication", label: "Messagerie", icon: MessageSquare, aliases: ["/messages"] },
       { href: "/membres", label: "Membres", icon: Users, requires: "member.view" },

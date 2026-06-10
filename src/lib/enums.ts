@@ -100,6 +100,13 @@ export type DonationStatus = (typeof DONATION_STATUSES)[number];
 export const EVENT_TYPES = ["REUNION", "WEEK_END", "CAMP", "SERVICE"] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
+export const EVENT_TYPE_LABEL: Record<EventType, string> = {
+  REUNION: "Réunion",
+  WEEK_END: "Week-end",
+  CAMP: "Camp",
+  SERVICE: "Service",
+};
+
 // Types de notification (cloche in-app + email + push). Extensible : chaque
 // nouveau déclencheur (annonce, mention, alerte retard…) ajoute une valeur ici.
 export const NOTIFICATION_TYPES = [
@@ -153,5 +160,8 @@ export const AUDIT_ACTIONS = [
   "DONATION_REJECTED",
   "ANNOUNCEMENT_PUBLISHED",
   "ANNOUNCEMENT_DELETED",
+  "EVENT_CREATED",
+  "EVENT_UPDATED",
+  "EVENT_DELETED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

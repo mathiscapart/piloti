@@ -13,6 +13,9 @@ const SUCCESS_MESSAGES: Record<string, string> = {
   "loan-drying": "Article mis en séchage.",
   "incident-reported": "Incident signalé. Merci !",
   "announcement-published": "Annonce publiée.",
+  "event-created": "Événement créé.",
+  "event-updated": "Événement mis à jour.",
+  "event-deleted": "Événement supprimé.",
 };
 
 /**

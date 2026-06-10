@@ -11,6 +11,7 @@ import { can } from "@/lib/permissions";
 import { publishChannelEvent } from "@/lib/realtime";
 
 import type { ActionResult } from "@/lib/types";
+import { resolveOverdueNotifications } from "./overdue";
 import {
   createLoanSchema,
   dryingSchema,
@@ -312,6 +313,11 @@ export async function returnLoan(
       },
     },
   );
+
+  // US-07 — l'alerte de retard se résout au retour complet du prêt.
+  if (!isPartial) {
+    await resolveOverdueNotifications(loanId);
+  }
 
   revalidatePath("/prets");
   revalidatePath("/stock");

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import type { CurrentUser } from "@/lib/get-current-user";
 import type { NotificationSnapshot } from "@/modules/notifications/queries";
 
-import { NAV_SECTIONS, type NavItem } from "./nav-items";
+import { isNavActive, NAV_SECTIONS, type NavItem } from "./nav-items";
 import { UserMenu } from "./UserMenu";
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
@@ -40,9 +40,7 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const isActive = (href: string, aliases?: string[]) =>
-    [href, ...(aliases ?? [])].some(
-      (h) => pathname === h || pathname.startsWith(`${h}/`),
-    );
+    isNavActive(pathname, href, aliases);
 
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-stone/60 bg-snow md:flex">

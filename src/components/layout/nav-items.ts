@@ -60,6 +60,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/annonces", label: "Annonces", icon: Megaphone },
       { href: "/communication", label: "Messagerie", icon: MessageSquare, aliases: ["/messages"] },
+      { href: "/membres", label: "Membres", icon: Users, requires: "member.view" },
       { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
     ],
   },
@@ -77,3 +78,33 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
 ];
+
+// Tous les chemins « racine » de la nav (href + alias), pour départager les
+// préfixes qui se chevauchent (ex. /membres vs /membres/annuaire).
+const ALL_NAV_HREFS: string[] = Array.from(
+  new Set(
+    [...PRIMARY_NAV, ...NAV_SECTIONS.flatMap((s) => s.items)].flatMap((it) => [
+      it.href,
+      ...(it.aliases ?? []),
+    ]),
+  ),
+);
+
+function pathMatches(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+// Une entrée est active si l'un de ses chemins matche le pathname ET qu'aucun
+// autre chemin de la nav, plus spécifique (plus long), ne matche aussi. Ainsi
+// /membres ne se surligne pas quand on est sur /membres/annuaire.
+export function isNavActive(
+  pathname: string,
+  href: string,
+  aliases?: string[],
+): boolean {
+  const best = ALL_NAV_HREFS.filter((h) => pathMatches(pathname, h)).sort(
+    (a, b) => b.length - a.length,
+  )[0];
+  if (!best) return false;
+  return [href, ...(aliases ?? [])].includes(best);
+}

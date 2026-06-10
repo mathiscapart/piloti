@@ -16,7 +16,7 @@ import { can } from "@/lib/permissions";
 import type { CurrentUser } from "@/lib/get-current-user";
 import { cn } from "@/lib/utils";
 
-import { NAV_SECTIONS } from "./nav-items";
+import { isNavActive, NAV_SECTIONS } from "./nav-items";
 
 export function MobileMenu({ user }: { user: CurrentUser }) {
   const [open, setOpen] = useState(false);
@@ -54,9 +54,7 @@ export function MobileMenu({ user }: { user: CurrentUser }) {
               <ul className="mt-2 grid grid-cols-2 gap-2">
                 {section.items.map((item) => {
                   const Icon = item.icon;
-                  const active = [item.href, ...(item.aliases ?? [])].some(
-                    (h) => pathname === h || pathname.startsWith(`${h}/`),
-                  );
+                  const active = isNavActive(pathname, item.href, item.aliases);
                   return (
                     <li key={item.href}>
                       <Link

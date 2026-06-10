@@ -465,6 +465,58 @@ export type MemberDetail = NonNullable<
   Awaited<ReturnType<typeof getMemberDetail>>
 >;
 
+// Roster des membres du groupe (US-13/US-14) : tous les comptes ACTIVE,
+// filtrables par unité et par rôle, recherche par nom (insensible aux accents).
+// Réservé aux profils member.view (vérifié côté page).
+export interface MemberFilter {
+  search?: string;
+  unit?: string;
+  role?: string;
+}
+
+export async function listMembers(opts: MemberFilter = {}) {
+  const where: Prisma.UserWhereInput = { status: "ACTIVE" };
+  if (opts.unit) where.unit = opts.unit;
+
+  const users = await db.user.findMany({
+    where,
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      image: true,
+      role: true,
+      roles: true,
+      unit: true,
+      phone: true,
+      email: true,
+    },
+  });
+
+  let rows = users;
+  if (opts.role) {
+    rows = rows.filter((u) => {
+      try {
+        return (JSON.parse(u.roles) as string[]).includes(opts.role!);
+      } catch {
+        return u.role === opts.role;
+      }
+    });
+  }
+
+  const term = normalizeSearch(opts.search ?? "");
+  if (term.length > 0) {
+    rows = rows.filter((u) =>
+      normalizeSearch(`${u.firstName} ${u.lastName}`).includes(term),
+    );
+  }
+
+  return rows;
+}
+
+export type MemberRosterEntry = Awaited<ReturnType<typeof listMembers>>[number];
+
 // US-26 — annuaire des compétences : parents AYANT CONSENTI (RGPD), filtrables
 // par profession / compétences / disponibilités. Réservé aux Responsables de
 // Groupe (vérifié côté page via la permission member.directory).

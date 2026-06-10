@@ -8,14 +8,12 @@ import type { CurrentUser } from "@/lib/get-current-user";
 import { cn } from "@/lib/utils";
 
 import { MobileMenu } from "./MobileMenu";
-import { PRIMARY_NAV } from "./nav-items";
+import { isNavActive, PRIMARY_NAV } from "./nav-items";
 
 export function BottomNav({ user }: { user: CurrentUser }) {
   const pathname = usePathname();
   const isActive = (item: { href: string; aliases?: string[] }) =>
-    [item.href, ...(item.aliases ?? [])].some(
-      (h) => pathname === h || pathname.startsWith(`${h}/`),
-    );
+    isNavActive(pathname, item.href, item.aliases);
 
   // Raccourcis visibles selon le rôle (US-29) + 1 colonne pour « Menu ».
   const items = PRIMARY_NAV.filter((i) => !i.requires || can(user, i.requires));

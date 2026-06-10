@@ -7,7 +7,12 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
 import { vapidPublicKey } from "@/lib/push";
 
-import { PasswordForm, ProfileForm, SkillsProfileForm } from "./account-forms";
+import {
+  AvatarForm,
+  PasswordForm,
+  ProfileForm,
+  SkillsProfileForm,
+} from "./account-forms";
 
 export default async function AccountPage() {
   const user = await getCurrentUser();
@@ -63,6 +68,15 @@ export default async function AccountPage() {
           l&apos;administration pour toute modification.
         </p>
       </section>
+
+      {/* Photo de profil — auto-service. La `key` force le remount après
+          changement pour que l'aperçu reflète la photo enregistrée côté serveur. */}
+      <AvatarForm
+        key={user.image ?? "none"}
+        image={user.image ?? null}
+        firstName={user.firstName}
+        lastName={user.lastName}
+      />
 
       {/* Coordonnées — éditable par l'utilisateur. */}
       <ProfileForm

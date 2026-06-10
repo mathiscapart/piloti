@@ -8,12 +8,93 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { authClient } from "@/lib/auth-client";
 import type { ActionResult } from "@/lib/types";
 
-import { updateOwnProfile, updateOwnSkillsProfile } from "./actions";
+import {
+  updateOwnAvatar,
+  updateOwnProfile,
+  updateOwnSkillsProfile,
+} from "./actions";
 
 const emptyState: ActionResult = { error: null };
+
+// Photo de profil — téléversement / suppression en auto-service.
+export function AvatarForm({
+  image,
+  firstName,
+  lastName,
+}: {
+  image: string | null;
+  firstName: string;
+  lastName: string;
+}) {
+  const router = useRouter();
+  const [preview, setPreview] = useState<string | null>(image);
+  const [state, formAction, pending] = useActionState<ActionResult, FormData>(
+    updateOwnAvatar,
+    emptyState,
+  );
+
+  useEffect(() => {
+    if (state.error === null && state !== emptyState) {
+      toast.success("Photo de profil mise à jour.");
+      router.refresh();
+    }
+  }, [state, router]);
+
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPreview(URL.createObjectURL(file));
+  }
+
+  return (
+    <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
+      <h2 className="font-bold text-earth">Photo de profil</h2>
+      <form action={formAction} className="flex items-center gap-4">
+        <UserAvatar
+          image={preview}
+          firstName={firstName}
+          lastName={lastName}
+          className="size-20 text-2xl"
+        />
+        <div className="space-y-2">
+          <input
+            type="file"
+            name="avatar"
+            accept="image/*"
+            onChange={onPick}
+            className="block w-full text-sm text-trail file:mr-3 file:rounded-full file:border-0 file:bg-sand file:px-3 file:py-1.5 file:text-sm file:font-bold file:text-earth hover:file:bg-sand/70"
+          />
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={pending}>
+              {pending ? "Envoi…" : "Enregistrer la photo"}
+            </Button>
+            {image ? (
+              <Button
+                type="submit"
+                name="remove"
+                value="1"
+                size="sm"
+                variant="outline"
+                disabled={pending}
+              >
+                Supprimer
+              </Button>
+            ) : null}
+          </div>
+          {state.error ? (
+            <p className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink">
+              {state.error}
+            </p>
+          ) : null}
+        </div>
+      </form>
+    </section>
+  );
+}
 
 // Coordonnées (prénom, nom, téléphone) — éditables par l'utilisateur lui-même.
 export function ProfileForm({

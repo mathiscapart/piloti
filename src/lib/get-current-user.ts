@@ -26,6 +26,7 @@ export async function getCurrentUser() {
       status: true,
       unit: true,
       phone: true,
+      image: true,
     },
   });
   if (!user) redirect("/login");

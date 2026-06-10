@@ -439,6 +439,7 @@ export async function getMemberDetail(id: string) {
       role: true,
       roles: true,
       status: true,
+      image: true,
       // US-26 — profil parent enrichi
       profession: true,
       skills: true,

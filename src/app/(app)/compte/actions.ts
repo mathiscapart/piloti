@@ -5,6 +5,7 @@ import { z } from "zod";
 
 import { withAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -49,6 +50,46 @@ export async function updateOwnProfile(
       action: "USER_PROFILE_UPDATED",
       userId: user.id,
       metadata: { self: true },
+    },
+  );
+
+  revalidatePath("/compte");
+  return { error: null };
+}
+
+// Photo de profil — auto-service : l'utilisateur téléverse ou retire son avatar.
+// L'image est traitée (resize/WebP) par `saveUploadedPhoto` puis le chemin est
+// stocké dans `User.image`. Toute mutation → AuditLog (même transaction).
+export async function updateOwnAvatar(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+
+  const remove = formData.get("remove") === "1";
+  let image: string | null;
+  if (remove) {
+    image = null;
+  } else {
+    const file = formData.get("avatar");
+    if (!(file instanceof File) || file.size === 0) {
+      return { error: "Aucune image sélectionnée." };
+    }
+    try {
+      image = await saveUploadedPhoto(file);
+    } catch (err) {
+      return {
+        error: err instanceof UploadError ? err.message : "Échec de l'envoi.",
+      };
+    }
+  }
+
+  await withAudit(
+    (tx) => tx.user.update({ where: { id: user.id }, data: { image } }),
+    {
+      action: "USER_PROFILE_UPDATED",
+      userId: user.id,
+      metadata: { self: true, avatar: remove ? "removed" : "set" },
     },
   );
 

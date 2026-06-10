@@ -5,10 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
-import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,7 +39,6 @@ export function UserMenu({ user, compact }: { user: CurrentUser; compact?: boole
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const initials = `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.toUpperCase();
   const adminLinks = ADMIN_LINKS.filter((l) => can(user, l.requires));
 
   function handleSignOut() {
@@ -56,11 +52,12 @@ export function UserMenu({ user, compact }: { user: CurrentUser; compact?: boole
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className={compact ? "rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : "flex w-full items-center gap-3 rounded-xl p-2 text-left transition-colors hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"}>
-        <Avatar className="size-9">
-          <AvatarFallback className="bg-forest text-snow font-bold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <UserAvatar
+          image={user.image}
+          firstName={user.firstName}
+          lastName={user.lastName}
+          className="size-9"
+        />
         {!compact && (
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold text-earth">

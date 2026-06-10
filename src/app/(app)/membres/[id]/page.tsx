@@ -6,6 +6,7 @@ import { CategoryIcon } from "@/components/equipment/CategoryChip";
 import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -72,20 +73,32 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
       {/* Identité + contact */}
       <section className="space-y-3 rounded-2xl bg-snow p-5 shadow-card">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-black text-earth md:text-3xl">
-            {user.firstName} {user.lastName}
-          </h1>
-          <span className="inline-flex items-center rounded-full bg-sand px-2.5 py-0.5 text-xs font-bold text-earth">
-            {ROLE_LABEL[user.role] ?? user.role}
-          </span>
-          {user.status === "SUSPENDED" ? (
-            <span className="inline-flex items-center rounded-full bg-brick-soft px-2.5 py-0.5 text-xs font-bold text-brick-ink">
-              Suspendu
-            </span>
-          ) : null}
+        <div className="flex items-start gap-4">
+          <UserAvatar
+            image={user.image}
+            firstName={user.firstName}
+            lastName={user.lastName}
+            className="size-16 shrink-0 text-xl"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-black text-earth md:text-3xl">
+                {user.firstName} {user.lastName}
+              </h1>
+              <span className="inline-flex items-center rounded-full bg-sand px-2.5 py-0.5 text-xs font-bold text-earth">
+                {ROLE_LABEL[user.role] ?? user.role}
+              </span>
+              {user.status === "SUSPENDED" ? (
+                <span className="inline-flex items-center rounded-full bg-brick-soft px-2.5 py-0.5 text-xs font-bold text-brick-ink">
+                  Suspendu
+                </span>
+              ) : null}
+            </div>
+            {user.unit ? (
+              <p className="text-sm text-trail">{user.unit}</p>
+            ) : null}
+          </div>
         </div>
-        {user.unit ? <p className="text-sm text-trail">{user.unit}</p> : null}
 
         <div className="flex flex-wrap gap-2 pt-1">
           {user.phone ? (

@@ -44,43 +44,31 @@ export async function sendPushToUser(
   userId: string,
   payload: PushPayload,
 ): Promise<void> {
-  if (!ensureConfigured()) {
-    console.log(`[push] non configuré (VAPID manquant) — user=${userId}`);
-    return;
-  }
+  if (!ensureConfigured()) return;
 
   const subs = await db.pushSubscription.findMany({ where: { userId } });
-  console.log(
-    `[push] user=${userId} subs=${subs.length} title="${payload.title}"`,
-  );
   if (subs.length === 0) return;
 
   const data = JSON.stringify(payload);
   await Promise.allSettled(
     subs.map(async (sub) => {
-      let host = sub.endpoint;
       try {
-        host = new URL(sub.endpoint).host;
-      } catch {}
-      try {
-        const res = await webpush.sendNotification(
+        await webpush.sendNotification(
           {
             endpoint: sub.endpoint,
             keys: { p256dh: sub.p256dh, auth: sub.auth },
           },
           data,
         );
-        console.log(`[push] -> ${host} statut=${res.statusCode}`);
       } catch (err: unknown) {
         const status = (err as { statusCode?: number }).statusCode;
-        console.log(`[push] -> ${host} ÉCHEC statut=${status}`);
         if (status === 404 || status === 410) {
           // Abonnement expiré/révoqué côté navigateur → on le supprime.
           await db.pushSubscription
             .delete({ where: { id: sub.id } })
             .catch(() => {});
         } else {
-          console.error("[push] détail erreur:", err);
+          console.error("[push] échec envoi:", err);
         }
       }
     }),

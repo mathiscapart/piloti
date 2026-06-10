@@ -107,9 +107,6 @@ export async function notify(input: NotifyInput): Promise<void> {
     const emailEnabled = input.force || (user.notificationPref?.emailEnabled ?? true);
     const pushEnabled = input.force || (user.notificationPref?.pushEnabled ?? true);
     const url = absoluteUrl(input.link);
-    console.log(
-      `[notify] user=${input.userId} type=${input.type} isNew=${isNew} push=${pushEnabled} email=${emailEnabled}`,
-    );
 
     const tasks: Promise<unknown>[] = [];
     if (emailEnabled) {

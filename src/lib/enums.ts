@@ -107,6 +107,16 @@ export const EVENT_TYPE_LABEL: Record<EventType, string> = {
   SERVICE: "Service",
 };
 
+// US-P04 — réponse d'inscription à un événement.
+export const RSVP_RESPONSES = ["PRESENT", "ABSENT", "MAYBE"] as const;
+export type RsvpResponse = (typeof RSVP_RESPONSES)[number];
+
+export const RSVP_LABEL: Record<RsvpResponse, string> = {
+  PRESENT: "Présent",
+  ABSENT: "Absent",
+  MAYBE: "Peut-être",
+};
+
 // Types de notification (cloche in-app + email + push). Extensible : chaque
 // nouveau déclencheur (annonce, mention, alerte retard…) ajoute une valeur ici.
 export const NOTIFICATION_TYPES = [
@@ -163,5 +173,6 @@ export const AUDIT_ACTIONS = [
   "EVENT_CREATED",
   "EVENT_UPDATED",
   "EVENT_DELETED",
+  "EVENT_RSVP",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

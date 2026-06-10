@@ -2,14 +2,22 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { notificationEmailHtml, sendEmail } from "@/lib/email";
+import { RSVP_LABEL, RSVP_RESPONSES, type RsvpResponse } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
 import { eventSchema } from "./types";
+
+function absoluteUrl(path: string): string {
+  const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  return `${base}${path}`;
+}
 
 // Les valeurs `datetime-local` (« YYYY-MM-DDTHH:mm ») n'ont pas de fuseau. On
 // les interprète comme une heure « murale » figée, stockée telle quelle en UTC
@@ -44,7 +52,20 @@ function readForm(formData: FormData) {
     unit: formData.get("unit"),
     location: formData.get("location"),
     description: formData.get("description"),
+    registrationOpen: formData.get("registrationOpen"),
+    registrationDeadline: formData.get("registrationDeadline"),
   };
+}
+
+// La date limite d'inscription (datetime-local, optionnelle) suit la même règle
+// d'heure murale que les dates de l'événement.
+function parseDeadline(
+  raw: string | null,
+): { value: Date | null } | { error: string } {
+  if (!raw) return { value: null };
+  const d = parseWallTime(raw);
+  if (!d) return { error: "Date limite d'inscription invalide." };
+  return { value: d };
 }
 
 // US-P01 — créer un événement (réservé aux encadrants).
@@ -63,6 +84,8 @@ export async function createEvent(
   }
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
+  const deadline = parseDeadline(parsed.data.registrationDeadline);
+  if ("error" in deadline) return { error: deadline.error };
 
   await withAudit(
     (tx) =>
@@ -75,6 +98,8 @@ export async function createEvent(
           unit: parsed.data.unit,
           location: parsed.data.location,
           description: parsed.data.description,
+          registrationOpen: parsed.data.registrationOpen,
+          registrationDeadline: deadline.value,
           createdById: user.id,
         },
       }),
@@ -112,6 +137,8 @@ export async function updateEvent(
   }
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
+  const deadline = parseDeadline(parsed.data.registrationDeadline);
+  if ("error" in deadline) return { error: deadline.error };
 
   await withAudit(
     (tx) =>
@@ -125,6 +152,8 @@ export async function updateEvent(
           unit: parsed.data.unit,
           location: parsed.data.location,
           description: parsed.data.description,
+          registrationOpen: parsed.data.registrationOpen,
+          registrationDeadline: deadline.value,
         },
       }),
     {
@@ -164,4 +193,65 @@ export async function deleteEvent(eventId: string): Promise<ActionResult> {
   revalidatePath("/planning");
   revalidatePath("/dashboard");
   redirect("/planning?notice=event-deleted");
+}
+
+// US-P04 — un membre répond à un événement ouvert aux inscriptions
+// (présent / absent / peut-être). Réponse modifiable ; confirmation par email.
+export async function rsvpEvent(
+  eventId: string,
+  response: string,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!(RSVP_RESPONSES as readonly string[]).includes(response)) {
+    return { error: "Réponse invalide." };
+  }
+
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      name: true,
+      registrationOpen: true,
+      registrationDeadline: true,
+    },
+  });
+  if (!event) return { error: "Événement introuvable." };
+  if (!event.registrationOpen) {
+    return { error: "Les inscriptions ne sont pas ouvertes pour cet événement." };
+  }
+  if (event.registrationDeadline && event.registrationDeadline < new Date()) {
+    return { error: "La date limite d'inscription est dépassée." };
+  }
+
+  await withAudit(
+    (tx) =>
+      tx.eventRegistration.upsert({
+        where: { eventId_userId: { eventId, userId: user.id } },
+        create: { eventId, userId: user.id, response },
+        update: { response },
+      }),
+    {
+      action: "EVENT_RSVP",
+      userId: user.id,
+      metadata: { eventId, response },
+    },
+  );
+
+  // Confirmation par email (best-effort, après la réponse).
+  const label = RSVP_LABEL[response as RsvpResponse];
+  after(() =>
+    sendEmail({
+      to: user.email,
+      subject: `Inscription — ${event.name}`,
+      html: notificationEmailHtml({
+        title: event.name,
+        body: `Votre réponse a bien été enregistrée : <strong>${label}</strong>.`,
+        url: absoluteUrl(`/planning/${eventId}`),
+        cta: "Voir l'événement",
+      }),
+    }),
+  );
+
+  revalidatePath(`/planning/${eventId}`);
+  return { error: null };
 }

@@ -28,6 +28,8 @@ export interface EventFormValues {
   unit: string; // "" = tout le groupe
   location: string;
   description: string;
+  registrationOpen: boolean;
+  registrationDeadline: string; // "" = pas de limite
 }
 
 export function EventForm({
@@ -99,7 +101,7 @@ export function EventForm({
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label htmlFor="startDate">Début</Label>
           <Input
             id="startDate"
@@ -107,9 +109,10 @@ export function EventForm({
             type="datetime-local"
             required
             defaultValue={defaults?.startDate ?? ""}
+            className="min-w-0 max-w-full appearance-none"
           />
         </div>
-        <div className="space-y-1.5">
+        <div className="min-w-0 space-y-1.5">
           <Label htmlFor="endDate">Fin</Label>
           <Input
             id="endDate"
@@ -117,6 +120,7 @@ export function EventForm({
             type="datetime-local"
             required
             defaultValue={defaults?.endDate ?? ""}
+            className="min-w-0 max-w-full appearance-none"
           />
         </div>
       </div>
@@ -142,6 +146,36 @@ export function EventForm({
           defaultValue={defaults?.description ?? ""}
           placeholder="Infos pratiques, matériel à apporter, horaires détaillés…"
         />
+      </div>
+
+      {/* US-P04 — inscriptions */}
+      <div className="space-y-3 rounded-xl bg-sand/50 p-4">
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            name="registrationOpen"
+            defaultChecked={defaults?.registrationOpen ?? false}
+            className="mt-0.5 size-4 accent-forest"
+          />
+          <span className="text-sm font-medium text-earth">
+            Ouvrir les inscriptions
+            <span className="block text-xs font-normal text-trail">
+              Les membres pourront répondre présent / absent / peut-être.
+            </span>
+          </span>
+        </label>
+        <div className="min-w-0 space-y-1.5">
+          <Label htmlFor="registrationDeadline">
+            Date limite d&apos;inscription (facultatif)
+          </Label>
+          <Input
+            id="registrationDeadline"
+            name="registrationDeadline"
+            type="datetime-local"
+            defaultValue={defaults?.registrationDeadline ?? ""}
+            className="min-w-0 max-w-full appearance-none"
+          />
+        </div>
       </div>
 
       {state.error ? (

@@ -1,20 +1,40 @@
-import { ArrowLeft, CalendarDays, MapPin, Pencil } from "lucide-react";
+import { ArrowLeft, CalendarDays, MapPin, Pencil, Users } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   EVENT_TYPE_LABEL,
+  RSVP_LABEL,
+  RSVP_RESPONSES,
   UNIT_LABEL,
   type EventType,
+  type RsvpResponse,
   type Unit,
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 import { formatEventRange } from "@/modules/planning/format";
-import { getEvent } from "@/modules/planning/queries";
+import { getEventWithRegistrations } from "@/modules/planning/queries";
 
 import { DeleteEventButton } from "../DeleteEventButton";
+import { RsvpControl } from "../RsvpControl";
+
+const DEADLINE_FMT = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "long",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "UTC",
+});
+
+const RSVP_TONE: Record<RsvpResponse, string> = {
+  PRESENT: "text-forest-ink",
+  ABSENT: "text-brick-ink",
+  MAYBE: "text-sun-ink",
+};
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -25,9 +45,18 @@ export default async function EventDetailPage({ params }: PageProps) {
   const user = await getCurrentUser();
   if (!can(user, "event.view")) redirect("/dashboard");
 
-  const event = await getEvent(id);
-  if (!event) notFound();
+  const data = await getEventWithRegistrations(id, user.id);
+  if (!data) notFound();
+  const { event, registrations, myResponse } = data;
   const canManage = can(user, "event.manage");
+
+  const deadlinePassed =
+    event.registrationDeadline != null &&
+    event.registrationDeadline < new Date();
+
+  // Regroupement des réponses par type (pour la vue chef).
+  const byResponse = (r: RsvpResponse) =>
+    registrations.filter((reg) => reg.response === r);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -84,6 +113,93 @@ export default async function EventDetailPage({ params }: PageProps) {
           </div>
         ) : null}
       </section>
+
+      {/* US-P04 — inscriptions */}
+      {event.registrationOpen ? (
+        <section className="space-y-3 rounded-2xl bg-snow p-5 shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-bold text-earth">Inscription</h2>
+            {event.registrationDeadline ? (
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  deadlinePassed ? "text-brick" : "text-trail",
+                )}
+              >
+                {deadlinePassed ? "Clôturée le " : "Jusqu'au "}
+                {DEADLINE_FMT.format(event.registrationDeadline)}
+              </span>
+            ) : null}
+          </div>
+
+          {deadlinePassed ? (
+            <p className="text-sm text-trail">
+              Les inscriptions sont closes.
+              {myResponse
+                ? ` Votre réponse : ${RSVP_LABEL[myResponse as RsvpResponse]}.`
+                : ""}
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-trail">Indiquez votre présence :</p>
+              <RsvpControl eventId={event.id} current={myResponse} />
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {/* Vue chef : liste des réponses. */}
+      {canManage && event.registrationOpen ? (
+        <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
+          <div className="flex items-center gap-2">
+            <Users className="size-4 text-trail" />
+            <h2 className="font-bold text-earth">
+              Réponses ({registrations.length})
+            </h2>
+          </div>
+
+          {registrations.length === 0 ? (
+            <p className="text-sm text-trail">Aucune réponse pour le moment.</p>
+          ) : (
+            <div className="space-y-4">
+              {RSVP_RESPONSES.map((r) => {
+                const list = byResponse(r);
+                if (list.length === 0) return null;
+                return (
+                  <div key={r} className="space-y-2">
+                    <h3
+                      className={cn(
+                        "text-sm font-bold",
+                        RSVP_TONE[r as RsvpResponse],
+                      )}
+                    >
+                      {RSVP_LABEL[r as RsvpResponse]} ({list.length})
+                    </h3>
+                    <ul className="flex flex-wrap gap-2">
+                      {list.map((reg) => (
+                        <li
+                          key={reg.user.id}
+                          className="flex items-center gap-2 rounded-full bg-sand px-2 py-1"
+                        >
+                          <UserAvatar
+                            image={reg.user.image}
+                            firstName={reg.user.firstName}
+                            lastName={reg.user.lastName}
+                            className="size-6 text-[10px]"
+                          />
+                          <span className="text-sm font-medium text-earth">
+                            {reg.user.firstName} {reg.user.lastName}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

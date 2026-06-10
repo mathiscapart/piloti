@@ -48,6 +48,10 @@ export default async function EditEventPage({ params }: PageProps) {
             unit: event.unit ?? "",
             location: event.location ?? "",
             description: event.description ?? "",
+            registrationOpen: event.registrationOpen,
+            registrationDeadline: event.registrationDeadline
+              ? toDatetimeLocal(event.registrationDeadline)
+              : "",
           }}
         />
       </section>

@@ -27,6 +27,15 @@ export const eventSchema = z.object({
     ),
   location: optionalText,
   description: optionalText,
+  // US-P04 — inscriptions.
+  registrationOpen: z.preprocess(
+    (v) => v === "on" || v === "true" || v === true,
+    z.boolean(),
+  ),
+  registrationDeadline: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
 });
 
 export type EventInput = z.infer<typeof eventSchema>;

@@ -38,6 +38,33 @@ export async function getEvent(id: string) {
 
 export type EventDetail = NonNullable<Awaited<ReturnType<typeof getEvent>>>;
 
+// US-P04 — détail enrichi : l'événement, la liste des réponses (pour les chefs)
+// et la réponse de l'utilisateur courant (pour le contrôle d'inscription).
+export async function getEventWithRegistrations(id: string, userId: string) {
+  const event = await db.event.findUnique({ where: { id } });
+  if (!event) return null;
+
+  const registrations = await db.eventRegistration.findMany({
+    where: { eventId: id },
+    orderBy: [{ createdAt: "asc" }],
+    select: {
+      response: true,
+      user: {
+        select: { id: true, firstName: true, lastName: true, image: true, unit: true },
+      },
+    },
+  });
+
+  const myResponse =
+    registrations.find((r) => r.user.id === userId)?.response ?? null;
+
+  return { event, registrations, myResponse };
+}
+
+export type EventRegistrationEntry = Awaited<
+  ReturnType<typeof getEventWithRegistrations>
+>;
+
 // Compteur d'événements à venir (badge dashboard / nav éventuel).
 export async function countUpcomingEvents() {
   return db.event.count({ where: { endDate: { gte: new Date() } } });

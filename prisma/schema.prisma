@@ -75,6 +75,7 @@ model User {
   dryingLoans       Loan[]     @relation("LoanDryingContact")
   reportedIncidents Incident[] @relation("IncidentReporter")
   resolvedIncidents Incident[] @relation("IncidentResolver")
+  eventRegistrations EventRegistration[] @relation("UserEventRegistration")
   auditLogs         AuditLog[]
 
   @@index([status])
@@ -311,10 +312,32 @@ model Event {
   location    String?
   description String?
   createdById String? // auteur (chef) — null si compte supprimé
+  // US-P04 — inscriptions : ouverture + date limite (déclenche les relances P06).
+  registrationOpen     Boolean   @default(false)
+  registrationDeadline DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 
+  registrations EventRegistration[]
+
   @@index([startDate])
+}
+
+// US-P04 — réponse d'un membre à un événement (présent / absent / peut-être).
+// Un enregistrement par (événement, utilisateur) ; la réponse est modifiable.
+model EventRegistration {
+  id        String   @id @default(cuid())
+  eventId   String
+  userId    String
+  response  String // RsvpResponse: PRESENT | ABSENT | MAYBE
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserEventRegistration", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
 }
 
 // ----------------------------------------------------------------------------

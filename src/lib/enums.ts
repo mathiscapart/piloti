@@ -125,6 +125,7 @@ export const NOTIFICATION_TYPES = [
   "DIRECT_MESSAGE", // US-C04 — message privé reçu
   "MENTION", // mention directe
   "LOAN_OVERDUE", // US-07 — prêt en retard
+  "EVENT_REMINDER", // US-P06 — relance d'inscription avant la date limite
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

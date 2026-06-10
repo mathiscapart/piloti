@@ -76,6 +76,7 @@ model User {
   reportedIncidents Incident[] @relation("IncidentReporter")
   resolvedIncidents Incident[] @relation("IncidentResolver")
   eventRegistrations EventRegistration[] @relation("UserEventRegistration")
+  eventReminders    EventReminder[]    @relation("UserEventReminder")
   auditLogs         AuditLog[]
 
   @@index([status])
@@ -319,6 +320,7 @@ model Event {
   updatedAt   DateTime @default(now()) @updatedAt
 
   registrations EventRegistration[]
+  reminders     EventReminder[]
 
   @@index([startDate])
 }
@@ -335,6 +337,22 @@ model EventRegistration {
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   user  User  @relation("UserEventRegistration", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+}
+
+// US-P06 — relance automatique envoyée à un membre non-répondant avant la date
+// limite d'inscription. Une ligne par (événement, utilisateur) : sert à la fois
+// de garde anti-doublon et de trace visible par le chef (« qui a été relancé »).
+model EventReminder {
+  id      String   @id @default(cuid())
+  eventId String
+  userId  String
+  sentAt  DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserEventReminder", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, userId])
   @@index([eventId])

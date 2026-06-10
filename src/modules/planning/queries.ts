@@ -44,21 +44,31 @@ export async function getEventWithRegistrations(id: string, userId: string) {
   const event = await db.event.findUnique({ where: { id } });
   if (!event) return null;
 
-  const registrations = await db.eventRegistration.findMany({
-    where: { eventId: id },
-    orderBy: [{ createdAt: "asc" }],
-    select: {
-      response: true,
-      user: {
-        select: { id: true, firstName: true, lastName: true, image: true, unit: true },
+  const [registrations, reminders] = await Promise.all([
+    db.eventRegistration.findMany({
+      where: { eventId: id },
+      orderBy: [{ createdAt: "asc" }],
+      select: {
+        response: true,
+        user: {
+          select: { id: true, firstName: true, lastName: true, image: true, unit: true },
+        },
       },
-    },
-  });
+    }),
+    db.eventReminder.findMany({
+      where: { eventId: id },
+      orderBy: [{ sentAt: "asc" }],
+      select: {
+        sentAt: true,
+        user: { select: { id: true, firstName: true, lastName: true } },
+      },
+    }),
+  ]);
 
   const myResponse =
     registrations.find((r) => r.user.id === userId)?.response ?? null;
 
-  return { event, registrations, myResponse };
+  return { event, registrations, reminders, myResponse };
 }
 
 export type EventRegistrationEntry = Awaited<

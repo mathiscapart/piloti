@@ -47,7 +47,7 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   const data = await getEventWithRegistrations(id, user.id);
   if (!data) notFound();
-  const { event, registrations, myResponse } = data;
+  const { event, registrations, reminders, myResponse } = data;
   const canManage = can(user, "event.manage");
 
   const deadlinePassed =
@@ -198,6 +198,19 @@ export default async function EventDetailPage({ params }: PageProps) {
               })}
             </div>
           )}
+
+          {reminders.length > 0 ? (
+            <div className="space-y-1 border-t border-stone/50 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
+                Relancés ({reminders.length})
+              </h3>
+              <p className="text-sm text-trail">
+                {reminders
+                  .map((r) => `${r.user.firstName} ${r.user.lastName}`)
+                  .join(", ")}
+              </p>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </div>

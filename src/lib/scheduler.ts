@@ -25,9 +25,9 @@ export function startScheduler(): void {
     Number(process.env.OVERDUE_CHECK_INTERVAL_MS) || DEFAULT_INTERVAL_MS;
 
   const run = async () => {
+    // Import dynamique : évite de charger Prisma au moment de l'enregistrement
+    // de l'instrumentation (et garde ce module léger).
     try {
-      // Import dynamique : évite de charger Prisma au moment de l'enregistrement
-      // de l'instrumentation (et garde ce module léger).
       const { checkOverdueLoans } = await import("@/modules/inventory/overdue");
       const sent = await checkOverdueLoans();
       if (sent > 0) {
@@ -35,6 +35,18 @@ export function startScheduler(): void {
       }
     } catch (err) {
       console.error("[scheduler] échec du contrôle des prêts en retard:", err);
+    }
+
+    try {
+      const { sendRegistrationReminders } = await import(
+        "@/modules/planning/reminders"
+      );
+      const reminded = await sendRegistrationReminders();
+      if (reminded > 0) {
+        console.log(`[scheduler] ${reminded} relance(s) d'inscription envoyée(s).`);
+      }
+    } catch (err) {
+      console.error("[scheduler] échec des relances d'inscription:", err);
     }
   };
 

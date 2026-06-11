@@ -53,26 +53,29 @@ export default async function MembersPage({ searchParams }: PageProps) {
         </p>
       </header>
 
-      {/* Filtres : recherche + unité + rôle (GET, entièrement côté serveur). */}
+      {/* Filtres : recherche + unité + rôle (GET, entièrement côté serveur).
+          Grille qui se réorganise : tout empilé en mobile, recherche pleine
+          largeur puis selects côte à côte dès sm, tout sur une ligne en lg. */}
       <form
         method="GET"
-        className="flex flex-col gap-3 sm:flex-row sm:items-end"
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,12rem)_auto] lg:items-end"
         role="search"
       >
-        <div className="relative flex-1">
+        <div className="relative min-w-0 sm:col-span-2 lg:col-span-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-trail" />
           <Input
             type="search"
             name="q"
             defaultValue={search}
             placeholder="Chercher par nom…"
-            className="pl-9"
+            className="w-full pl-9"
           />
         </div>
         <select
           name="unit"
           defaultValue={unitFilter}
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-earth"
+          aria-label="Filtrer par branche"
+          className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-earth"
         >
           <option value="">Toutes les branches</option>
           {UNITS.map((u) => (
@@ -84,7 +87,8 @@ export default async function MembersPage({ searchParams }: PageProps) {
         <select
           name="role"
           defaultValue={roleFilter}
-          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-earth"
+          aria-label="Filtrer par rôle"
+          className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-earth"
         >
           <option value="">Tous les rôles</option>
           {ROLES.map((r) => (
@@ -95,7 +99,7 @@ export default async function MembersPage({ searchParams }: PageProps) {
         </select>
         <button
           type="submit"
-          className="h-10 shrink-0 rounded-full bg-forest px-5 text-sm font-bold text-snow transition-colors hover:bg-forest/90"
+          className="h-10 w-full rounded-full bg-forest px-5 text-sm font-bold text-snow transition-colors hover:bg-forest/90 sm:col-span-2 lg:col-span-1 lg:w-auto"
         >
           Filtrer
         </button>
@@ -108,7 +112,7 @@ export default async function MembersPage({ searchParams }: PageProps) {
           description="Aucun membre ne correspond à ces critères."
         />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {members.map((m) => {
             const roleLabels = effectiveRoles(m)
               .map((r) => ROLE_LABEL[r as Role] ?? r)

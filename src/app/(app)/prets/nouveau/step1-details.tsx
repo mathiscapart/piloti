@@ -27,10 +27,13 @@ interface Props {
     startDate: string;
     expectedReturn: string;
     eventName: string;
+    eventId: string;
   };
+  // US-P12 — événements à venir pour rattacher le prêt (optionnel).
+  events: { id: string; name: string }[];
 }
 
-export function Step1Details({ borrowers, self, details }: Props) {
+export function Step1Details({ borrowers, self, details, events }: Props) {
   // Formulaire GET : passe emprunteur + dates + événement à l'étape 2 via l'URL,
   // où la disponibilité du matériel sera calculée pour cette période (US-12).
   return (
@@ -98,8 +101,33 @@ export function Step1Details({ borrowers, self, details }: Props) {
         </div>
       </div>
 
+      {/* US-P12 — rattacher à un événement du planning (optionnel). */}
+      {events.length > 0 ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="eventId">Événement du planning (optionnel)</Label>
+          <select
+            id="eventId"
+            name="eventId"
+            defaultValue={details.eventId}
+            className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-earth"
+          >
+            <option value="">Aucun</option>
+            {events.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-trail">
+            Rattache le matériel mobilisé à un événement du calendrier.
+          </p>
+        </div>
+      ) : null}
+
       <div className="space-y-1.5">
-        <Label htmlFor="eventName">Événement (optionnel)</Label>
+        <Label htmlFor="eventName">
+          {events.length > 0 ? "Ou nom libre (optionnel)" : "Événement (optionnel)"}
+        </Label>
         <Input
           id="eventName"
           name="eventName"

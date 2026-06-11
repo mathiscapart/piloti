@@ -31,6 +31,7 @@ interface Details {
   startDate: string;
   expectedReturn: string;
   eventName: string;
+  eventId: string;
 }
 
 interface Props {
@@ -87,6 +88,7 @@ export function Step2Select({
       <input type="hidden" name="startDate" value={details.startDate} />
       <input type="hidden" name="expectedReturn" value={details.expectedReturn} />
       <input type="hidden" name="eventName" value={details.eventName} />
+      <input type="hidden" name="eventId" value={details.eventId} />
     </>
   );
 
@@ -100,7 +102,7 @@ export function Step2Select({
           {details.eventName ? ` · ${details.eventName}` : ""}
         </span>
         <Link
-          href={`/prets/nouveau?borrowerId=${encodeURIComponent(details.borrowerId)}&startDate=${details.startDate}&expectedReturn=${details.expectedReturn}&eventName=${encodeURIComponent(details.eventName)}`}
+          href={`/prets/nouveau?borrowerId=${encodeURIComponent(details.borrowerId)}&startDate=${details.startDate}&expectedReturn=${details.expectedReturn}&eventName=${encodeURIComponent(details.eventName)}&eventId=${encodeURIComponent(details.eventId)}`}
           className="font-bold text-trail hover:text-earth"
         >
           Modifier

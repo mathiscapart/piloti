@@ -142,6 +142,26 @@ export async function getAttendanceCount(eventId: string) {
   return db.attendance.count({ where: { eventId, present: true } });
 }
 
+// US-P12 — matériel mobilisé : les lignes de prêt rattachées à un événement.
+export async function getEventLoans(eventId: string) {
+  return db.loan.findMany({
+    where: { eventId },
+    orderBy: [{ createdAt: "asc" }],
+    select: {
+      id: true,
+      groupId: true,
+      quantity: true,
+      startDate: true,
+      expectedReturn: true,
+      status: true,
+      equipment: { select: { id: true, name: true } },
+      borrower: { select: { id: true, firstName: true, lastName: true } },
+    },
+  });
+}
+
+export type EventLoan = Awaited<ReturnType<typeof getEventLoans>>[number];
+
 // Compteur d'événements à venir (badge dashboard / nav éventuel).
 export async function countUpcomingEvents() {
   return db.event.count({ where: { endDate: { gte: new Date() } } });

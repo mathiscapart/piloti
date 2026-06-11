@@ -3,7 +3,9 @@ import {
   CalendarDays,
   ClipboardCheck,
   MapPin,
+  Package,
   Pencil,
+  TriangleAlert,
   Users,
 } from "lucide-react";
 import Link from "next/link";
@@ -27,6 +29,7 @@ import { getChildrenOf } from "@/modules/family/queries";
 import { formatEventRange } from "@/modules/planning/format";
 import {
   getAttendanceCount,
+  getEventLoans,
   getEventWithRegistrations,
 } from "@/modules/planning/queries";
 
@@ -77,6 +80,13 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   // US-P07 — résumé de présence (pour les chefs).
   const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
+
+  // US-P12 — matériel mobilisé (prêts rattachés), pour qui peut voir les prêts.
+  const canViewLoans = can(user, "loan.view");
+  const eventLoans = canViewLoans ? await getEventLoans(event.id) : [];
+  // Incohérence de dates : le prêt ne chevauche pas la fenêtre de l'événement.
+  const isLoanIncoherent = (l: (typeof eventLoans)[number]) =>
+    l.expectedReturn < event.startDate || l.startDate > event.endDate;
 
   // Regroupement des réponses par type (pour la vue chef).
   const byResponse = (r: RsvpResponse) =>
@@ -262,6 +272,50 @@ export default async function EventDetailPage({ params }: PageProps) {
               </p>
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {/* US-P12 — matériel mobilisé (prêts rattachés). */}
+      {canViewLoans && eventLoans.length > 0 ? (
+        <section className="space-y-3 rounded-2xl bg-snow p-5 shadow-card">
+          <div className="flex items-center gap-2">
+            <Package className="size-4 text-trail" />
+            <h2 className="font-bold text-earth">
+              Matériel mobilisé ({eventLoans.length})
+            </h2>
+          </div>
+          <ul className="space-y-2">
+            {eventLoans.map((l) => {
+              const incoherent = isLoanIncoherent(l);
+              return (
+                <li
+                  key={l.id}
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl bg-sand/60 p-3 text-sm"
+                >
+                  <Link
+                    href={`/stock/${l.equipment.id}`}
+                    className="font-bold text-earth hover:text-forest"
+                  >
+                    {l.equipment.name}
+                  </Link>
+                  {l.quantity > 1 ? (
+                    <span className="rounded-full bg-snow px-2 py-0.5 text-xs font-bold text-earth">
+                      ×{l.quantity}
+                    </span>
+                  ) : null}
+                  <span className="text-trail">
+                    · {l.borrower.firstName} {l.borrower.lastName}
+                  </span>
+                  {incoherent ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-brick-soft px-2 py-0.5 text-xs font-bold text-brick-ink">
+                      <TriangleAlert className="size-3" />
+                      Dates hors événement
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
     </div>

@@ -200,7 +200,10 @@ model Loan {
   returnedAt     DateTime?
   returnedById   String?
   status         String    @default("ACTIF") // LoanStatus: ACTIF | RETARD | RETOURNE | SECHAGE
-  eventName      String?
+  eventName      String? // libellé libre (legacy / si pas d'événement lié)
+  // US-P12 — lien optionnel vers un événement du planning. Null = prêt non
+  // rattaché. Les lignes d'un même prêt groupé partagent le même eventId.
+  eventId        String?
 
   // Séchage (statut SECHAGE)
   dryingLocation   String?
@@ -220,11 +223,13 @@ model Loan {
   borrower     User     @relation("LoanBorrower", fields: [borrowerId], references: [id])
   returnedBy   User?    @relation("LoanReturnedBy", fields: [returnedById], references: [id])
   dryingContact User?   @relation("LoanDryingContact", fields: [dryingContactId], references: [id])
+  event        Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
   auditLogs  AuditLog[]
 
   @@index([status])
   @@index([equipmentId])
   @@index([borrowerId])
+  @@index([eventId])
   @@index([expectedReturn])
   @@index([groupId])
 }
@@ -327,6 +332,7 @@ model Event {
   registrations EventRegistration[]
   reminders     EventReminder[]
   attendances   Attendance[]
+  loans         Loan[]
 
   @@index([startDate])
 }

@@ -9,6 +9,7 @@ import {
   listBorrowers,
   listCategories,
 } from "@/modules/inventory/queries";
+import { listEvents } from "@/modules/planning/queries";
 
 import { Step1Details } from "./step1-details";
 import { Step2Select } from "./step2-select";
@@ -28,6 +29,7 @@ interface PageProps {
     startDate?: string;
     expectedReturn?: string;
     eventName?: string;
+    eventId?: string;
   }>;
 }
 
@@ -57,6 +59,7 @@ export default async function NewLoanPage({ searchParams }: PageProps) {
     startDate: params.startDate ?? "",
     expectedReturn: params.expectedReturn ?? "",
     eventName: params.eventName ?? "",
+    eventId: params.eventId ?? "",
   };
 
   // US-12 — l'étape 2 (sélection) a besoin de l'emprunteur ET des dates pour
@@ -107,12 +110,17 @@ async function Step1Page({
     startDate: string;
     expectedReturn: string;
     eventName: string;
+    eventId: string;
   };
   isManager: boolean;
   self: SelfBorrower;
 }) {
   // Jeune : pas d'accès à l'annuaire des membres → on ne charge pas la liste.
-  const borrowers = isManager ? await listBorrowers() : null;
+  // US-P12 — événements à venir, pour rattacher le prêt (lien optionnel).
+  const [borrowers, events] = await Promise.all([
+    isManager ? listBorrowers() : Promise.resolve(null),
+    listEvents({ scope: "upcoming" }),
+  ]);
   return (
     <>
       <div>
@@ -125,7 +133,12 @@ async function Step1Page({
             : "Choisis la période. Le prêt sera créé à ton nom."}
         </p>
       </div>
-      <Step1Details borrowers={borrowers} details={details} self={self} />
+      <Step1Details
+        borrowers={borrowers}
+        details={details}
+        self={self}
+        events={events.map((e) => ({ id: e.id, name: e.name }))}
+      />
     </>
   );
 }
@@ -144,6 +157,7 @@ async function Step2Page({
     startDate: string;
     expectedReturn: string;
     eventName: string;
+    eventId: string;
   };
   isManager: boolean;
   self: SelfBorrower;

@@ -46,6 +46,7 @@ export async function createLoan(
     startDate: formData.get("startDate"),
     expectedReturn: formData.get("expectedReturn"),
     eventName: formData.get("eventName"),
+    eventId: formData.get("eventId"),
     notes: formData.get("notes"),
   });
   if (!parsed.success) {
@@ -109,6 +110,20 @@ export async function createLoan(
     }
   }
 
+  // US-P12 — lien optionnel à un événement du planning. Si lié et qu'aucun
+  // libellé libre n'est saisi, on prend le nom de l'événement comme snapshot.
+  let eventId: string | null = null;
+  let eventName = parsed.data.eventName ?? null;
+  if (parsed.data.eventId) {
+    const event = await db.event.findUnique({
+      where: { id: parsed.data.eventId },
+      select: { id: true, name: true },
+    });
+    if (!event) return { error: "Événement lié introuvable." };
+    eventId = event.id;
+    if (!eventName) eventName = event.name;
+  }
+
   // US-32 — un seul prêt groupé : N lignes (une par article) partageant un
   // `groupId`, chacune avec sa propre date de retour. Transaction explicite
   // (withAudit gère 1 result/1 audit) → N Loan rows + N AuditLog.
@@ -125,7 +140,8 @@ export async function createLoan(
             startDate: parsed.data.startDate,
             expectedReturn: item.expectedReturn ?? parsed.data.expectedReturn,
             status: "ACTIF",
-            eventName: parsed.data.eventName,
+            eventName,
+            eventId,
             notes: parsed.data.notes,
           },
         }),

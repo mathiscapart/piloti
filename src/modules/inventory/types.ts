@@ -73,6 +73,8 @@ export const createLoanSchema = z.object({
   startDate: z.coerce.date(),
   expectedReturn: z.coerce.date(),
   eventName: optionalString,
+  // US-P12 — lien optionnel vers un événement du planning.
+  eventId: optionalString,
   notes: optionalString,
 });
 export type CreateLoanInput = z.infer<typeof createLoanSchema>;

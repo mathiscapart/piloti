@@ -1,4 +1,4 @@
-import { CalendarDays, MapPin, Plus, Users } from "lucide-react";
+import { CalendarDays, ListTodo, MapPin, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -17,6 +17,7 @@ import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { formatEventRange, monthKey, monthLabel } from "@/modules/planning/format";
 import { listEvents, type EventListItem } from "@/modules/planning/queries";
+import { listOpenTasksPreview } from "@/modules/planning/tasks";
 
 const TYPE_TONE: Record<EventType, string> = {
   REUNION: "bg-sky-soft text-sky-ink",
@@ -40,11 +41,14 @@ export default async function PlanningPage({ searchParams }: PageProps) {
     type && (EVENT_TYPES as readonly string[]).includes(type) ? type : "";
   const past = scope === "past";
 
-  const events = await listEvents({
-    unit: unitFilter || undefined,
-    type: typeFilter || undefined,
-    scope: past ? "past" : "upcoming",
-  });
+  const [events, openTasks] = await Promise.all([
+    listEvents({
+      unit: unitFilter || undefined,
+      type: typeFilter || undefined,
+      scope: past ? "past" : "upcoming",
+    }),
+    listOpenTasksPreview(5),
+  ]);
 
   // Regroupement par mois (ordre déjà fixé par la requête).
   const groups: { key: string; label: string; items: EventListItem[] }[] = [];
@@ -89,6 +93,40 @@ export default async function PlanningPage({ searchParams }: PageProps) {
           ) : null}
         </div>
       </header>
+
+      {/* US-P10 — aperçu des tâches à faire (vue complète : /planning/taches). */}
+      {openTasks.length > 0 ? (
+        <section className="space-y-2 rounded-2xl bg-snow p-4 shadow-card">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-1.5 font-bold text-earth">
+              <ListTodo className="size-4 text-forest" />
+              À faire
+            </h2>
+            <Link
+              href="/planning/taches"
+              className="text-sm font-bold text-forest hover:underline"
+            >
+              Voir tout →
+            </Link>
+          </div>
+          <ul className="space-y-1">
+            {openTasks.map((t) => (
+              <li
+                key={t.id}
+                className="flex items-center gap-2 text-sm text-earth"
+              >
+                <span className="size-1.5 shrink-0 rounded-full bg-forest" />
+                <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                {t.assignee ? (
+                  <span className="shrink-0 text-xs text-trail">
+                    {t.assignee.firstName}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* Filtres (GET, côté serveur) : à-venir/passés, branche, type. */}
       <form

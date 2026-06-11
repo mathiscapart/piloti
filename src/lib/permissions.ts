@@ -49,6 +49,9 @@ export const ACTIONS = [
   // Planning & événements (US-P01/P02/P03)
   "event.view", // consulter le calendrier (tout utilisateur actif)
   "event.manage", // créer / modifier / supprimer un événement (encadrants)
+  // Tâches / to-do (US-P10)
+  "task.view", // consulter les tâches (tout utilisateur actif)
+  "task.manage", // créer / modifier / supprimer une tâche (encadrants)
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -64,7 +67,11 @@ interface AuthCtx {
 }
 
 // Ouvert à tout utilisateur ACTIVE, quel que soit le rôle.
-const ANY_ACTIVE = new Set<Action>(["donation.create", "event.view"]);
+const ANY_ACTIVE = new Set<Action>([
+  "donation.create",
+  "event.view",
+  "task.view",
+]);
 
 // Pour chaque action, les rôles (hors ADMIN, superutilisateur) qui l'autorisent.
 // Une action absente / à liste vide = réservée à l'ADMIN.
@@ -112,6 +119,9 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // Planning — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
   "event.view": [],
   "event.manage": [CHEF],
+  // Tâches — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
+  "task.view": [],
+  "task.manage": [CHEF],
 };
 
 /**

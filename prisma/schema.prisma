@@ -78,6 +78,7 @@ model User {
   eventRegistrations EventRegistration[] @relation("UserEventRegistration")
   eventReminders    EventReminder[]    @relation("UserEventReminder")
   attendances       Attendance[]       @relation("UserAttendance")
+  assignedTasks     Task[]             @relation("TaskAssignee")
   // US — rattachement familial : liens parent↔jeune (un compte peut être parent
   // de plusieurs jeunes et un jeune avoir plusieurs responsables).
   familyAsParent    FamilyLink[]       @relation("FamilyParent")
@@ -372,6 +373,25 @@ model EventRegistration {
 
   @@unique([eventId, userId])
   @@index([eventId])
+}
+
+// US-P10 — tâche (to-do) du planning : titre, responsable optionnel, échéance
+// optionnelle, statut fait/à faire.
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  assigneeId  String?
+  dueDate     DateTime? // échéance (date « murale », stockée en UTC)
+  done        Boolean   @default(false)
+  doneAt      DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  assignee User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([done])
+  @@index([dueDate])
 }
 
 // Rattachement familial : un lien parent → jeune. Permet à un parent d'agir

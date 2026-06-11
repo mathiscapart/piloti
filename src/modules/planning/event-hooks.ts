@@ -74,3 +74,51 @@ export async function notifyEventAudience(
     });
   }
 }
+
+// US-P11 — une tâche ouverte au groupe : annonce dans le salon général pour
+// mobiliser des volontaires (best-effort, sans notification de salon).
+export async function postGroupTaskToChannel(
+  title: string,
+  actorId: string,
+): Promise<void> {
+  const audience = await resolveUnitAudience(null); // groupe → #general
+  if (!audience.channelId) return;
+  const msg = await db.message.create({
+    data: {
+      channelId: audience.channelId,
+      authorId: actorId,
+      body: `📋 Nouvelle tâche du groupe : ${title} — inscris-toi pour aider !`,
+      attachments: "[]",
+    },
+  });
+  publishChannelEvent({
+    type: "message",
+    channelId: audience.channelId,
+    payload: { id: msg.id },
+  });
+}
+
+// US-P12 — un prêt rattaché à un événement : annonce le matériel mobilisé dans
+// le salon de l'unité concernée (best-effort, sans notification de salon).
+export async function postLoanToEventChannel(
+  eventUnit: string | null,
+  eventName: string,
+  summary: string,
+  actorId: string,
+): Promise<void> {
+  const audience = await resolveUnitAudience(eventUnit);
+  if (!audience.channelId) return;
+  const msg = await db.message.create({
+    data: {
+      channelId: audience.channelId,
+      authorId: actorId,
+      body: `🎒 Matériel réservé pour ${eventName} : ${summary}`,
+      attachments: "[]",
+    },
+  });
+  publishChannelEvent({
+    type: "message",
+    channelId: audience.channelId,
+    payload: { id: msg.id },
+  });
+}

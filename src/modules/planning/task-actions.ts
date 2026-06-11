@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
@@ -9,6 +10,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
+import { postGroupTaskToChannel } from "./event-hooks";
 import { nextOccurrenceData } from "./recurrence";
 
 // Échéance saisie en date « murale » (« YYYY-MM-DD ») → minuit UTC, pour un
@@ -83,6 +85,11 @@ export async function createTask(
       metadata: { taskId: task.id, title, recurrence, groupTask },
     }),
   );
+
+  // Fixation logique : une tâche de groupe est annoncée dans le salon général.
+  if (groupTask) {
+    after(() => postGroupTaskToChannel(title, user.id));
+  }
 
   revalidatePath("/planning/taches");
   revalidatePath("/planning");

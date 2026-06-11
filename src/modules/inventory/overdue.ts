@@ -37,6 +37,7 @@ export async function checkOverdueLoans(): Promise<number> {
     select: {
       id: true,
       expectedReturn: true,
+      borrowerId: true,
       equipment: { select: { name: true } },
       borrower: { select: { firstName: true, lastName: true } },
     },
@@ -84,6 +85,19 @@ export async function checkOverdueLoans(): Promise<number> {
         body,
         link: "/prets",
         messageId: loan.id, // clé de déduplication (un alerte par prêt)
+      });
+      sent++;
+    }
+
+    // Fixation logique : prévient aussi l'emprunteur lui-même.
+    if (!alreadySent.has(`${loan.borrowerId}:${loan.id}`)) {
+      await notify({
+        userId: loan.borrowerId,
+        type: "LOAN_OVERDUE",
+        title: "Ton prêt est en retard",
+        body: `${loan.equipment.name} — à rendre (${lateLabel}).`,
+        link: "/prets",
+        messageId: loan.id,
       });
       sent++;
     }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
@@ -9,6 +10,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { withAudit } from "@/lib/audit";
 import { can } from "@/lib/permissions";
 import { publishChannelEvent } from "@/lib/realtime";
+import { postLoanToEventChannel } from "@/modules/planning/event-hooks";
 
 import type { ActionResult } from "@/lib/types";
 import { resolveOverdueNotifications } from "./overdue";
@@ -114,14 +116,16 @@ export async function createLoan(
   // libellé libre n'est saisi, on prend le nom de l'événement comme snapshot.
   let eventId: string | null = null;
   let eventName = parsed.data.eventName ?? null;
+  let linkedEvent: { name: string; unit: string | null } | null = null;
   if (parsed.data.eventId) {
     const event = await db.event.findUnique({
       where: { id: parsed.data.eventId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, unit: true },
     });
     if (!event) return { error: "Événement lié introuvable." };
     eventId = event.id;
     if (!eventName) eventName = event.name;
+    linkedEvent = { name: event.name, unit: event.unit };
   }
 
   // US-32 — un seul prêt groupé : N lignes (une par article) partageant un
@@ -201,6 +205,19 @@ export async function createLoan(
       });
       revalidatePath("/communication/general");
     }
+  }
+
+  // Fixation logique (US-P12) : prêt rattaché à un événement → annonce le
+  // matériel mobilisé dans le salon de l'unité de l'événement.
+  if (linkedEvent) {
+    const summary = parsed.data.items
+      .map((i) => {
+        const name = byId.get(i.equipmentId)?.name ?? "Article";
+        return i.quantity > 1 ? `${name} ×${i.quantity}` : name;
+      })
+      .join(", ");
+    const ev = linkedEvent;
+    after(() => postLoanToEventChannel(ev.unit, ev.name, summary, user.id));
   }
 
   revalidatePath("/prets");

@@ -43,7 +43,7 @@ export function Sidebar({
     isNavActive(pathname, href, aliases);
 
   return (
-    <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-stone/60 bg-snow md:flex">
+    <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-stone/60 bg-snow md:flex print:hidden">
       <div className="flex h-16 items-center justify-between border-b border-stone/60 px-5">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img

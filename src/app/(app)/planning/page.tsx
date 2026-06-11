@@ -1,4 +1,4 @@
-import { CalendarDays, MapPin, Plus } from "lucide-react";
+import { CalendarDays, MapPin, Plus, Users } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -70,14 +70,24 @@ export default async function PlanningPage({ searchParams }: PageProps) {
             Événements
           </h1>
         </div>
-        {canManage ? (
-          <Button asChild>
-            <Link href="/planning/nouveau">
-              <Plus className="size-4" />
-              Nouvel événement
-            </Link>
-          </Button>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {can(user, "member.view") ? (
+            <Button asChild variant="outline">
+              <Link href="/planning/presences">
+                <Users className="size-4" />
+                Bilan présences
+              </Link>
+            </Button>
+          ) : null}
+          {canManage ? (
+            <Button asChild>
+              <Link href="/planning/nouveau">
+                <Plus className="size-4" />
+                Nouvel événement
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </header>
 
       {/* Filtres (GET, côté serveur) : à-venir/passés, branche, type. */}

@@ -20,7 +20,7 @@ export function BottomNav({ user }: { user: CurrentUser }) {
   const columns = items.length + 1;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-stone/60 bg-snow pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-stone/60 bg-snow pb-[env(safe-area-inset-bottom)] md:hidden print:hidden">
       <ul
         className="grid"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}

@@ -16,6 +16,10 @@ import {
   listLinkableParents,
 } from "@/modules/family/queries";
 import { getMemberDetail } from "@/modules/inventory/queries";
+import {
+  CONSECUTIVE_ABSENCE_THRESHOLD,
+  getMemberAttendanceStats,
+} from "@/modules/planning/stats";
 
 import { FamilySection } from "./FamilySection";
 import { MemberProfileForm } from "./MemberProfileForm";
@@ -32,6 +36,13 @@ const ROLE_LABEL: Record<string, string> = {
   PARENT: "Parent",
   JEUNE: "Jeune",
 };
+
+// Date d'événement : formatée en UTC (heure murale, cf. module planning).
+const EVENT_DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "short",
+  timeZone: "UTC",
+});
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -66,6 +77,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
     canManageFamily && isParent ? listLinkableChildren(user.id) : Promise.resolve([]),
     canManageFamily && isJeune ? listLinkableParents(user.id) : Promise.resolve([]),
   ]);
+
+  // US-P08 — statistiques de présence (jeunes uniquement).
+  const attendanceStats = isJeune
+    ? await getMemberAttendanceStats(user.id)
+    : null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -185,6 +201,67 @@ export default async function MemberDetailPage({ params }: PageProps) {
         linkableParents={linkableParents}
         canManage={canManageFamily}
       />
+
+      {/* US-P08 — statistiques de présence (jeunes). */}
+      {attendanceStats ? (
+        <section className="space-y-3 rounded-2xl bg-snow p-5 shadow-card">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-bold text-earth">Présence</h2>
+            {attendanceStats.rate !== null ? (
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-sm font-bold",
+                  attendanceStats.rate >= 70
+                    ? "bg-forest-soft text-forest-ink"
+                    : attendanceStats.rate >= 40
+                      ? "bg-sun-soft text-sun-ink"
+                      : "bg-brick-soft text-brick-ink",
+                )}
+              >
+                {attendanceStats.rate}%
+              </span>
+            ) : null}
+          </div>
+
+          {attendanceStats.total === 0 ? (
+            <p className="text-sm text-trail">
+              Aucun pointage enregistré pour le moment.
+            </p>
+          ) : (
+            <>
+              {attendanceStats.atRisk ? (
+                <p className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink">
+                  ⚠️ {attendanceStats.consecutiveAbsences} absences consécutives
+                  (seuil d&apos;alerte : {CONSECUTIVE_ABSENCE_THRESHOLD}).
+                </p>
+              ) : null}
+              <p className="text-sm text-earth">
+                Présent à{" "}
+                <span className="font-bold">
+                  {attendanceStats.present}/{attendanceStats.total}
+                </span>{" "}
+                événements pointés.
+              </p>
+              <ul className="flex flex-wrap gap-1.5">
+                {attendanceStats.recent.map((t) => (
+                  <li
+                    key={t.event.id}
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-xs font-medium",
+                      t.present
+                        ? "bg-forest-soft text-forest-ink"
+                        : "bg-brick-soft text-brick-ink",
+                    )}
+                    title={t.event.name}
+                  >
+                    {EVENT_DAY_FMT.format(t.event.startDate)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      ) : null}
 
       {/* Matériel détenu */}
       <section className="space-y-3">

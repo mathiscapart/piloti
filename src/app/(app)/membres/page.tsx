@@ -120,7 +120,7 @@ export default async function MembersPage({ searchParams }: PageProps) {
             return (
               <li
                 key={m.id}
-                className="flex items-center gap-3 rounded-2xl bg-snow p-4 shadow-card"
+                className="flex min-w-0 items-center gap-3 rounded-2xl bg-snow p-4 shadow-card"
               >
                 <Link href={`/membres/${m.id}`} className="shrink-0">
                   <UserAvatar

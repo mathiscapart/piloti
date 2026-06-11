@@ -1,26 +1,20 @@
 "use client";
 
-import { Check, Trash2 } from "lucide-react";
+import { Check, Repeat, Trash2, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
-import { deleteTask, toggleTask } from "@/modules/planning/task-actions";
+import {
+  deleteTask,
+  toggleTask,
+  toggleTaskSignup,
+} from "@/modules/planning/task-actions";
+import type { TaskVM } from "@/modules/planning/task-vm";
 
-export interface TaskVM {
-  id: string;
-  title: string;
-  done: boolean;
-  assigneeFirst: string | null;
-  assigneeLast: string | null;
-  assigneeImage: string | null;
-  dueLabel: string | null;
-  overdue: boolean;
-  canToggle: boolean;
-  canDelete: boolean;
-}
+export type { TaskVM };
 
 export function TaskList({ tasks }: { tasks: TaskVM[] }) {
   const router = useRouter();
@@ -53,6 +47,14 @@ export function TaskList({ tasks }: { tasks: TaskVM[] }) {
         toast.success("Tâche supprimée.");
         router.refresh();
       }
+    });
+  }
+
+  function signup(t: TaskVM) {
+    start(async () => {
+      const res = await toggleTaskSignup(t.id);
+      if (res?.error) toast.error(res.error);
+      else router.refresh();
     });
   }
 
@@ -117,7 +119,52 @@ export function TaskList({ tasks }: { tasks: TaskVM[] }) {
                     {t.dueLabel}
                   </span>
                 ) : null}
+                {t.recurrenceLabel ? (
+                  <span className="inline-flex items-center gap-1 text-trail">
+                    <Repeat className="size-3" />
+                    {t.recurrenceLabel}
+                  </span>
+                ) : null}
               </div>
+
+              {/* US-P11 — inscription groupe */}
+              {t.groupTask ? (
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold",
+                      t.covered
+                        ? "bg-forest-soft text-forest-ink"
+                        : "bg-sun-soft text-sun-ink",
+                    )}
+                  >
+                    <Users className="size-3" />
+                    {t.signupCount}
+                    {t.minRequired > 0 ? `/${t.minRequired}` : ""} inscrit
+                    {t.signupCount > 1 ? "s" : ""}
+                  </span>
+                  {!t.done ? (
+                    <button
+                      type="button"
+                      onClick={() => signup(t)}
+                      disabled={pending}
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 text-xs font-bold transition-colors disabled:opacity-50",
+                        t.mySignup
+                          ? "border-forest bg-forest text-snow"
+                          : "border-stone/60 bg-snow text-earth hover:bg-sand",
+                      )}
+                    >
+                      {t.mySignup ? "Inscrit ✓" : "S'inscrire"}
+                    </button>
+                  ) : null}
+                  {t.signupNames ? (
+                    <span className="min-w-0 truncate text-xs text-trail">
+                      {t.signupNames}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             {t.canDelete ? (

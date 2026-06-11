@@ -79,6 +79,7 @@ model User {
   eventReminders    EventReminder[]    @relation("UserEventReminder")
   attendances       Attendance[]       @relation("UserAttendance")
   assignedTasks     Task[]             @relation("TaskAssignee")
+  taskSignups       TaskSignup[]       @relation("TaskSignupUser")
   // US — rattachement familial : liens parent↔jeune (un compte peut être parent
   // de plusieurs jeunes et un jeune avoir plusieurs responsables).
   familyAsParent    FamilyLink[]       @relation("FamilyParent")
@@ -388,10 +389,33 @@ model Task {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 
-  assignee User? @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  // US-P11 — tâche récurrente / ouverte au groupe.
+  recurrence     String    @default("NONE") // NONE | DAILY | WEEKLY | MONTHLY | YEARLY
+  recurrenceEvery Int      @default(1) // intervalle (ex. toutes les 2 semaines)
+  groupTask      Boolean   @default(false) // ouverte à l'inscription du groupe
+  minRequired    Int       @default(0) // nb minimum d'inscrits pour être couverte
+  nextGenerated  Boolean   @default(false) // l'occurrence suivante a été générée
+  reminderSentAt DateTime? // dédup de la relance/rappel d'échéance
+
+  assignee User?        @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  signups  TaskSignup[]
 
   @@index([done])
   @@index([dueDate])
+}
+
+// US-P11 — inscription d'un membre sur une tâche ouverte au groupe.
+model TaskSignup {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation("TaskSignupUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@index([taskId])
 }
 
 // Rattachement familial : un lien parent → jeune. Permet à un parent d'agir

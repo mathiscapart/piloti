@@ -14,8 +14,18 @@ const TASK_SELECT = {
   dueDate: true,
   done: true,
   doneAt: true,
+  recurrence: true,
+  recurrenceEvery: true,
+  groupTask: true,
+  minRequired: true,
   assignee: {
     select: { id: true, firstName: true, lastName: true, image: true },
+  },
+  signups: {
+    orderBy: { createdAt: "asc" },
+    select: {
+      user: { select: { id: true, firstName: true, lastName: true, image: true } },
+    },
   },
 } as const;
 
@@ -64,4 +74,14 @@ export async function listOpenTasksPreview(limit = 5) {
 
 export async function countOpenTasks() {
   return db.task.count({ where: { done: false } });
+}
+
+// US-P11 — tâches de groupe ouvertes (pour le tableau de bord).
+export async function listOpenGroupTasks() {
+  const tasks = await db.task.findMany({
+    where: { done: false, groupTask: true },
+    orderBy: { createdAt: "asc" },
+    select: TASK_SELECT,
+  });
+  return sortTasks(tasks);
 }

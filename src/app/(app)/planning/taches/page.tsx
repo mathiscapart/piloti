@@ -7,15 +7,10 @@ import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { listBorrowers } from "@/modules/inventory/queries";
 import { listTasks, type TaskStatusFilter } from "@/modules/planning/tasks";
+import { buildTaskVMs } from "@/modules/planning/task-vm";
 
 import { CreateTaskForm } from "./CreateTaskForm";
-import { TaskList, type TaskVM } from "./TaskList";
-
-const DUE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  timeZone: "UTC",
-});
+import { TaskList } from "./TaskList";
 
 const STATUS_TABS: { value: TaskStatusFilter; label: string }[] = [
   { value: "open", label: "À faire" },
@@ -45,26 +40,7 @@ export default async function TasksPage({ searchParams }: PageProps) {
     listBorrowers(),
   ]);
 
-  // Aujourd'hui à minuit UTC (les échéances sont stockées en date « murale »).
-  const now = new Date();
-  const todayUtc = Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
-  );
-
-  const vm: TaskVM[] = tasks.map((t) => ({
-    id: t.id,
-    title: t.title,
-    done: t.done,
-    assigneeFirst: t.assignee?.firstName ?? null,
-    assigneeLast: t.assignee?.lastName ?? null,
-    assigneeImage: t.assignee?.image ?? null,
-    dueLabel: t.dueDate ? DUE_FMT.format(t.dueDate) : null,
-    overdue: !t.done && t.dueDate ? t.dueDate.getTime() < todayUtc : false,
-    canToggle: canManage || t.assignee?.id === user.id,
-    canDelete: canManage,
-  }));
+  const vm = buildTaskVMs(tasks, { userId: user.id, canManage });
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">

@@ -117,6 +117,18 @@ export const RSVP_LABEL: Record<RsvpResponse, string> = {
   MAYBE: "Peut-être",
 };
 
+// US-P11 — fréquence de récurrence d'une tâche.
+export const RECURRENCES = ["NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
+export type Recurrence = (typeof RECURRENCES)[number];
+
+export const RECURRENCE_LABEL: Record<Recurrence, string> = {
+  NONE: "Ponctuelle",
+  DAILY: "Quotidienne",
+  WEEKLY: "Hebdomadaire",
+  MONTHLY: "Mensuelle",
+  YEARLY: "Annuelle",
+};
+
 // Types de notification (cloche in-app + email + push). Extensible : chaque
 // nouveau déclencheur (annonce, mention, alerte retard…) ajoute une valeur ici.
 export const NOTIFICATION_TYPES = [
@@ -126,6 +138,7 @@ export const NOTIFICATION_TYPES = [
   "MENTION", // mention directe
   "LOAN_OVERDUE", // US-07 — prêt en retard
   "EVENT_REMINDER", // US-P06 — relance d'inscription avant la date limite
+  "TASK_REMINDER", // US-P11 — rappel / relance d'une tâche récurrente
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -181,5 +194,6 @@ export const AUDIT_ACTIONS = [
   "TASK_CREATED",
   "TASK_UPDATED",
   "TASK_DELETED",
+  "TASK_SIGNUP",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

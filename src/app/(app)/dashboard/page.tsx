@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Clock,
   Gift,
+  ListTodo,
   Package,
   Phone,
   Plus,
@@ -17,6 +18,10 @@ import { ROLE_LABEL, type Role } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
 import { getDashboardData } from "@/modules/inventory/queries";
+import { listOpenGroupTasks } from "@/modules/planning/tasks";
+import { buildTaskVMs } from "@/modules/planning/task-vm";
+
+import { TaskList } from "../planning/taches/TaskList";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -44,6 +49,13 @@ export default async function DashboardPage() {
   const roles = effectiveRoles(user);
   const roleLabel =
     roles.length > 0 ? (ROLE_LABEL[roles[0] as Role] ?? roles[0]) : "Membre";
+
+  // US-P11 — tâches de groupe ouvertes : visibles par tout le monde.
+  const groupTasks = await listOpenGroupTasks();
+  const groupTaskVms = buildTaskVMs(groupTasks, {
+    userId: user.id,
+    canManage: can(user, "task.manage"),
+  });
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -215,6 +227,25 @@ export default async function DashboardPage() {
           </ul>
         )}
       </section>
+      ) : null}
+
+      {/* US-P11 — tâches du groupe ouvertes à l'inscription (tout le monde). */}
+      {groupTaskVms.length > 0 ? (
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h2 className="flex items-center gap-1.5 text-lg font-bold text-earth">
+              <ListTodo className="size-5 text-forest" />
+              Tâches du groupe
+            </h2>
+            <Link
+              href="/planning/taches"
+              className="text-sm font-bold text-forest hover:underline"
+            >
+              Toutes →
+            </Link>
+          </div>
+          <TaskList tasks={groupTaskVms} />
+        </section>
       ) : null}
 
       {/* Utilisateur sans rôle métier (parent / jeune / membre du local). */}

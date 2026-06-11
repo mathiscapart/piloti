@@ -48,6 +48,22 @@ export function startScheduler(): void {
     } catch (err) {
       console.error("[scheduler] échec des relances d'inscription:", err);
     }
+
+    try {
+      const { processRecurringTasks, sendTaskReminders } = await import(
+        "@/modules/planning/task-scheduler"
+      );
+      const regenerated = await processRecurringTasks();
+      if (regenerated > 0) {
+        console.log(`[scheduler] ${regenerated} tâche(s) récurrente(s) régénérée(s).`);
+      }
+      const taskReminders = await sendTaskReminders();
+      if (taskReminders > 0) {
+        console.log(`[scheduler] ${taskReminders} rappel(s) de tâche envoyé(s).`);
+      }
+    } catch (err) {
+      console.error("[scheduler] échec du traitement des tâches:", err);
+    }
   };
 
   setTimeout(run, STARTUP_DELAY_MS);

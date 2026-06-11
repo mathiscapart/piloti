@@ -8,8 +8,10 @@ import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { ANNOUNCEMENT_AUDIENCES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { UNITS } from "@/lib/enums";
 import { can, effectiveRoles } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
+import { resolveUnitAudience } from "@/modules/audience/unit-audience";
 import { notifyMany } from "@/modules/notifications/notify";
 
 import { audienceUserIds } from "./audience";
@@ -24,10 +26,17 @@ const createSchema = z.object({
 });
 
 // Résout les destinataires d'une annonce selon son audience (ACTIVE, hors auteur).
+// Pour une branche précise, on inclut désormais les PARENTS des jeunes de la
+// branche (via le rattachement familial US-36) en plus de ses membres.
 async function resolveRecipients(
   audience: string,
   excludeUserId: string,
 ): Promise<string[]> {
+  if ((UNITS as readonly string[]).includes(audience)) {
+    const { allIds } = await resolveUnitAudience(audience);
+    return allIds.filter((id) => id !== excludeUserId);
+  }
+  // "ALL" / "PARENTS" : logique historique (sur la liste des comptes actifs).
   const users = await db.user.findMany({
     where: { status: "ACTIVE" },
     select: { id: true, role: true, roles: true, unit: true },

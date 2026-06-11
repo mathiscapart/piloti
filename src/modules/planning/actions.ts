@@ -11,6 +11,7 @@ import { RSVP_LABEL, RSVP_RESPONSES, type RsvpResponse } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
+import { isChildOf } from "@/modules/family/queries";
 
 import { eventSchema } from "./types";
 
@@ -197,13 +198,31 @@ export async function deleteEvent(eventId: string): Promise<ActionResult> {
 
 // US-P04 — un membre répond à un événement ouvert aux inscriptions
 // (présent / absent / peut-être). Réponse modifiable ; confirmation par email.
+// Un parent peut répondre pour un de ses enfants rattachés (`targetUserId`).
 export async function rsvpEvent(
   eventId: string,
   response: string,
+  targetUserId?: string,
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!(RSVP_RESPONSES as readonly string[]).includes(response)) {
     return { error: "Réponse invalide." };
+  }
+
+  // Cible : soi-même par défaut, sinon un enfant rattaché (autorisation).
+  const targetId = targetUserId ?? user.id;
+  let targetName: string | null = null;
+  if (targetId !== user.id) {
+    const ok = await isChildOf(user.id, targetId);
+    if (!ok) {
+      return { error: "Tu ne peux inscrire que tes enfants rattachés." };
+    }
+    const child = await db.user.findUnique({
+      where: { id: targetId },
+      select: { firstName: true, lastName: true },
+    });
+    if (!child) return { error: "Compte introuvable." };
+    targetName = `${child.firstName} ${child.lastName}`;
   }
 
   const event = await db.event.findUnique({
@@ -226,26 +245,29 @@ export async function rsvpEvent(
   await withAudit(
     (tx) =>
       tx.eventRegistration.upsert({
-        where: { eventId_userId: { eventId, userId: user.id } },
-        create: { eventId, userId: user.id, response },
+        where: { eventId_userId: { eventId, userId: targetId } },
+        create: { eventId, userId: targetId, response },
         update: { response },
       }),
     {
       action: "EVENT_RSVP",
       userId: user.id,
-      metadata: { eventId, response },
+      metadata: { eventId, response, targetUserId: targetId },
     },
   );
 
-  // Confirmation par email (best-effort, après la réponse).
+  // Confirmation par email à la personne qui agit (best-effort, après réponse).
   const label = RSVP_LABEL[response as RsvpResponse];
+  const body = targetName
+    ? `Inscription enregistrée pour <strong>${targetName}</strong> : <strong>${label}</strong>.`
+    : `Votre réponse a bien été enregistrée : <strong>${label}</strong>.`;
   after(() =>
     sendEmail({
       to: user.email,
       subject: `Inscription — ${event.name}`,
       html: notificationEmailHtml({
         title: event.name,
-        body: `Votre réponse a bien été enregistrée : <strong>${label}</strong>.`,
+        body,
         url: absoluteUrl(`/planning/${eventId}`),
         cta: "Voir l'événement",
       }),

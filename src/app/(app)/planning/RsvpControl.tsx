@@ -19,17 +19,20 @@ export function RsvpControl({
   eventId,
   current,
   closed,
+  forUserId,
 }: {
   eventId: string;
   current: string | null;
   closed?: boolean;
+  // Inscription pour un tiers (enfant rattaché). Absent = pour soi-même.
+  forUserId?: string;
 }) {
   const [pending, start] = useTransition();
 
   function choose(response: string) {
     if (closed) return;
     start(async () => {
-      const res = await rsvpEvent(eventId, response);
+      const res = await rsvpEvent(eventId, response, forUserId);
       if (res?.error) toast.error(res.error);
       else toast.success("Réponse enregistrée.");
     });

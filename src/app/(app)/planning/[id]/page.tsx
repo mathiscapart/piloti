@@ -16,6 +16,7 @@ import {
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { getChildrenOf } from "@/modules/family/queries";
 import { formatEventRange } from "@/modules/planning/format";
 import { getEventWithRegistrations } from "@/modules/planning/queries";
 
@@ -53,6 +54,16 @@ export default async function EventDetailPage({ params }: PageProps) {
   const deadlinePassed =
     event.registrationDeadline != null &&
     event.registrationDeadline < new Date();
+
+  // US-P04 + rattachement familial : un parent peut inscrire ses enfants.
+  const myChildren = event.registrationOpen
+    ? await getChildrenOf(user.id)
+    : [];
+  const childRsvps = myChildren.map((child) => ({
+    child,
+    response:
+      registrations.find((r) => r.user.id === child.id)?.response ?? null,
+  }));
 
   // Regroupement des réponses par type (pour la vue chef).
   const byResponse = (r: RsvpResponse) =>
@@ -143,6 +154,26 @@ export default async function EventDetailPage({ params }: PageProps) {
             <>
               <p className="text-sm text-trail">Indiquez votre présence :</p>
               <RsvpControl eventId={event.id} current={myResponse} />
+
+              {childRsvps.length > 0 ? (
+                <div className="space-y-3 border-t border-stone/50 pt-3">
+                  <p className="text-sm font-medium text-earth">
+                    Inscrire mes enfants :
+                  </p>
+                  {childRsvps.map(({ child, response }) => (
+                    <div key={child.id} className="space-y-1.5">
+                      <p className="text-sm font-bold text-earth">
+                        {child.firstName} {child.lastName}
+                      </p>
+                      <RsvpControl
+                        eventId={event.id}
+                        current={response}
+                        forUserId={child.id}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </>
           )}
         </section>

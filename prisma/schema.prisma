@@ -77,6 +77,10 @@ model User {
   resolvedIncidents Incident[] @relation("IncidentResolver")
   eventRegistrations EventRegistration[] @relation("UserEventRegistration")
   eventReminders    EventReminder[]    @relation("UserEventReminder")
+  // US — rattachement familial : liens parent↔jeune (un compte peut être parent
+  // de plusieurs jeunes et un jeune avoir plusieurs responsables).
+  familyAsParent    FamilyLink[]       @relation("FamilyParent")
+  familyAsChild     FamilyLink[]       @relation("FamilyChild")
   auditLogs         AuditLog[]
 
   @@index([status])
@@ -340,6 +344,23 @@ model EventRegistration {
 
   @@unique([eventId, userId])
   @@index([eventId])
+}
+
+// Rattachement familial : un lien parent → jeune. Permet à un parent d'agir
+// pour son enfant (ex. inscription à un événement, US-P04). Géré par
+// l'administration (user.manage).
+model FamilyLink {
+  id        String   @id @default(cuid())
+  parentId  String
+  childId   String
+  createdAt DateTime @default(now())
+
+  parent User @relation("FamilyParent", fields: [parentId], references: [id], onDelete: Cascade)
+  child  User @relation("FamilyChild", fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, childId])
+  @@index([parentId])
+  @@index([childId])
 }
 
 // US-P06 — relance automatique envoyée à un membre non-répondant avant la date

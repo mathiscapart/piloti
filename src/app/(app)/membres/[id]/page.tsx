@@ -10,8 +10,14 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import {
+  getFamilyForMember,
+  listLinkableChildren,
+  listLinkableParents,
+} from "@/modules/family/queries";
 import { getMemberDetail } from "@/modules/inventory/queries";
 
+import { FamilySection } from "./FamilySection";
 import { MemberProfileForm } from "./MemberProfileForm";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -48,8 +54,18 @@ export default async function MemberDetailPage({ params }: PageProps) {
   // voient en lecture seule.
   const canManageProfile = can(currentUser, "member.directory");
   const isParent = effectiveRoles(user).includes("PARENT");
+  const isJeune = effectiveRoles(user).includes("SCOUT");
   const hasProfile =
     !!user.profession || !!user.skills || !!user.availability || !!user.helpNotes;
+
+  // Rattachement familial : liens du membre + (pour user.manage) listes
+  // d'ajout selon son rôle. Affiché pour parents et jeunes.
+  const canManageFamily = can(currentUser, "user.manage");
+  const family = await getFamilyForMember(user.id);
+  const [linkableChildren, linkableParents] = await Promise.all([
+    canManageFamily && isParent ? listLinkableChildren(user.id) : Promise.resolve([]),
+    canManageFamily && isJeune ? listLinkableParents(user.id) : Promise.resolve([]),
+  ]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -157,6 +173,18 @@ export default async function MemberDetailPage({ params }: PageProps) {
           ) : null}
         </section>
       ) : null}
+
+      {/* Rattachement familial (parent ↔ jeune) */}
+      <FamilySection
+        memberId={user.id}
+        isParent={isParent}
+        isJeune={isJeune}
+        childLinks={family.children}
+        parentLinks={family.parents}
+        linkableChildren={linkableChildren}
+        linkableParents={linkableParents}
+        canManage={canManageFamily}
+      />
 
       {/* Matériel détenu */}
       <section className="space-y-3">

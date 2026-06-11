@@ -13,7 +13,7 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
-import { notifyEventAudience } from "./event-hooks";
+import { maybeAlertAbsences, notifyEventAudience } from "./event-hooks";
 import { eventSchema } from "./types";
 
 function absoluteUrl(path: string): string {
@@ -243,6 +243,12 @@ export async function setAttendance(
       metadata: { eventId, userId, present },
     },
   );
+
+  // Fixation logique (US-P08) : si le jeune est marqué absent et franchit le
+  // seuil d'absences consécutives, on alerte ses parents.
+  if (!present) {
+    after(() => maybeAlertAbsences(eventId, userId));
+  }
 
   revalidatePath(`/planning/${eventId}/presences`);
   revalidatePath(`/planning/${eventId}`);

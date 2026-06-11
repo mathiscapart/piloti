@@ -140,6 +140,7 @@ export const NOTIFICATION_TYPES = [
   "EVENT_REMINDER", // US-P06 — relance d'inscription avant la date limite
   "TASK_REMINDER", // US-P11 — rappel / relance d'une tâche récurrente
   "EVENT_UPDATE", // création / modification / annulation d'un événement
+  "ATTENDANCE_ALERT", // US-P08 — absences consécutives (alerte aux parents)
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

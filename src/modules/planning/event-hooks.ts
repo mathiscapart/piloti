@@ -6,6 +6,10 @@ import { resolveUnitAudience } from "@/modules/audience/unit-audience";
 import { notifyMany } from "@/modules/notifications/notify";
 
 import { formatEventRange } from "./format";
+import {
+  CONSECUTIVE_ABSENCE_THRESHOLD,
+  getMemberAttendanceStats,
+} from "./stats";
 
 // Fixations logiques — événement ↔ communication.
 // À la création / modification / annulation d'un événement, on :
@@ -73,6 +77,49 @@ export async function notifyEventAudience(
       payload: { id: msg.id },
     });
   }
+}
+
+// US-P08 — après un pointage « absent », alerte les parents si le jeune atteint
+// le seuil d'absences consécutives. Dédupliqué par (événement, jeune) pour ne
+// pas spammer lors de re-pointages.
+export async function maybeAlertAbsences(
+  eventId: string,
+  youthId: string,
+): Promise<void> {
+  const stats = await getMemberAttendanceStats(youthId);
+  if (!stats || stats.consecutiveAbsences < CONSECUTIVE_ABSENCE_THRESHOLD) {
+    return;
+  }
+
+  const dedupKey = `absence:${eventId}:${youthId}`;
+  const already = await db.notification.findFirst({
+    where: { type: "ATTENDANCE_ALERT", messageId: dedupKey },
+    select: { id: true },
+  });
+  if (already) return;
+
+  const [links, youth] = await Promise.all([
+    db.familyLink.findMany({
+      where: { childId: youthId },
+      select: { parentId: true },
+    }),
+    db.user.findUnique({
+      where: { id: youthId },
+      select: { firstName: true, lastName: true },
+    }),
+  ]);
+  const parentIds = links.map((l) => l.parentId);
+  if (parentIds.length === 0 || !youth) return;
+
+  const name = `${youth.firstName} ${youth.lastName}`;
+  await notifyMany(parentIds, (userId) => ({
+    userId,
+    type: "ATTENDANCE_ALERT",
+    title: `Absences répétées : ${name}`,
+    body: `${name} cumule ${stats.consecutiveAbsences} absences consécutives aux activités.`,
+    link: `/membres/${youthId}`,
+    messageId: dedupKey,
+  }));
 }
 
 // US-P11 — une tâche ouverte au groupe : annonce dans le salon général pour

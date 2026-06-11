@@ -31,14 +31,14 @@ export async function sendRegistrationReminders(): Promise<number> {
   let sent = 0;
   for (const event of events) {
     // Audience : membres de l'unité concernée, ou tout le groupe si non ciblé.
-    const recipients = await db.user.findMany({
+    const members = await db.user.findMany({
       where: {
         status: "ACTIVE",
         ...(event.unit ? { unit: event.unit } : {}),
       },
-      select: { id: true },
+      select: { id: true, roles: true },
     });
-    if (recipients.length === 0) continue;
+    if (members.length === 0) continue;
 
     const [registered, reminded] = await Promise.all([
       db.eventRegistration.findMany({
@@ -50,25 +50,50 @@ export async function sendRegistrationReminders(): Promise<number> {
         select: { userId: true },
       }),
     ]);
+    const registeredSet = new Set(registered.map((r) => r.userId));
     const excluded = new Set<string>([
       ...registered.map((r) => r.userId),
       ...reminded.map((r) => r.userId),
     ]);
 
-    for (const u of recipients) {
-      if (excluded.has(u.id)) continue;
+    // Fixation logique : on relance aussi les PARENTS des jeunes non inscrits
+    // (ils peuvent répondre pour leur enfant, US-36).
+    const uncoveredYouth = members
+      .filter((m) => {
+        try {
+          return (
+            (JSON.parse(m.roles) as string[]).includes("SCOUT") &&
+            !registeredSet.has(m.id)
+          );
+        } catch {
+          return false;
+        }
+      })
+      .map((m) => m.id);
+    const parentLinks = uncoveredYouth.length
+      ? await db.familyLink.findMany({
+          where: { childId: { in: uncoveredYouth } },
+          select: { parentId: true },
+        })
+      : [];
+    const recipientIds = [
+      ...new Set([...members.map((m) => m.id), ...parentLinks.map((l) => l.parentId)]),
+    ];
+
+    for (const userId of recipientIds) {
+      if (excluded.has(userId)) continue;
       // On marque la relance AVANT l'envoi : garantit l'anti-doublon même si
       // l'envoi échoue (mieux vaut une relance manquée qu'un spam). L'unique
       // (eventId,userId) absorbe les exécutions concurrentes.
       try {
         await db.eventReminder.create({
-          data: { eventId: event.id, userId: u.id },
+          data: { eventId: event.id, userId },
         });
       } catch {
         continue;
       }
       await notify({
-        userId: u.id,
+        userId,
         type: "EVENT_REMINDER",
         title: `Réponds-tu à « ${event.name} » ?`,
         body: `Tu n'as pas encore indiqué ta présence. Réponds avant la date limite.`,

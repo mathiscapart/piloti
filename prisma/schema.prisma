@@ -77,6 +77,7 @@ model User {
   resolvedIncidents Incident[] @relation("IncidentResolver")
   eventRegistrations EventRegistration[] @relation("UserEventRegistration")
   eventReminders    EventReminder[]    @relation("UserEventReminder")
+  attendances       Attendance[]       @relation("UserAttendance")
   // US — rattachement familial : liens parent↔jeune (un compte peut être parent
   // de plusieurs jeunes et un jeune avoir plusieurs responsables).
   familyAsParent    FamilyLink[]       @relation("FamilyParent")
@@ -325,8 +326,29 @@ model Event {
 
   registrations EventRegistration[]
   reminders     EventReminder[]
+  attendances   Attendance[]
 
   @@index([startDate])
+}
+
+// US-P07 — pointage de présence réelle à un événement (relevé par un chef),
+// distinct de l'inscription/RSVP (intention du membre). Une ligne par
+// (événement, membre) ; `present` modifiable. Alimente les stats US-P08/P09.
+model Attendance {
+  id         String   @id @default(cuid())
+  eventId    String
+  userId     String
+  present    Boolean  @default(true)
+  markedById String? // chef ayant pointé
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserAttendance", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId])
+  @@index([userId])
 }
 
 // US-P04 — réponse d'un membre à un événement (présent / absent / peut-être).

@@ -196,6 +196,43 @@ export async function deleteEvent(eventId: string): Promise<ActionResult> {
   redirect("/planning?notice=event-deleted");
 }
 
+// US-P07 — pointer la présence d'un membre à un événement (réservé aux chefs).
+// Modifiable à tout moment (corriger une erreur).
+export async function setAttendance(
+  eventId: string,
+  userId: string,
+  present: boolean,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "event.manage")) {
+    return { error: "Réservé aux chefs." };
+  }
+
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true },
+  });
+  if (!event) return { error: "Événement introuvable." };
+
+  await withAudit(
+    (tx) =>
+      tx.attendance.upsert({
+        where: { eventId_userId: { eventId, userId } },
+        create: { eventId, userId, present, markedById: actor.id },
+        update: { present, markedById: actor.id },
+      }),
+    {
+      action: "EVENT_ATTENDANCE",
+      userId: actor.id,
+      metadata: { eventId, userId, present },
+    },
+  );
+
+  revalidatePath(`/planning/${eventId}/presences`);
+  revalidatePath(`/planning/${eventId}`);
+  return { error: null };
+}
+
 // US-P04 — un membre répond à un événement ouvert aux inscriptions
 // (présent / absent / peut-être). Réponse modifiable ; confirmation par email.
 // Un parent peut répondre pour un de ses enfants rattachés (`targetUserId`).

@@ -75,6 +75,73 @@ export type EventRegistrationEntry = Awaited<
   ReturnType<typeof getEventWithRegistrations>
 >;
 
+function hasRole(rolesJson: string, role: string): boolean {
+  try {
+    return (JSON.parse(rolesJson) as string[]).includes(role);
+  } catch {
+    return false;
+  }
+}
+
+// US-P07 — feuille de pointage : les jeunes concernés par l'événement (unité
+// ciblée, ou toutes si événement de groupe) avec leur présence relevée.
+// `present` : true/false si pointé, null si pas encore pointé.
+export async function getAttendanceRoster(eventId: string) {
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, name: true, unit: true, startDate: true, endDate: true },
+  });
+  if (!event) return null;
+
+  const [jeunes, attendance] = await Promise.all([
+    db.user.findMany({
+      where: {
+        status: "ACTIVE",
+        roles: { contains: "SCOUT" },
+        ...(event.unit ? { unit: event.unit } : {}),
+      },
+      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        image: true,
+        unit: true,
+        roles: true,
+      },
+    }),
+    db.attendance.findMany({
+      where: { eventId },
+      select: { userId: true, present: true },
+    }),
+  ]);
+
+  const map = new Map(attendance.map((a) => [a.userId, a.present]));
+  const roster = jeunes
+    .filter((u) => hasRole(u.roles, "SCOUT"))
+    .map((u) => ({
+      user: {
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        image: u.image,
+        unit: u.unit,
+      },
+      present: map.get(u.id) ?? null,
+    }));
+
+  return { event, roster };
+}
+
+export type AttendanceRoster = NonNullable<
+  Awaited<ReturnType<typeof getAttendanceRoster>>
+>;
+
+// Compteur de présents (pour le résumé sur la fiche événement).
+export async function getAttendanceCount(eventId: string) {
+  return db.attendance.count({ where: { eventId, present: true } });
+}
+
 // Compteur d'événements à venir (badge dashboard / nav éventuel).
 export async function countUpcomingEvents() {
   return db.event.count({ where: { endDate: { gte: new Date() } } });

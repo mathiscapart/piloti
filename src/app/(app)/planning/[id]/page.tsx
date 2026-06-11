@@ -1,4 +1,11 @@
-import { ArrowLeft, CalendarDays, MapPin, Pencil, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  ClipboardCheck,
+  MapPin,
+  Pencil,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -18,7 +25,10 @@ import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getChildrenOf } from "@/modules/family/queries";
 import { formatEventRange } from "@/modules/planning/format";
-import { getEventWithRegistrations } from "@/modules/planning/queries";
+import {
+  getAttendanceCount,
+  getEventWithRegistrations,
+} from "@/modules/planning/queries";
 
 import { DeleteEventButton } from "../DeleteEventButton";
 import { RsvpControl } from "../RsvpControl";
@@ -64,6 +74,9 @@ export default async function EventDetailPage({ params }: PageProps) {
     response:
       registrations.find((r) => r.user.id === child.id)?.response ?? null,
   }));
+
+  // US-P07 — résumé de présence (pour les chefs).
+  const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
 
   // Regroupement des réponses par type (pour la vue chef).
   const byResponse = (r: RsvpResponse) =>
@@ -114,6 +127,13 @@ export default async function EventDetailPage({ params }: PageProps) {
 
         {canManage ? (
           <div className="flex flex-wrap gap-2 border-t border-stone/50 pt-4">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/planning/${event.id}/presences`}>
+                <ClipboardCheck className="size-4" />
+                Pointer les présences
+                {attendanceCount > 0 ? ` (${attendanceCount})` : ""}
+              </Link>
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link href={`/planning/${event.id}/modifier`}>
                 <Pencil className="size-4" />

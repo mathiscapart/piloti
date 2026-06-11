@@ -13,6 +13,7 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
+import { notifyEventAudience } from "./event-hooks";
 import { eventSchema } from "./types";
 
 function absoluteUrl(path: string): string {
@@ -88,7 +89,7 @@ export async function createEvent(
   const deadline = parseDeadline(parsed.data.registrationDeadline);
   if ("error" in deadline) return { error: deadline.error };
 
-  await withAudit(
+  const created = await withAudit(
     (tx) =>
       tx.event.create({
         data: {
@@ -110,6 +111,9 @@ export async function createEvent(
       metadata: { eventId: event.id, name: event.name, type: event.type },
     }),
   );
+
+  // Fixation logique : notifie l'unité (jeunes + parents) + poste au salon.
+  after(() => notifyEventAudience(created, user.id, "created"));
 
   revalidatePath("/planning");
   revalidatePath("/dashboard");
@@ -141,7 +145,7 @@ export async function updateEvent(
   const deadline = parseDeadline(parsed.data.registrationDeadline);
   if ("error" in deadline) return { error: deadline.error };
 
-  await withAudit(
+  const updated = await withAudit(
     (tx) =>
       tx.event.update({
         where: { id: eventId },
@@ -164,6 +168,8 @@ export async function updateEvent(
     },
   );
 
+  after(() => notifyEventAudience(updated, user.id, "updated"));
+
   revalidatePath("/planning");
   revalidatePath(`/planning/${eventId}`);
   revalidatePath("/dashboard");
@@ -178,7 +184,14 @@ export async function deleteEvent(eventId: string): Promise<ActionResult> {
   }
   const existing = await db.event.findUnique({
     where: { id: eventId },
-    select: { name: true },
+    select: {
+      id: true,
+      name: true,
+      unit: true,
+      startDate: true,
+      endDate: true,
+      location: true,
+    },
   });
   if (!existing) return { error: "Événement introuvable." };
 
@@ -190,6 +203,9 @@ export async function deleteEvent(eventId: string): Promise<ActionResult> {
       metadata: { eventId, name: existing.name },
     },
   );
+
+  // Fixation logique : prévient l'unité de l'annulation (+ message salon).
+  after(() => notifyEventAudience(existing, user.id, "cancelled"));
 
   revalidatePath("/planning");
   revalidatePath("/dashboard");

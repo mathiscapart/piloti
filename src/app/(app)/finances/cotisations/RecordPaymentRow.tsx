@@ -17,7 +17,10 @@ import {
 } from "@/lib/enums";
 import { cn } from "@/lib/utils";
 import { formatEuros } from "@/modules/finance/format";
-import { recordPayment } from "@/modules/finance/campaign-actions";
+import {
+  recordPayment,
+  toggleExemption,
+} from "@/modules/finance/campaign-actions";
 
 const STATUS_TONE: Record<PaymentStatus, string> = {
   PAID: "bg-forest-soft text-forest-ink",
@@ -35,6 +38,8 @@ export interface PaymentRowVM {
   paidCents: number;
   expectedCents: number;
   status: PaymentStatus;
+  exempt: boolean;
+  reminded: boolean;
   canManage: boolean;
 }
 
@@ -66,6 +71,19 @@ export function RecordPaymentRow(props: PaymentRowVM) {
     });
   }
 
+  function toggleExempt() {
+    start(async () => {
+      const res = await toggleExemption(props.campaignId, props.userId);
+      if (res?.error) toast.error(res.error);
+      else {
+        toast.success(
+          props.exempt ? "Relances réactivées." : "Relances suspendues.",
+        );
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <li className="space-y-2 rounded-2xl bg-snow p-3 shadow-card">
       <div className="flex items-center gap-3">
@@ -83,6 +101,15 @@ export function RecordPaymentRow(props: PaymentRowVM) {
             {formatEuros(props.paidCents)} / {formatEuros(props.expectedCents)}
           </p>
         </div>
+        {props.exempt ? (
+          <span className="shrink-0 rounded-full bg-stone px-2 py-0.5 text-xs font-bold text-earth">
+            Échelonnement
+          </span>
+        ) : props.reminded && props.status !== "PAID" ? (
+          <span className="shrink-0 rounded-full bg-sun-soft px-2 py-0.5 text-xs font-bold text-sun-ink">
+            Relancé
+          </span>
+        ) : null}
         <span
           className={cn(
             "shrink-0 rounded-full px-2 py-0.5 text-xs font-bold",
@@ -103,6 +130,19 @@ export function RecordPaymentRow(props: PaymentRowVM) {
           </Button>
         ) : null}
       </div>
+
+      {props.canManage && props.status !== "PAID" ? (
+        <button
+          type="button"
+          onClick={toggleExempt}
+          disabled={pending}
+          className="text-xs font-bold text-trail underline-offset-2 hover:text-earth hover:underline disabled:opacity-50"
+        >
+          {props.exempt
+            ? "Réactiver les relances"
+            : "Échelonnement convenu (suspendre les relances)"}
+        </button>
+      ) : null}
 
       {open && props.canManage ? (
         <div className="flex flex-wrap items-end gap-2 rounded-xl bg-sand/60 p-2">

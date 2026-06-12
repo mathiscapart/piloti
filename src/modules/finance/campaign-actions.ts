@@ -131,3 +131,35 @@ export async function recordPayment(
   revalidatePath(`/finances/cotisations/${campaignId}`);
   return { error: null };
 }
+
+// US-F03 — « échelonnement convenu » : active/désactive la suspension des
+// relances pour un jeune.
+export async function toggleExemption(
+  campaignId: string,
+  userId: string,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "campaign.manage")) {
+    return { error: "Réservé au trésorier." };
+  }
+
+  const existing = await db.campaignExemption.findUnique({
+    where: { campaignId_userId: { campaignId, userId } },
+    select: { id: true },
+  });
+
+  await withAudit(
+    (tx) =>
+      existing
+        ? tx.campaignExemption.delete({ where: { id: existing.id } })
+        : tx.campaignExemption.create({ data: { campaignId, userId } }),
+    {
+      action: "CAMPAIGN_EXEMPTION_TOGGLED",
+      userId: actor.id,
+      metadata: { campaignId, userId, exempt: !existing },
+    },
+  );
+
+  revalidatePath(`/finances/cotisations/${campaignId}`);
+  return { error: null };
+}

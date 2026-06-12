@@ -51,14 +51,26 @@ export async function getCampaignDetail(id: string) {
   });
   const jeunes = candidates.filter((u) => hasRole(u.roles, "SCOUT"));
 
-  const payments = await db.campaignPayment.findMany({
-    where: { campaignId: id },
-    select: { userId: true, amountCents: true },
-  });
+  const [payments, exemptions, reminders] = await Promise.all([
+    db.campaignPayment.findMany({
+      where: { campaignId: id },
+      select: { userId: true, amountCents: true },
+    }),
+    db.campaignExemption.findMany({
+      where: { campaignId: id },
+      select: { userId: true },
+    }),
+    db.campaignReminder.findMany({
+      where: { campaignId: id },
+      select: { userId: true },
+    }),
+  ]);
   const paidByUser = new Map<string, number>();
   for (const p of payments) {
     paidByUser.set(p.userId, (paidByUser.get(p.userId) ?? 0) + p.amountCents);
   }
+  const exemptSet = new Set(exemptions.map((e) => e.userId));
+  const remindedSet = new Set(reminders.map((r) => r.userId));
 
   const late = campaign.deadline != null && campaign.deadline < new Date();
 
@@ -72,6 +84,8 @@ export async function getCampaignDetail(id: string) {
       user: { id: j.id, firstName: j.firstName, lastName: j.lastName, image: j.image },
       paidCents: paid,
       status,
+      exempt: exemptSet.has(j.id),
+      reminded: remindedSet.has(j.id),
     };
   });
 

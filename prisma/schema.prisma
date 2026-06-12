@@ -386,9 +386,37 @@ model Campaign {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
 
-  payments CampaignPayment[]
+  payments   CampaignPayment[]
+  reminders  CampaignReminder[]
+  exemptions CampaignExemption[]
 
   @@index([unit])
+}
+
+// US-F03 — relance envoyée pour un jeune non à jour (dédup + historique).
+model CampaignReminder {
+  id         String   @id @default(cuid())
+  campaignId String
+  userId     String // le jeune relancé
+  sentAt     DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
+}
+
+// US-F03 — « échelonnement convenu » : suspend les relances pour ce jeune.
+model CampaignExemption {
+  id         String   @id @default(cuid())
+  campaignId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
 }
 
 // Un paiement (total ou partiel) d'un jeune pour une campagne. Plusieurs

@@ -218,6 +218,7 @@ export const NOTIFICATION_TYPES = [
   "EXPENSE_SUBMITTED", // US-F06 — note de frais déclarée (→ trésorier)
   "EXPENSE_UPDATE", // US-F07 — note de frais approuvée / remboursée / refusée
   "CAMPAIGN_LAUNCHED", // US-F01 — campagne de cotisation lancée (→ familles)
+  "CAMPAIGN_REMINDER", // US-F03 — relance d'une cotisation en retard
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -280,5 +281,6 @@ export const AUDIT_ACTIONS = [
   "EXPENSE_REIMBURSED",
   "CAMPAIGN_CREATED",
   "CAMPAIGN_PAYMENT_RECORDED",
+  "CAMPAIGN_EXEMPTION_TOGGLED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

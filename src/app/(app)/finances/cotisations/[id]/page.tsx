@@ -112,6 +112,8 @@ export default async function CampaignDetailPage({ params }: PageProps) {
               paidCents={r.paidCents}
               expectedCents={campaign.amountCents}
               status={r.status}
+              exempt={r.exempt}
+              reminded={r.reminded}
               canManage={canManage}
             />
           ))}

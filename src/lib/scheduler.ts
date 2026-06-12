@@ -64,6 +64,18 @@ export function startScheduler(): void {
     } catch (err) {
       console.error("[scheduler] échec du traitement des tâches:", err);
     }
+
+    try {
+      const { sendCampaignReminders } = await import(
+        "@/modules/finance/campaign-scheduler"
+      );
+      const reminders = await sendCampaignReminders();
+      if (reminders > 0) {
+        console.log(`[scheduler] ${reminders} relance(s) de cotisation envoyée(s).`);
+      }
+    } catch (err) {
+      console.error("[scheduler] échec des relances de cotisation:", err);
+    }
   };
 
   setTimeout(run, STARTUP_DELAY_MS);

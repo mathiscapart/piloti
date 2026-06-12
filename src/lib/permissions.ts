@@ -89,6 +89,7 @@ const RG = "RESPONSABLE_GROUPE";
 const MAT = "RESPONSABLE_MATERIEL";
 const TRES = "TRESORIER";
 const SEC = "SECRETAIRE";
+const LOCAL = "MEMBRE_LOCAL";
 
 const PERMISSIONS: Record<Action, Role[]> = {
   // Inventaire — lecture : encadrants + RG (lecture) + responsable matériel.
@@ -132,8 +133,10 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // Finances — déclaration par les encadrants ; gestion par le trésorier ;
   // consultation pour encadrants + RG (lecture seule). Le déclarant voit
   // toujours ses propres notes (filtré côté requête).
-  "expense.create": [CHEF, MAT, TRES],
-  "expense.view": [CHEF, MAT, TRES, RG],
+  // Déclaration ouverte à tous les rôles encadrants / fonctionnels — SAUF
+  // parents et jeunes (qui n'avancent pas de frais pour le groupe).
+  "expense.create": [CHEF, MAT, TRES, SEC, RG, LOCAL],
+  "expense.view": [CHEF, MAT, TRES, SEC, RG, LOCAL],
   "expense.manage": [TRES],
   // Cotisations — gestion par le trésorier ; lecture pour trésorier + RG.
   "campaign.view": [TRES, RG],

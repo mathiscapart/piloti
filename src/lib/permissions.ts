@@ -52,6 +52,10 @@ export const ACTIONS = [
   // Tâches / to-do (US-P10)
   "task.view", // consulter les tâches (tout utilisateur actif)
   "task.manage", // créer / modifier / supprimer une tâche (encadrants)
+  // Finances — notes de frais (US-F06/F07)
+  "expense.create", // déclarer une note de frais
+  "expense.view", // consulter les notes de frais (les siennes / toutes)
+  "expense.manage", // valider / rembourser / refuser (trésorier)
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -122,6 +126,12 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // Tâches — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
   "task.view": [],
   "task.manage": [CHEF],
+  // Finances — déclaration par les encadrants ; gestion par le trésorier ;
+  // consultation pour encadrants + RG (lecture seule). Le déclarant voit
+  // toujours ses propres notes (filtré côté requête).
+  "expense.create": [CHEF, MAT, TRES],
+  "expense.view": [CHEF, MAT, TRES, RG],
+  "expense.manage": [TRES],
 };
 
 /**

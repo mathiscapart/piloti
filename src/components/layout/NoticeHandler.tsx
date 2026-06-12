@@ -16,6 +16,7 @@ const SUCCESS_MESSAGES: Record<string, string> = {
   "event-created": "Événement créé.",
   "event-updated": "Événement mis à jour.",
   "event-deleted": "Événement supprimé.",
+  "expense-created": "Note de frais envoyée au trésorier.",
 };
 
 /**

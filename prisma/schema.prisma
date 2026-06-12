@@ -83,6 +83,8 @@ model User {
   attendances       Attendance[]       @relation("UserAttendance")
   assignedTasks     Task[]             @relation("TaskAssignee")
   taskSignups       TaskSignup[]       @relation("TaskSignupUser")
+  expensesDeclared  Expense[]          @relation("ExpenseDeclarant")
+  expensesReviewed  Expense[]          @relation("ExpenseReviewer")
   // US — rattachement familial : liens parent↔jeune (un compte peut être parent
   // de plusieurs jeunes et un jeune avoir plusieurs responsables).
   familyAsParent    FamilyLink[]       @relation("FamilyParent")
@@ -338,8 +340,37 @@ model Event {
   reminders     EventReminder[]
   attendances   Attendance[]
   loans         Loan[]
+  expenses      Expense[]
 
   @@index([startDate])
+}
+
+// US-F06/F07 — note de frais : une dépense avancée par un membre, à valider et
+// rembourser par le trésorier. Montant stocké en centimes (entier, pas de float).
+model Expense {
+  id                  String    @id @default(cuid())
+  declarantId         String
+  amountCents         Int
+  date                DateTime // date de la dépense (date « murale »)
+  category            String // ExpenseCategory
+  eventId             String? // dépense rattachée à un événement (optionnel)
+  note                String?
+  receiptUrl          String? // photo du reçu (obligatoire au-dessus de 20 €)
+  status              String    @default("PENDING") // ExpenseStatus
+  reviewedById        String?
+  reviewedAt          DateTime?
+  rejectionReason     String?
+  reimbursedAt        DateTime?
+  reimbursementMethod String? // espèces / chèque / virement
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @default(now()) @updatedAt
+
+  declarant User   @relation("ExpenseDeclarant", fields: [declarantId], references: [id])
+  reviewer  User?  @relation("ExpenseReviewer", fields: [reviewedById], references: [id])
+  event     Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([declarantId])
 }
 
 // US-P07 — pointage de présence réelle à un événement (relevé par un chef),

@@ -10,6 +10,7 @@ import {
   type LucideIcon,
   Megaphone,
   MessageSquare,
+  Wallet,
   Package,
   Truck,
   UserPlus,
@@ -66,6 +67,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/communication", label: "Messagerie", icon: MessageSquare, aliases: ["/messages"] },
       { href: "/membres", label: "Membres", icon: Users, requires: "member.view" },
       { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
+    ],
+  },
+  {
+    title: "Finances",
+    items: [
+      { href: "/finances/notes", label: "Notes de frais", icon: Wallet, requires: "expense.view" },
     ],
   },
   {

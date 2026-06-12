@@ -117,6 +117,53 @@ export const RSVP_LABEL: Record<RsvpResponse, string> = {
   MAYBE: "Peut-être",
 };
 
+// US-F06/F07 — notes de frais.
+export const EXPENSE_CATEGORIES = [
+  "TRANSPORT",
+  "HEBERGEMENT",
+  "NOURRITURE",
+  "MATERIEL",
+  "ACTIVITES",
+  "AUTRE",
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+  TRANSPORT: "Transport",
+  HEBERGEMENT: "Hébergement",
+  NOURRITURE: "Nourriture",
+  MATERIEL: "Matériel",
+  ACTIVITES: "Activités",
+  AUTRE: "Autre",
+};
+
+export const EXPENSE_STATUSES = [
+  "PENDING",
+  "APPROVED",
+  "REIMBURSED",
+  "REJECTED",
+] as const;
+export type ExpenseStatus = (typeof EXPENSE_STATUSES)[number];
+
+export const EXPENSE_STATUS_LABEL: Record<ExpenseStatus, string> = {
+  PENDING: "En attente",
+  APPROVED: "Approuvée",
+  REIMBURSED: "Remboursée",
+  REJECTED: "Refusée",
+};
+
+export const REIMBURSEMENT_METHODS = ["ESPECES", "CHEQUE", "VIREMENT"] as const;
+export type ReimbursementMethod = (typeof REIMBURSEMENT_METHODS)[number];
+
+export const REIMBURSEMENT_METHOD_LABEL: Record<ReimbursementMethod, string> = {
+  ESPECES: "Espèces",
+  CHEQUE: "Chèque",
+  VIREMENT: "Virement",
+};
+
+// Seuil (en centimes) au-dessus duquel le reçu est obligatoire (US-F06 : 20 €).
+export const RECEIPT_REQUIRED_ABOVE_CENTS = 2000;
+
 // US-P11 — fréquence de récurrence d'une tâche.
 export const RECURRENCES = ["NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 export type Recurrence = (typeof RECURRENCES)[number];
@@ -141,6 +188,8 @@ export const NOTIFICATION_TYPES = [
   "TASK_REMINDER", // US-P11 — rappel / relance d'une tâche récurrente
   "EVENT_UPDATE", // création / modification / annulation d'un événement
   "ATTENDANCE_ALERT", // US-P08 — absences consécutives (alerte aux parents)
+  "EXPENSE_SUBMITTED", // US-F06 — note de frais déclarée (→ trésorier)
+  "EXPENSE_UPDATE", // US-F07 — note de frais approuvée / remboursée / refusée
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -197,5 +246,9 @@ export const AUDIT_ACTIONS = [
   "TASK_UPDATED",
   "TASK_DELETED",
   "TASK_SIGNUP",
+  "EXPENSE_CREATED",
+  "EXPENSE_APPROVED",
+  "EXPENSE_REJECTED",
+  "EXPENSE_REIMBURSED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

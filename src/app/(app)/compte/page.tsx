@@ -13,6 +13,7 @@ import {
   ProfileForm,
   SkillsProfileForm,
 } from "./account-forms";
+import { CalendarSubscription } from "./CalendarSubscription";
 
 export default async function AccountPage() {
   const user = await getCurrentUser();
@@ -95,6 +96,9 @@ export default async function AccountPage() {
           skillsConsent={profile?.skillsConsent ?? false}
         />
       ) : null}
+
+      {/* US-P02 — abonnement iCal au planning. */}
+      <CalendarSubscription />
 
       {/* Mot de passe — auto-service via better-auth. */}
       <PasswordForm />

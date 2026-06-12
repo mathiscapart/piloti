@@ -3,11 +3,44 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { randomUUID } from "crypto";
+
 import { withAudit } from "@/lib/audit";
+import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 
 import type { ActionResult } from "@/lib/types";
+
+// US-P02 — renvoie (en la créant au besoin) l'URL d'abonnement iCal de
+// l'utilisateur. Le jeton est secret : il vaut authentification pour ce flux.
+export async function ensureCalendarToken(): Promise<{ url: string }> {
+  const user = await getCurrentUser();
+  const current = await db.user.findUnique({
+    where: { id: user.id },
+    select: { calendarToken: true },
+  });
+
+  let token = current?.calendarToken ?? null;
+  if (!token) {
+    token = `${randomUUID()}${randomUUID()}`.replace(/-/g, "");
+    await withAudit(
+      (tx) =>
+        tx.user.update({
+          where: { id: user.id },
+          data: { calendarToken: token },
+        }),
+      {
+        action: "USER_PROFILE_UPDATED",
+        userId: user.id,
+        metadata: { self: true, calendarToken: "generated" },
+      },
+    );
+  }
+
+  const base = process.env.BETTER_AUTH_URL ?? "";
+  return { url: `${base}/api/calendar/${token}.ics` };
+}
 
 // US-32 — auto-gestion : un utilisateur édite ses propres coordonnées.
 const profileSchema = z.object({

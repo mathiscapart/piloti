@@ -41,6 +41,9 @@ model User {
   // US-26 — profil demandé à l'inscription (ex. "PARENT") : simple indication
   // pour aider l'admin à attribuer le bon rôle à la validation. Non privilégié.
   requestedRole  String?
+  // US-P02 — jeton secret pour l'abonnement iCal (URL sans cookie). Généré à la
+  // demande depuis « Mon compte ».
+  calendarToken  String? @unique
 
   // US-26 — profil parent enrichi (annuaire des compétences pour aider le
   // groupe). Champs facultatifs ; `skillsConsent` = consentement RGPD pour

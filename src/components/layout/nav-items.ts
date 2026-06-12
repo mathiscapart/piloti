@@ -11,11 +11,12 @@ import {
   type LucideIcon,
   Megaphone,
   MessageSquare,
-  Wallet,
   Package,
+  PieChart,
   Truck,
   UserPlus,
   Users,
+  Wallet,
 } from "lucide-react";
 
 import type { Action } from "@/lib/permissions";
@@ -73,6 +74,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Finances",
     items: [
+      { href: "/finances/tableau-de-bord", label: "Tableau de bord", icon: PieChart, requires: "campaign.view" },
       { href: "/finances/cotisations", label: "Cotisations", icon: CreditCard, requires: "campaign.view" },
       { href: "/finances/notes", label: "Notes de frais", icon: Wallet, requires: "expense.view" },
     ],

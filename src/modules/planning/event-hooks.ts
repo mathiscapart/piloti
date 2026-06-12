@@ -63,11 +63,18 @@ export async function notifyEventAudience(
 
   // 2) Message d'info dans le salon de l'unité (pas de notification de salon).
   if (audience.channelId) {
+    // Lien cliquable vers l'événement (pour inscrire son enfant) — sauf à
+    // l'annulation, où l'événement n'existe plus.
+    const base = process.env.BETTER_AUTH_URL ?? "";
+    const cta =
+      change === "cancelled"
+        ? ""
+        : `\n👉 Détails & inscription : ${base}/planning/${event.id}`;
     const msg = await db.message.create({
       data: {
         channelId: audience.channelId,
         authorId: actorId,
-        body: `${cfg.emoji} ${cfg.verb} : ${event.name} — ${detail}`,
+        body: `${cfg.emoji} ${cfg.verb} : ${event.name} — ${detail}${cta}`,
         attachments: "[]",
       },
     });
@@ -130,11 +137,12 @@ export async function postGroupTaskToChannel(
 ): Promise<void> {
   const audience = await resolveUnitAudience(null); // groupe → #general
   if (!audience.channelId) return;
+  const base = process.env.BETTER_AUTH_URL ?? "";
   const msg = await db.message.create({
     data: {
       channelId: audience.channelId,
       authorId: actorId,
-      body: `📋 Nouvelle tâche du groupe : ${title} — inscris-toi pour aider !`,
+      body: `📋 Nouvelle tâche du groupe : ${title} — inscris-toi pour aider !\n👉 ${base}/planning/taches`,
       attachments: "[]",
     },
   });

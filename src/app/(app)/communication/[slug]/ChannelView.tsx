@@ -18,6 +18,8 @@ import {
 } from "@/modules/communication/actions";
 import { loadPolls } from "@/modules/communication/poll-actions";
 import type { PollWithVotes } from "@/modules/communication/poll-actions";
+
+import { MessageBody } from "./MessageBody";
 import type { ActionResult } from "@/lib/types";
 
 import { CreatePollDialog } from "./CreatePollDialog";
@@ -408,9 +410,7 @@ function MessageRow({
           </div>
         </div>
       ) : msg.body ? (
-        <p className="whitespace-pre-wrap break-words text-sm text-earth">
-          {msg.body}
-        </p>
+        <MessageBody body={msg.body} />
       ) : null}
 
       {attachments.length > 0 ? (

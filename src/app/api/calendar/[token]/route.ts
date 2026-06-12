@@ -77,15 +77,36 @@ export async function GET(
 
   const user = await db.user.findUnique({
     where: { calendarToken: clean },
-    select: { status: true, unit: true },
+    select: { id: true, status: true, unit: true },
   });
   if (!user || user.status !== "ACTIVE") {
     return new Response("Not found", { status: 404 });
   }
 
-  // Événements qui concernent l'utilisateur : ceux de groupe + ceux de sa branche.
+  // Événements auxquels l'utilisateur (ou ses enfants rattachés) est inscrit —
+  // inclus quelle que soit leur branche.
+  const childLinks = await db.familyLink.findMany({
+    where: { parentId: user.id },
+    select: { childId: true },
+  });
+  const memberIds = [user.id, ...childLinks.map((l) => l.childId)];
+  const regs = await db.eventRegistration.findMany({
+    where: { userId: { in: memberIds } },
+    select: { eventId: true },
+  });
+  const registeredEventIds = [...new Set(regs.map((r) => r.eventId))];
+
+  // Périmètre : événements de groupe + de sa branche + ceux où il est inscrit.
   const events = await db.event.findMany({
-    where: { OR: [{ unit: null }, { unit: user.unit }] },
+    where: {
+      OR: [
+        { unit: null },
+        ...(user.unit ? [{ unit: user.unit }] : []),
+        ...(registeredEventIds.length
+          ? [{ id: { in: registeredEventIds } }]
+          : []),
+      ],
+    },
     orderBy: { startDate: "asc" },
     select: {
       id: true,

@@ -85,6 +85,7 @@ model User {
   taskSignups       TaskSignup[]       @relation("TaskSignupUser")
   expensesDeclared  Expense[]          @relation("ExpenseDeclarant")
   expensesReviewed  Expense[]          @relation("ExpenseReviewer")
+  campaignPayments  CampaignPayment[]  @relation("CampaignPaymentUser")
   // US — rattachement familial : liens parent↔jeune (un compte peut être parent
   // de plusieurs jeunes et un jeune avoir plusieurs responsables).
   familyAsParent    FamilyLink[]       @relation("FamilyParent")
@@ -371,6 +372,43 @@ model Expense {
 
   @@index([status])
   @@index([declarantId])
+}
+
+// US-F01/F02 — campagne de cotisation. `amountCents` = montant attendu par jeune
+// du périmètre (unité, ou groupe si null).
+model Campaign {
+  id          String    @id @default(cuid())
+  name        String
+  amountCents Int
+  unit        String? // périmètre : null = tout le groupe
+  deadline    DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
+
+  payments CampaignPayment[]
+
+  @@index([unit])
+}
+
+// Un paiement (total ou partiel) d'un jeune pour une campagne. Plusieurs
+// paiements possibles par jeune (échelonnement).
+model CampaignPayment {
+  id           String   @id @default(cuid())
+  campaignId   String
+  userId       String // le jeune concerné
+  amountCents  Int
+  method       String // PaymentMethod
+  paidAt       DateTime
+  note         String?
+  recordedById String?
+  createdAt    DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user     User     @relation("CampaignPaymentUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
+  @@index([userId])
 }
 
 // US-P07 — pointage de présence réelle à un événement (relevé par un chef),

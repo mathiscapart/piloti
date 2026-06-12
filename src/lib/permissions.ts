@@ -56,6 +56,9 @@ export const ACTIONS = [
   "expense.create", // déclarer une note de frais
   "expense.view", // consulter les notes de frais (les siennes / toutes)
   "expense.manage", // valider / rembourser / refuser (trésorier)
+  // Finances — cotisations (US-F01/F02)
+  "campaign.view", // consulter les campagnes / suivi des paiements
+  "campaign.manage", // créer une campagne, enregistrer des paiements (trésorier)
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -132,6 +135,9 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "expense.create": [CHEF, MAT, TRES],
   "expense.view": [CHEF, MAT, TRES, RG],
   "expense.manage": [TRES],
+  // Cotisations — gestion par le trésorier ; lecture pour trésorier + RG.
+  "campaign.view": [TRES, RG],
+  "campaign.manage": [TRES],
 };
 
 /**

@@ -164,6 +164,33 @@ export const REIMBURSEMENT_METHOD_LABEL: Record<ReimbursementMethod, string> = {
 // Seuil (en centimes) au-dessus duquel le reçu est obligatoire (US-F06 : 20 €).
 export const RECEIPT_REQUIRED_ABOVE_CENTS = 2000;
 
+// US-F02 — modes de paiement d'une cotisation.
+export const PAYMENT_METHODS = [
+  "ESPECES",
+  "CHEQUE",
+  "VIREMENT",
+  "EN_LIGNE",
+] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  ESPECES: "Espèces",
+  CHEQUE: "Chèque",
+  VIREMENT: "Virement",
+  EN_LIGNE: "En ligne",
+};
+
+// US-F02 — statut de cotisation d'un jeune (dérivé : payé vs dû vs échéance).
+export const PAYMENT_STATUSES = ["PAID", "PARTIAL", "PENDING", "LATE"] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  PAID: "Payé",
+  PARTIAL: "Partiel",
+  PENDING: "En attente",
+  LATE: "En retard",
+};
+
 // US-P11 — fréquence de récurrence d'une tâche.
 export const RECURRENCES = ["NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const;
 export type Recurrence = (typeof RECURRENCES)[number];
@@ -190,6 +217,7 @@ export const NOTIFICATION_TYPES = [
   "ATTENDANCE_ALERT", // US-P08 — absences consécutives (alerte aux parents)
   "EXPENSE_SUBMITTED", // US-F06 — note de frais déclarée (→ trésorier)
   "EXPENSE_UPDATE", // US-F07 — note de frais approuvée / remboursée / refusée
+  "CAMPAIGN_LAUNCHED", // US-F01 — campagne de cotisation lancée (→ familles)
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -250,5 +278,7 @@ export const AUDIT_ACTIONS = [
   "EXPENSE_APPROVED",
   "EXPENSE_REJECTED",
   "EXPENSE_REIMBURSED",
+  "CAMPAIGN_CREATED",
+  "CAMPAIGN_PAYMENT_RECORDED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

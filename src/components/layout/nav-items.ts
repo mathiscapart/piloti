@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   CalendarDays,
   Contact,
+  CreditCard,
   FolderOpen,
   Gift,
   History,
@@ -72,6 +73,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: "Finances",
     items: [
+      { href: "/finances/cotisations", label: "Cotisations", icon: CreditCard, requires: "campaign.view" },
       { href: "/finances/notes", label: "Notes de frais", icon: Wallet, requires: "expense.view" },
     ],
   },

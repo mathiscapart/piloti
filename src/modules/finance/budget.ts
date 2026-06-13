@@ -8,7 +8,14 @@ import { EXPENSE_CATEGORIES } from "@/lib/enums";
 export async function getEventBudget(eventId: string) {
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true, name: true, priceCents: true, startDate: true, endDate: true },
+    select: {
+      id: true,
+      name: true,
+      priceCents: true,
+      requirePayment: true,
+      startDate: true,
+      endDate: true,
+    },
   });
   if (!event) return null;
 
@@ -63,11 +70,16 @@ export async function getEventBudget(eventId: string) {
     collectedCents: collected,
     // Marge : le tarif demandé couvre-t-il le budget prévu ?
     marginCents: price * attendeeCount - totalPlanned,
-    registrations: registrations.map((r) => ({
-      user: r.user,
-      paidCents: r.paidCents,
-      dueCents: Math.max(0, price - r.paidCents),
-    })),
+    registrations: registrations.map((r) => {
+      const dueCents = Math.max(0, price - r.paidCents);
+      return {
+        user: r.user,
+        paidCents: r.paidCents,
+        dueCents,
+        // Inscription provisoire : option activée + reste à payer.
+        provisional: event.requirePayment && dueCents > 0,
+      };
+    }),
   };
 }
 

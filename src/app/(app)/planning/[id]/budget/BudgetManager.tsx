@@ -11,7 +11,11 @@ import {
   type ExpenseCategory,
 } from "@/lib/enums";
 import { cn } from "@/lib/utils";
-import { setBudgetLine, setEventPrice } from "@/modules/finance/budget-actions";
+import {
+  setBudgetLine,
+  setEventPaymentRequired,
+  setEventPrice,
+} from "@/modules/finance/budget-actions";
 import { formatEuros } from "@/modules/finance/format";
 
 interface BudgetRow {
@@ -23,6 +27,7 @@ interface BudgetRow {
 export function BudgetManager({
   eventId,
   price,
+  requirePayment,
   rows,
   totalPlanned,
   totalActual,
@@ -33,6 +38,7 @@ export function BudgetManager({
 }: {
   eventId: string;
   price: number;
+  requirePayment: boolean;
   rows: BudgetRow[];
   totalPlanned: number;
   totalActual: number;
@@ -58,6 +64,14 @@ export function BudgetManager({
   function saveLine(category: string, value: string) {
     start(async () => {
       const res = await setBudgetLine(eventId, category, value);
+      if (res?.error) toast.error(res.error);
+      else router.refresh();
+    });
+  }
+
+  function toggleRequire(required: boolean) {
+    start(async () => {
+      const res = await setEventPaymentRequired(eventId, required);
       if (res?.error) toast.error(res.error);
       else router.refresh();
     });
@@ -91,6 +105,24 @@ export function BudgetManager({
             {price > 0 ? formatEuros(price) : "Gratuit"}
           </p>
         )}
+
+        {price > 0 ? (
+          <label className="flex items-start gap-2 pt-1">
+            <input
+              type="checkbox"
+              defaultChecked={requirePayment}
+              disabled={!canManage || pending}
+              onChange={(e) => toggleRequire(e.target.checked)}
+              className="mt-0.5 size-4 accent-forest"
+            />
+            <span className="text-sm text-earth">
+              Inscription définitive seulement si payée
+              <span className="block text-xs text-trail">
+                Les inscriptions non réglées restent « provisoires ».
+              </span>
+            </span>
+          </label>
+        ) : null}
       </section>
 
       {/* Budget prévisionnel vs réel */}

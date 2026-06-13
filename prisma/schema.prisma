@@ -339,6 +339,8 @@ model Event {
 
   // US-F05 — tarif demandé par jeune si l'événement est payant (null = gratuit).
   priceCents Int?
+  // US-F05 — si vrai, l'inscription reste provisoire tant qu'elle n'est pas payée.
+  requirePayment Boolean @default(false)
 
   registrations EventRegistration[]
   reminders     EventReminder[]

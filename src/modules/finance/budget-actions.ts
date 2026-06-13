@@ -41,6 +41,35 @@ export async function setEventPrice(
   return { error: null };
 }
 
+// US-F05 — (dé)active l'inscription provisoire-tant-que-non-payée.
+export async function setEventPaymentRequired(
+  eventId: string,
+  required: boolean,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, "budget.manage")) return { error: "Permission refusée." };
+
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true },
+  });
+  if (!event) return { error: "Événement introuvable." };
+
+  await withAudit(
+    (tx) =>
+      tx.event.update({ where: { id: eventId }, data: { requirePayment: required } }),
+    {
+      action: "EVENT_PRICE_SET",
+      userId: user.id,
+      metadata: { eventId, requirePayment: required },
+    },
+  );
+
+  revalidatePath(`/planning/${eventId}/budget`);
+  revalidatePath(`/planning/${eventId}`);
+  return { error: null };
+}
+
 // US-F04 — définir le montant prévu d'une catégorie de budget (0 = retire).
 export async function setBudgetLine(
   eventId: string,

@@ -21,6 +21,7 @@ export interface PaymentRowVM {
   paidCents: number;
   dueCents: number;
   priceCents: number;
+  provisional: boolean;
   canManage: boolean;
 }
 
@@ -62,6 +63,11 @@ export function EventPaymentRow(props: PaymentRowVM) {
             {formatEuros(props.paidCents)} / {formatEuros(props.priceCents)}
           </p>
         </div>
+        {props.provisional ? (
+          <span className="shrink-0 rounded-full bg-stone px-2 py-0.5 text-xs font-bold text-earth">
+            Provisoire
+          </span>
+        ) : null}
         <span
           className={cn(
             "shrink-0 rounded-full px-2 py-0.5 text-xs font-bold",

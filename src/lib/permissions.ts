@@ -59,6 +59,9 @@ export const ACTIONS = [
   // Finances — cotisations (US-F01/F02)
   "campaign.view", // consulter les campagnes / suivi des paiements
   "campaign.manage", // créer une campagne, enregistrer des paiements (trésorier)
+  // Finances — budget d'événement & encaissement (US-F04/F05)
+  "budget.view", // consulter le budget d'un événement
+  "budget.manage", // éditer le budget, le tarif, encaisser (chef / trésorier)
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -141,6 +144,10 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // Cotisations — gestion par le trésorier ; lecture pour trésorier + RG.
   "campaign.view": [TRES, RG],
   "campaign.manage": [TRES],
+  // Budget d'événement — construit par chef ou trésorier (US-F04 « chef ou
+  // trésorier ») ; lecture + RG.
+  "budget.view": [CHEF, TRES, RG],
+  "budget.manage": [CHEF, TRES],
 };
 
 /**

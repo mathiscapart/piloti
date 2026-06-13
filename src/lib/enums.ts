@@ -282,5 +282,8 @@ export const AUDIT_ACTIONS = [
   "CAMPAIGN_CREATED",
   "CAMPAIGN_PAYMENT_RECORDED",
   "CAMPAIGN_EXEMPTION_TOGGLED",
+  "BUDGET_LINE_SET",
+  "EVENT_PRICE_SET",
+  "EVENT_PAYMENT_RECORDED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

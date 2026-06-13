@@ -337,13 +337,33 @@ model Event {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @default(now()) @updatedAt
 
+  // US-F05 — tarif demandé par jeune si l'événement est payant (null = gratuit).
+  priceCents Int?
+
   registrations EventRegistration[]
   reminders     EventReminder[]
   attendances   Attendance[]
   loans         Loan[]
   expenses      Expense[]
+  budgetLines   BudgetLine[]
 
   @@index([startDate])
+}
+
+// US-F04 — ligne de budget prévisionnel d'un événement (un montant prévu par
+// catégorie). Le « réel » est dérivé des notes de frais liées à l'événement.
+model BudgetLine {
+  id           String   @id @default(cuid())
+  eventId      String
+  category     String // ExpenseCategory
+  plannedCents Int
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, category])
+  @@index([eventId])
 }
 
 // US-F06/F07 — note de frais : une dépense avancée par un membre, à valider et
@@ -466,6 +486,8 @@ model EventRegistration {
   eventId   String
   userId    String
   response  String // RsvpResponse: PRESENT | ABSENT | MAYBE
+  // US-F05 — montant déjà payé pour cette inscription (événement payant).
+  paidCents Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 

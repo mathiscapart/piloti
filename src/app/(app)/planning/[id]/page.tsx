@@ -7,6 +7,7 @@ import {
   Pencil,
   TriangleAlert,
   Users,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -81,6 +82,9 @@ export default async function EventDetailPage({ params }: PageProps) {
   // US-P07 — résumé de présence (pour les chefs).
   const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
 
+  // US-F04/F05 — accès au budget de l'événement.
+  const canViewBudget = can(user, "budget.view");
+
   // US-P12 — matériel mobilisé (prêts rattachés), pour qui peut voir les prêts.
   const canViewLoans = can(user, "loan.view");
   const eventLoans = canViewLoans ? await getEventLoans(event.id) : [];
@@ -135,22 +139,34 @@ export default async function EventDetailPage({ params }: PageProps) {
           </p>
         ) : null}
 
-        {canManage ? (
+        {canManage || canViewBudget ? (
           <div className="flex flex-wrap gap-2 border-t border-stone/50 pt-4">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/planning/${event.id}/presences`}>
-                <ClipboardCheck className="size-4" />
-                Pointer les présences
-                {attendanceCount > 0 ? ` (${attendanceCount})` : ""}
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/planning/${event.id}/modifier`}>
-                <Pencil className="size-4" />
-                Modifier
-              </Link>
-            </Button>
-            <DeleteEventButton eventId={event.id} />
+            {canManage ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/planning/${event.id}/presences`}>
+                  <ClipboardCheck className="size-4" />
+                  Pointer les présences
+                  {attendanceCount > 0 ? ` (${attendanceCount})` : ""}
+                </Link>
+              </Button>
+            ) : null}
+            {canViewBudget ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/planning/${event.id}/budget`}>
+                  <Wallet className="size-4" />
+                  Budget & finances
+                </Link>
+              </Button>
+            ) : null}
+            {canManage ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/planning/${event.id}/modifier`}>
+                  <Pencil className="size-4" />
+                  Modifier
+                </Link>
+              </Button>
+            ) : null}
+            {canManage ? <DeleteEventButton eventId={event.id} /> : null}
           </div>
         ) : null}
       </section>

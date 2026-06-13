@@ -3,6 +3,7 @@ import {
   CalendarDays,
   Contact,
   CreditCard,
+  FileText,
   FolderOpen,
   Gift,
   History,
@@ -77,6 +78,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/finances/tableau-de-bord", label: "Tableau de bord", icon: PieChart, requires: "campaign.view" },
       { href: "/finances/cotisations", label: "Cotisations", icon: CreditCard, requires: "campaign.view" },
       { href: "/finances/notes", label: "Notes de frais", icon: Wallet, requires: "expense.view" },
+      { href: "/finances/bilan", label: "Bilan annuel", icon: FileText, requires: "campaign.view" },
     ],
   },
   {

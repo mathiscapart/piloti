@@ -46,6 +46,7 @@ export default async function EventBudgetPage({ params }: PageProps) {
       <BudgetManager
         eventId={data.event.id}
         price={data.price}
+        socialPrice={data.socialPrice}
         requirePayment={data.event.requirePayment}
         rows={data.budgetRows}
         totalPlanned={data.totalPlanned}
@@ -82,7 +83,8 @@ export default async function EventBudgetPage({ params }: PageProps) {
                   image={r.user.image}
                   paidCents={r.paidCents}
                   dueCents={r.dueCents}
-                  priceCents={data.price}
+                  priceCents={r.priceCents}
+                  social={r.social}
                   provisional={r.provisional}
                   canManage={canManage}
                 />

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import {
   setBudgetLine,
   setEventPaymentRequired,
-  setEventPrice,
+  setEventPricing,
 } from "@/modules/finance/budget-actions";
 import { formatEuros } from "@/modules/finance/format";
 
@@ -27,6 +27,7 @@ interface BudgetRow {
 export function BudgetManager({
   eventId,
   price,
+  socialPrice,
   requirePayment,
   rows,
   totalPlanned,
@@ -38,6 +39,7 @@ export function BudgetManager({
 }: {
   eventId: string;
   price: number;
+  socialPrice: number;
   requirePayment: boolean;
   rows: BudgetRow[];
   totalPlanned: number;
@@ -50,12 +52,12 @@ export function BudgetManager({
   const router = useRouter();
   const [pending, start] = useTransition();
 
-  function savePrice(value: string) {
+  function savePricing(priceVal: string, socialVal: string) {
     start(async () => {
-      const res = await setEventPrice(eventId, value);
+      const res = await setEventPricing(eventId, priceVal, socialVal);
       if (res?.error) toast.error(res.error);
       else {
-        toast.success("Tarif enregistré.");
+        toast.success("Tarifs enregistrés.");
         router.refresh();
       }
     });
@@ -84,16 +86,36 @@ export function BudgetManager({
         <h2 className="font-bold text-earth">Tarif par jeune</h2>
         {canManage ? (
           <form
-            className="flex items-end gap-2"
-            action={(fd) => savePrice(String(fd.get("price") ?? ""))}
+            className="flex flex-wrap items-end gap-3"
+            action={(fd) =>
+              savePricing(
+                String(fd.get("price") ?? ""),
+                String(fd.get("social") ?? ""),
+              )
+            }
           >
             <div className="space-y-1">
+              <label className="text-xs text-trail">Tarif (€)</label>
               <Input
                 name="price"
                 inputMode="decimal"
                 defaultValue={price > 0 ? String(price / 100) : ""}
                 placeholder="0 = gratuit"
-                className="h-9 w-32"
+                className="h-9 w-28"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-trail">Tarif cas social (€)</label>
+              <Input
+                name="social"
+                inputMode="decimal"
+                defaultValue={
+                  socialPrice > 0 && socialPrice !== price
+                    ? String(socialPrice / 100)
+                    : ""
+                }
+                placeholder="(optionnel)"
+                className="h-9 w-28"
               />
             </div>
             <Button type="submit" size="sm" disabled={pending}>
@@ -103,6 +125,9 @@ export function BudgetManager({
         ) : (
           <p className="text-sm text-earth">
             {price > 0 ? formatEuros(price) : "Gratuit"}
+            {socialPrice > 0 && socialPrice !== price
+              ? ` · cas social ${formatEuros(socialPrice)}`
+              : ""}
           </p>
         )}
 

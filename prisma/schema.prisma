@@ -339,6 +339,8 @@ model Event {
 
   // US-F05 — tarif demandé par jeune si l'événement est payant (null = gratuit).
   priceCents Int?
+  // US-F05 — tarif réduit « cas social » (null = pas de tarif social).
+  socialPriceCents Int?
   // US-F05 — si vrai, l'inscription reste provisoire tant qu'elle n'est pas payée.
   requirePayment Boolean @default(false)
 
@@ -543,6 +545,8 @@ model EventRegistration {
   response  String // RsvpResponse: PRESENT | ABSENT | MAYBE
   // US-F05 — montant déjà payé pour cette inscription (événement payant).
   paidCents Int      @default(0)
+  // US-F05 — inscription au tarif « cas social » (tarif réduit de l'événement).
+  social    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 

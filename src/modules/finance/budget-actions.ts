@@ -11,20 +11,26 @@ import type { ActionResult } from "@/lib/types";
 
 import { parseAmountToCents } from "./format";
 
-// US-F05 — définir (ou retirer) le tarif d'un événement payant.
-export async function setEventPrice(
+// US-F05 — définir le tarif (par défaut) et le tarif « cas social » d'un
+// événement payant. Chaîne vide = tarif retiré (null).
+export async function setEventPricing(
   eventId: string,
-  amountStr: string,
+  priceStr: string,
+  socialStr: string,
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!can(user, "budget.manage")) return { error: "Permission refusée." };
 
-  const trimmed = amountStr.trim();
-  let priceCents: number | null = null;
-  if (trimmed.length > 0) {
-    priceCents = parseAmountToCents(trimmed);
-    if (priceCents === null) return { error: "Tarif invalide." };
-  }
+  const parseOptional = (s: string): { value: number | null } | { error: string } => {
+    const t = s.trim();
+    if (t.length === 0) return { value: null };
+    const c = parseAmountToCents(t);
+    return c === null ? { error: "Tarif invalide." } : { value: c };
+  };
+  const price = parseOptional(priceStr);
+  if ("error" in price) return { error: price.error };
+  const social = parseOptional(socialStr);
+  if ("error" in social) return { error: social.error };
 
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -33,8 +39,47 @@ export async function setEventPrice(
   if (!event) return { error: "Événement introuvable." };
 
   await withAudit(
-    (tx) => tx.event.update({ where: { id: eventId }, data: { priceCents } }),
-    { action: "EVENT_PRICE_SET", userId: user.id, metadata: { eventId, priceCents } },
+    (tx) =>
+      tx.event.update({
+        where: { id: eventId },
+        data: { priceCents: price.value, socialPriceCents: social.value },
+      }),
+    {
+      action: "EVENT_PRICE_SET",
+      userId: user.id,
+      metadata: { eventId, priceCents: price.value, socialPriceCents: social.value },
+    },
+  );
+
+  revalidatePath(`/planning/${eventId}/budget`);
+  return { error: null };
+}
+
+// US-F05 — (dé)marque une inscription au tarif « cas social ».
+export async function toggleEventSocial(
+  eventId: string,
+  userId: string,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, "budget.manage")) return { error: "Permission refusée." };
+
+  const reg = await db.eventRegistration.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+    select: { id: true, social: true },
+  });
+  if (!reg) return { error: "Inscription introuvable." };
+
+  await withAudit(
+    (tx) =>
+      tx.eventRegistration.update({
+        where: { id: reg.id },
+        data: { social: !reg.social },
+      }),
+    {
+      action: "EVENT_PRICE_SET",
+      userId: user.id,
+      metadata: { eventId, userId, social: !reg.social },
+    },
   );
 
   revalidatePath(`/planning/${eventId}/budget`);

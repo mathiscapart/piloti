@@ -12,6 +12,7 @@ export async function getEventBudget(eventId: string) {
       id: true,
       name: true,
       priceCents: true,
+      socialPriceCents: true,
       requirePayment: true,
       startDate: true,
       endDate: true,
@@ -34,6 +35,7 @@ export async function getEventBudget(eventId: string) {
       orderBy: { createdAt: "asc" },
       select: {
         paidCents: true,
+        social: true,
         user: { select: { id: true, firstName: true, lastName: true, image: true } },
       },
     }),
@@ -55,7 +57,14 @@ export async function getEventBudget(eventId: string) {
 
   const attendeeCount = registrations.length;
   const price = event.priceCents ?? 0;
+  const socialPrice = event.socialPriceCents ?? price; // tarif cas social
   const collected = registrations.reduce((a, r) => a + r.paidCents, 0);
+
+  // Le revenu attendu tient compte du tarif effectif de chaque inscrit.
+  const expectedRevenue = registrations.reduce(
+    (a, r) => a + (r.social ? socialPrice : price),
+    0,
+  );
 
   return {
     event,
@@ -66,15 +75,19 @@ export async function getEventBudget(eventId: string) {
     costPerYouthCents:
       attendeeCount > 0 ? Math.round(totalPlanned / attendeeCount) : 0,
     price,
-    expectedRevenueCents: price * attendeeCount,
+    socialPrice,
+    expectedRevenueCents: expectedRevenue,
     collectedCents: collected,
-    // Marge : le tarif demandé couvre-t-il le budget prévu ?
-    marginCents: price * attendeeCount - totalPlanned,
+    // Marge : les tarifs demandés couvrent-ils le budget prévu ?
+    marginCents: expectedRevenue - totalPlanned,
     registrations: registrations.map((r) => {
-      const dueCents = Math.max(0, price - r.paidCents);
+      const effective = r.social ? socialPrice : price;
+      const dueCents = Math.max(0, effective - r.paidCents);
       return {
         user: r.user,
         paidCents: r.paidCents,
+        priceCents: effective,
+        social: r.social,
         dueCents,
         // Inscription provisoire : option activée + reste à payer.
         provisional: event.requirePayment && dueCents > 0,

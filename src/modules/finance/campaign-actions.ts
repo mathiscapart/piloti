@@ -49,10 +49,28 @@ export async function createCampaign(
     if (!deadline) return { error: "Date limite invalide." };
   }
 
+  // US-F01 — tarifs différenciés + échelonnement (optionnels).
+  const secondRaw = String(formData.get("secondChild") ?? "").trim();
+  const socialRaw = String(formData.get("social") ?? "").trim();
+  const secondChildCents = secondRaw ? parseAmountToCents(secondRaw) : null;
+  const socialCents = socialRaw ? parseAmountToCents(socialRaw) : null;
+  if (secondRaw && secondChildCents === null) return { error: "Tarif 2e enfant invalide." };
+  if (socialRaw && socialCents === null) return { error: "Tarif cas social invalide." };
+  const installments = Math.min(12, Math.max(1, Number(formData.get("installments")) || 1));
+
   const created = await withAudit(
     (tx) =>
       tx.campaign.create({
-        data: { name, amountCents, unit, deadline, createdById: user.id },
+        data: {
+          name,
+          amountCents,
+          unit,
+          deadline,
+          secondChildCents,
+          socialCents,
+          installments,
+          createdById: user.id,
+        },
       }),
     (c) => ({
       action: "CAMPAIGN_CREATED",
@@ -125,6 +143,34 @@ export async function recordPayment(
       action: "CAMPAIGN_PAYMENT_RECORDED",
       userId: actor.id,
       metadata: { campaignId, userId, amountCents, method },
+    },
+  );
+
+  revalidatePath(`/finances/cotisations/${campaignId}`);
+  return { error: null };
+}
+
+// US-F01 — (dé)marque un jeune comme « cas social » pour la campagne.
+export async function toggleSocialCase(
+  campaignId: string,
+  userId: string,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "campaign.manage")) return { error: "Réservé au trésorier." };
+
+  const existing = await db.campaignSocialCase.findUnique({
+    where: { campaignId_userId: { campaignId, userId } },
+    select: { id: true },
+  });
+  await withAudit(
+    (tx) =>
+      existing
+        ? tx.campaignSocialCase.delete({ where: { id: existing.id } })
+        : tx.campaignSocialCase.create({ data: { campaignId, userId } }),
+    {
+      action: "CAMPAIGN_CREATED",
+      userId: actor.id,
+      metadata: { campaignId, userId, social: !existing },
     },
   );
 

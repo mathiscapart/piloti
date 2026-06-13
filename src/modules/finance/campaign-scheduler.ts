@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { notifyMany } from "@/modules/notifications/notify";
 
 import { formatEuros } from "./format";
+import { computeTiers } from "./tiers";
 
 // US-F03 — relances automatiques des cotisations en retard.
 // Pour chaque campagne dont l'échéance est passée, on relance (in-app + email)
@@ -47,6 +48,8 @@ export async function sendCampaignReminders(): Promise<number> {
       id: true,
       name: true,
       amountCents: true,
+      secondChildCents: true,
+      socialCents: true,
       unit: true,
       deadline: true,
       reminderDaysJson: true,
@@ -77,7 +80,7 @@ export async function sendCampaignReminders(): Promise<number> {
       .map((u) => u.id);
     if (jeunes.length === 0) continue;
 
-    const [payments, exemptions, reminders, links] = await Promise.all([
+    const [payments, exemptions, reminders, links, socialCases] = await Promise.all([
       db.campaignPayment.findMany({
         where: { campaignId: c.id, userId: { in: jeunes } },
         select: { userId: true, amountCents: true },
@@ -94,12 +97,17 @@ export async function sendCampaignReminders(): Promise<number> {
         where: { childId: { in: jeunes } },
         select: { parentId: true, childId: true },
       }),
+      db.campaignSocialCase.findMany({
+        where: { campaignId: c.id },
+        select: { userId: true },
+      }),
     ]);
 
     const paidBy = new Map<string, number>();
     for (const p of payments) {
       paidBy.set(p.userId, (paidBy.get(p.userId) ?? 0) + p.amountCents);
     }
+    const tiers = computeTiers(c, jeunes, links, new Set(socialCases.map((s) => s.userId)));
     const exempt = new Set(exemptions.map((e) => e.userId));
     const remindedAt = new Set(reminders.map((r) => `${r.userId}:${r.dayOffset}`));
     const parentsByChild = new Map<string, string[]>();
@@ -114,7 +122,8 @@ export async function sendCampaignReminders(): Promise<number> {
     // jeune (évite d'envoyer 3 relances d'un coup la première fois).
     for (const childId of jeunes) {
       if (exempt.has(childId)) continue;
-      const due = c.amountCents - (paidBy.get(childId) ?? 0);
+      const expected = tiers.get(childId)?.expectedCents ?? c.amountCents;
+      const due = expected - (paidBy.get(childId) ?? 0);
       if (due <= 0) continue;
 
       const offset = [...dueOffsets]

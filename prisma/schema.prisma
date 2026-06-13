@@ -411,12 +411,31 @@ model Campaign {
   // et modèle de message (null = gabarit par défaut).
   reminderDaysJson String  @default("[7,15,30]")
   reminderTemplate String?
+  // US-F01 — tarifs différenciés : `amountCents` = 1er enfant ; tarif 2e enfant
+  // et tarif « cas social » optionnels ; nb de paiements échelonnés (1 = unique).
+  secondChildCents Int?
+  socialCents      Int?
+  installments     Int     @default(1)
 
-  payments   CampaignPayment[]
-  reminders  CampaignReminder[]
-  exemptions CampaignExemption[]
+  payments    CampaignPayment[]
+  reminders   CampaignReminder[]
+  exemptions  CampaignExemption[]
+  socialCases CampaignSocialCase[]
 
   @@index([unit])
+}
+
+// US-F01 — jeune au tarif « cas social » pour une campagne.
+model CampaignSocialCase {
+  id         String   @id @default(cuid())
+  campaignId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
 }
 
 // US-F10 — caisse (compte de trésorerie). Le solde est dérivé du grand livre.

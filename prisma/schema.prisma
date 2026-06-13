@@ -407,6 +407,10 @@ model Campaign {
   createdById String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @default(now()) @updatedAt
+  // US-F03 — cadence des relances (jours après l'échéance, JSON ex. [7,15,30])
+  // et modèle de message (null = gabarit par défaut).
+  reminderDaysJson String  @default("[7,15,30]")
+  reminderTemplate String?
 
   payments   CampaignPayment[]
   reminders  CampaignReminder[]
@@ -449,11 +453,12 @@ model CampaignReminder {
   id         String   @id @default(cuid())
   campaignId String
   userId     String // le jeune relancé
+  dayOffset  Int      @default(0) // étape de cadence (jours après l'échéance)
   sentAt     DateTime @default(now())
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
-  @@unique([campaignId, userId])
+  @@unique([campaignId, userId, dayOffset])
   @@index([campaignId])
 }
 

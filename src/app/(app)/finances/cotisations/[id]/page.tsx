@@ -8,7 +8,16 @@ import { can } from "@/lib/permissions";
 import { getCampaignDetail } from "@/modules/finance/campaigns";
 import { formatEuros } from "@/modules/finance/format";
 
+import { CampaignReminderSettings } from "../CampaignReminderSettings";
 import { RecordPaymentRow } from "../RecordPaymentRow";
+
+function reminderDaysLabel(json: string): string {
+  try {
+    return (JSON.parse(json) as number[]).join(", ");
+  } catch {
+    return "7, 15, 30";
+  }
+}
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -93,6 +102,15 @@ export default async function CampaignDetailPage({ params }: PageProps) {
           </div>
         </div>
       </div>
+
+      {/* US-F03 — réglage des relances (trésorier) */}
+      {canManage ? (
+        <CampaignReminderSettings
+          campaignId={campaign.id}
+          days={reminderDaysLabel(campaign.reminderDaysJson)}
+          template={campaign.reminderTemplate ?? ""}
+        />
+      ) : null}
 
       {/* Suivi par jeune */}
       {rows.length === 0 ? (

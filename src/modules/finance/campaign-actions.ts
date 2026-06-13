@@ -132,6 +132,48 @@ export async function recordPayment(
   return { error: null };
 }
 
+// US-F03 — configure la cadence des relances (jours après échéance) et le
+// modèle de message d'une campagne.
+export async function updateCampaignReminders(
+  campaignId: string,
+  daysStr: string,
+  template: string,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "campaign.manage")) {
+    return { error: "Réservé au trésorier." };
+  }
+
+  const days = [
+    ...new Set(
+      daysStr
+        .split(/[,;\s]+/)
+        .map((s) => Number(s.trim()))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n <= 365),
+    ),
+  ].sort((a, b) => a - b);
+
+  const tpl = template.trim();
+  await withAudit(
+    (tx) =>
+      tx.campaign.update({
+        where: { id: campaignId },
+        data: {
+          reminderDaysJson: JSON.stringify(days),
+          reminderTemplate: tpl.length > 0 ? tpl : null,
+        },
+      }),
+    {
+      action: "CAMPAIGN_CREATED",
+      userId: actor.id,
+      metadata: { campaignId, reminderDays: days, templateEdited: tpl.length > 0 },
+    },
+  );
+
+  revalidatePath(`/finances/cotisations/${campaignId}`);
+  return { error: null };
+}
+
 // US-F03 — « échelonnement convenu » : active/désactive la suspension des
 // relances pour un jeune.
 export async function toggleExemption(

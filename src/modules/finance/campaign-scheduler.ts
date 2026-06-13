@@ -18,16 +18,52 @@ function hasRole(rolesJson: string, role: string): boolean {
   }
 }
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_TEMPLATE =
+  "Cotisation {campagne} : il reste {reste} à régler. Merci de régulariser.";
+
+function parseDays(json: string): number[] {
+  try {
+    const arr = JSON.parse(json) as unknown[];
+    return [...new Set(arr.map(Number).filter((n) => Number.isFinite(n) && n >= 0))].sort(
+      (a, b) => a - b,
+    );
+  } catch {
+    return [7, 15, 30];
+  }
+}
+
+function fillTemplate(tpl: string, vars: { campagne: string; reste: string }): string {
+  return tpl
+    .replaceAll("{campagne}", vars.campagne)
+    .replaceAll("{reste}", vars.reste);
+}
+
 export async function sendCampaignReminders(): Promise<number> {
   const now = new Date();
   const campaigns = await db.campaign.findMany({
     where: { deadline: { not: null, lt: now } },
-    select: { id: true, name: true, amountCents: true, unit: true },
+    select: {
+      id: true,
+      name: true,
+      amountCents: true,
+      unit: true,
+      deadline: true,
+      reminderDaysJson: true,
+      reminderTemplate: true,
+    },
   });
   if (campaigns.length === 0) return 0;
 
   let sent = 0;
   for (const c of campaigns) {
+    if (!c.deadline) continue;
+    // Étapes de cadence échues : échéance + N jours <= maintenant.
+    const dueOffsets = parseDays(c.reminderDaysJson).filter(
+      (d) => c.deadline!.getTime() + d * ONE_DAY_MS <= now.getTime(),
+    );
+    if (dueOffsets.length === 0) continue;
+
     const candidates = await db.user.findMany({
       where: {
         status: "ACTIVE",
@@ -41,7 +77,7 @@ export async function sendCampaignReminders(): Promise<number> {
       .map((u) => u.id);
     if (jeunes.length === 0) continue;
 
-    const [payments, exemptions, reminders] = await Promise.all([
+    const [payments, exemptions, reminders, links] = await Promise.all([
       db.campaignPayment.findMany({
         where: { campaignId: c.id, userId: { in: jeunes } },
         select: { userId: true, amountCents: true },
@@ -52,7 +88,11 @@ export async function sendCampaignReminders(): Promise<number> {
       }),
       db.campaignReminder.findMany({
         where: { campaignId: c.id },
-        select: { userId: true },
+        select: { userId: true, dayOffset: true },
+      }),
+      db.familyLink.findMany({
+        where: { childId: { in: jeunes } },
+        select: { parentId: true, childId: true },
       }),
     ]);
 
@@ -61,32 +101,30 @@ export async function sendCampaignReminders(): Promise<number> {
       paidBy.set(p.userId, (paidBy.get(p.userId) ?? 0) + p.amountCents);
     }
     const exempt = new Set(exemptions.map((e) => e.userId));
-    const reminded = new Set(reminders.map((r) => r.userId));
-
-    const toRemind = jeunes.filter(
-      (id) =>
-        (paidBy.get(id) ?? 0) < c.amountCents &&
-        !exempt.has(id) &&
-        !reminded.has(id),
-    );
-    if (toRemind.length === 0) continue;
-
-    const links = await db.familyLink.findMany({
-      where: { childId: { in: toRemind } },
-      select: { parentId: true, childId: true },
-    });
+    const remindedAt = new Set(reminders.map((r) => `${r.userId}:${r.dayOffset}`));
     const parentsByChild = new Map<string, string[]>();
     for (const l of links) {
       const arr = parentsByChild.get(l.childId) ?? [];
       arr.push(l.parentId);
       parentsByChild.set(l.childId, arr);
     }
+    const template = c.reminderTemplate?.trim() || DEFAULT_TEMPLATE;
 
-    for (const childId of toRemind) {
-      // Anti-doublon : on enregistre la relance AVANT l'envoi.
+    // On envoie pour la cadence la PLUS AVANCÉE due et non encore envoyée à ce
+    // jeune (évite d'envoyer 3 relances d'un coup la première fois).
+    for (const childId of jeunes) {
+      if (exempt.has(childId)) continue;
+      const due = c.amountCents - (paidBy.get(childId) ?? 0);
+      if (due <= 0) continue;
+
+      const offset = [...dueOffsets]
+        .reverse()
+        .find((d) => !remindedAt.has(`${childId}:${d}`));
+      if (offset === undefined) continue;
+
       try {
         await db.campaignReminder.create({
-          data: { campaignId: c.id, userId: childId },
+          data: { campaignId: c.id, userId: childId, dayOffset: offset },
         });
       } catch {
         continue;
@@ -94,12 +132,15 @@ export async function sendCampaignReminders(): Promise<number> {
       const recipients = [
         ...new Set([childId, ...(parentsByChild.get(childId) ?? [])]),
       ];
-      const due = c.amountCents - (paidBy.get(childId) ?? 0);
+      const body = fillTemplate(template, {
+        campagne: c.name,
+        reste: formatEuros(due),
+      });
       await notifyMany(recipients, (userId) => ({
         userId,
         type: "CAMPAIGN_REMINDER",
         title: `Cotisation en attente : ${c.name}`,
-        body: `Il reste ${formatEuros(due)} à régler.`,
+        body,
         link: "/finances/cotisations",
         messageId: c.id,
       }));

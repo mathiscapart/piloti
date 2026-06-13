@@ -49,7 +49,14 @@ export async function getCampaignDetail(id: string) {
       ...(campaign.unit ? { unit: campaign.unit } : {}),
     },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-    select: { id: true, firstName: true, lastName: true, image: true, roles: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      image: true,
+      roles: true,
+      socialBracket: { select: { coefficientPermille: true } },
+    },
   });
   const jeunes = candidates.filter((u) => hasRole(u.roles, "SCOUT"));
 
@@ -85,9 +92,13 @@ export async function getCampaignDetail(id: string) {
   const exemptSet = new Set(exemptions.map((e) => e.userId));
   const remindedSet = new Set(reminders.map((r) => r.userId));
   const socialSet = new Set(socialCases.map((s) => s.userId));
+  // US-F — pondération par tranche de quotient familial (globale).
+  const permilleByUser = new Map(
+    jeunes.map((j) => [j.id, j.socialBracket?.coefficientPermille ?? 1000]),
+  );
 
-  // US-F01 — montant attendu par jeune (tarif différencié).
-  const tiers = computeTiers(campaign, jeuneIds, links, socialSet);
+  // US-F01 — montant attendu par jeune (tarif différencié × tranche QF).
+  const tiers = computeTiers(campaign, jeuneIds, links, socialSet, permilleByUser);
 
   const late = campaign.deadline != null && campaign.deadline < new Date();
 

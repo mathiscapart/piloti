@@ -9,10 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { cn } from "@/lib/utils";
-import {
-  recordEventPayment,
-  toggleEventSocial,
-} from "@/modules/finance/budget-actions";
+import { recordEventPayment } from "@/modules/finance/budget-actions";
 import { formatEuros } from "@/modules/finance/format";
 
 export interface PaymentRowVM {
@@ -24,7 +21,7 @@ export interface PaymentRowVM {
   paidCents: number;
   dueCents: number;
   priceCents: number;
-  social: boolean;
+  bracketName: string | null;
   provisional: boolean;
   canManage: boolean;
 }
@@ -50,17 +47,6 @@ export function EventPaymentRow(props: PaymentRowVM) {
     });
   }
 
-  function toggleSocial() {
-    start(async () => {
-      const res = await toggleEventSocial(props.eventId, props.userId);
-      if (res?.error) toast.error(res.error);
-      else {
-        toast.success(props.social ? "Cas social retiré." : "Tarif cas social appliqué.");
-        router.refresh();
-      }
-    });
-  }
-
   return (
     <li className="space-y-2 rounded-2xl bg-snow p-3 shadow-card">
       <div className="flex items-center gap-3">
@@ -78,9 +64,9 @@ export function EventPaymentRow(props: PaymentRowVM) {
             {formatEuros(props.paidCents)} / {formatEuros(props.priceCents)}
           </p>
         </div>
-        {props.social ? (
+        {props.bracketName ? (
           <span className="shrink-0 rounded-full bg-forest-soft px-2 py-0.5 text-xs font-bold text-forest-ink">
-            Cas social
+            {props.bracketName}
           </span>
         ) : null}
         {props.provisional ? (
@@ -112,17 +98,6 @@ export function EventPaymentRow(props: PaymentRowVM) {
           </Button>
         ) : null}
       </div>
-
-      {props.canManage ? (
-        <button
-          type="button"
-          onClick={toggleSocial}
-          disabled={pending}
-          className="text-xs font-bold text-trail underline-offset-2 hover:text-earth hover:underline disabled:opacity-50"
-        >
-          {props.social ? "Retirer le tarif cas social" : "Appliquer le tarif cas social"}
-        </button>
-      ) : null}
 
       {open && props.canManage ? (
         <div className="flex flex-wrap items-end gap-2 rounded-xl bg-sand/60 p-2">

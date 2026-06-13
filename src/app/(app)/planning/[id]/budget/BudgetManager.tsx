@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
@@ -27,7 +28,6 @@ interface BudgetRow {
 export function BudgetManager({
   eventId,
   price,
-  socialPrice,
   requirePayment,
   rows,
   totalPlanned,
@@ -35,11 +35,11 @@ export function BudgetManager({
   attendeeCount,
   costPerYouthCents,
   marginCents,
+  expectedRevenueCents,
   canManage,
 }: {
   eventId: string;
   price: number;
-  socialPrice: number;
   requirePayment: boolean;
   rows: BudgetRow[];
   totalPlanned: number;
@@ -47,17 +47,18 @@ export function BudgetManager({
   attendeeCount: number;
   costPerYouthCents: number;
   marginCents: number;
+  expectedRevenueCents: number;
   canManage: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
 
-  function savePricing(priceVal: string, socialVal: string) {
+  function savePricing(priceVal: string) {
     start(async () => {
-      const res = await setEventPricing(eventId, priceVal, socialVal);
+      const res = await setEventPricing(eventId, priceVal);
       if (res?.error) toast.error(res.error);
       else {
-        toast.success("Tarifs enregistrés.");
+        toast.success("Tarif enregistré.");
         router.refresh();
       }
     });
@@ -83,38 +84,19 @@ export function BudgetManager({
     <div className="space-y-4">
       {/* Tarif */}
       <section className="space-y-2 rounded-2xl bg-snow p-5 shadow-card">
-        <h2 className="font-bold text-earth">Tarif par jeune</h2>
+        <h2 className="font-bold text-earth">Tarif de base par jeune</h2>
         {canManage ? (
           <form
             className="flex flex-wrap items-end gap-3"
-            action={(fd) =>
-              savePricing(
-                String(fd.get("price") ?? ""),
-                String(fd.get("social") ?? ""),
-              )
-            }
+            action={(fd) => savePricing(String(fd.get("price") ?? ""))}
           >
             <div className="space-y-1">
-              <label className="text-xs text-trail">Tarif (€)</label>
+              <label className="text-xs text-trail">Tarif plein (€)</label>
               <Input
                 name="price"
                 inputMode="decimal"
                 defaultValue={price > 0 ? String(price / 100) : ""}
                 placeholder="0 = gratuit"
-                className="h-9 w-28"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-trail">Tarif cas social (€)</label>
-              <Input
-                name="social"
-                inputMode="decimal"
-                defaultValue={
-                  socialPrice > 0 && socialPrice !== price
-                    ? String(socialPrice / 100)
-                    : ""
-                }
-                placeholder="(optionnel)"
                 className="h-9 w-28"
               />
             </div>
@@ -125,11 +107,20 @@ export function BudgetManager({
         ) : (
           <p className="text-sm text-earth">
             {price > 0 ? formatEuros(price) : "Gratuit"}
-            {socialPrice > 0 && socialPrice !== price
-              ? ` · cas social ${formatEuros(socialPrice)}`
-              : ""}
           </p>
         )}
+        {price > 0 ? (
+          <p className="text-xs text-trail">
+            Chaque jeune paie ce tarif pondéré par sa{" "}
+            <Link
+              href="/finances/tranches"
+              className="font-bold text-forest underline-offset-2 hover:underline"
+            >
+              tranche de quotient familial
+            </Link>
+            .
+          </p>
+        ) : null}
 
         {price > 0 ? (
           <label className="flex items-start gap-2 pt-1">
@@ -221,13 +212,38 @@ export function BudgetManager({
               marginCents >= 0 ? "text-forest" : "text-brick",
             )}
           >
+            {marginCents >= 0 ? "+" : ""}
             {formatEuros(marginCents)}
           </p>
           <p className="text-xs text-trail">
-            Marge (tarif × inscrits − budget)
+            Solde (contributions − budget)
           </p>
         </div>
       </section>
+
+      {/* Équilibre : objectif « 0 à la fin » */}
+      {price > 0 ? (
+        <div
+          className={cn(
+            "flex items-center justify-between rounded-2xl px-4 py-3 text-sm shadow-card",
+            marginCents >= 0
+              ? "bg-forest-soft text-forest-ink"
+              : "bg-sun-soft text-sun-ink",
+          )}
+        >
+          <span className="font-bold">
+            {marginCents >= 0
+              ? marginCents === 0
+                ? "Budget équilibré ✓"
+                : "Budget couvert ✓"
+              : "Budget non couvert"}
+          </span>
+          <span>
+            {formatEuros(expectedRevenueCents)} attendus /{" "}
+            {formatEuros(totalPlanned)} prévus
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

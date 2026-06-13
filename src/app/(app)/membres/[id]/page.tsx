@@ -10,6 +10,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { listBrackets } from "@/modules/finance/brackets";
 import {
   getFamilyForMember,
   listLinkableChildren,
@@ -21,6 +22,7 @@ import {
   getMemberAttendanceStats,
 } from "@/modules/planning/stats";
 
+import { BracketSelect } from "./BracketSelect";
 import { FamilySection } from "./FamilySection";
 import { MemberProfileForm } from "./MemberProfileForm";
 
@@ -82,6 +84,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
   const attendanceStats = isJeune
     ? await getMemberAttendanceStats(user.id)
     : null;
+
+  // US-F — tranche de quotient familial : assignable par le trésorier sur un
+  // jeune (le tarif effectif des événements/cotisations en découle).
+  const canManageBracket = isJeune && can(currentUser, "campaign.manage");
+  const brackets = canManageBracket ? await listBrackets() : [];
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -201,6 +208,19 @@ export default async function MemberDetailPage({ params }: PageProps) {
         linkableParents={linkableParents}
         canManage={canManageFamily}
       />
+
+      {/* US-F — tranche de quotient familial (jeunes, trésorier). */}
+      {canManageBracket ? (
+        <BracketSelect
+          userId={user.id}
+          currentBracketId={user.socialBracketId}
+          brackets={brackets.map((b) => ({
+            id: b.id,
+            name: b.name,
+            coefficientPermille: b.coefficientPermille,
+          }))}
+        />
+      ) : null}
 
       {/* US-P08 — statistiques de présence (jeunes). */}
       {attendanceStats ? (

@@ -90,10 +90,32 @@ model User {
   // de plusieurs jeunes et un jeune avoir plusieurs responsables).
   familyAsParent    FamilyLink[]       @relation("FamilyParent")
   familyAsChild     FamilyLink[]       @relation("FamilyChild")
+  // US-F — tranche de quotient familial (tarification solidaire SGDF).
+  socialBracketId   String?
+  socialBracket     SocialBracket?     @relation("UserSocialBracket", fields: [socialBracketId], references: [id], onDelete: SetNull)
   auditLogs         AuditLog[]
 
   @@index([status])
   @@index([role])
+  @@index([socialBracketId])
+}
+
+// US-F — tranche de quotient familial (tarification solidaire SGDF).
+// Définies une fois pour le groupe (T1…T5). Chaque famille est rangée dans une
+// tranche stable, appliquée automatiquement aux événements ET aux cotisations.
+// coefficientPermille = multiplicateur en pour-mille (1000 = ×1.0, 600 = ×0.6).
+model SocialBracket {
+  id                 String   @id @default(cuid())
+  name               String
+  coefficientPermille Int     @default(1000)
+  order              Int      @default(0)
+  archived           Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  members User[] @relation("UserSocialBracket")
+
+  @@index([archived])
 }
 
 model Session {

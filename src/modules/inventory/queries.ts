@@ -446,6 +446,8 @@ export async function getMemberDetail(id: string) {
       availability: true,
       helpNotes: true,
       skillsConsent: true,
+      // US-F — tranche de quotient familial (tarification solidaire).
+      socialBracketId: true,
     },
   });
   if (!user) return null;

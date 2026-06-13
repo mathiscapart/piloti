@@ -288,5 +288,9 @@ export const AUDIT_ACTIONS = [
   "CASHBOX_CREATED",
   "CASH_MOVEMENT",
   "CASH_TRANSFER",
+  "BRACKET_CREATED",
+  "BRACKET_UPDATED",
+  "BRACKET_ARCHIVED",
+  "USER_BRACKET_SET",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

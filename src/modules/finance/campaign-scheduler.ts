@@ -73,12 +73,18 @@ export async function sendCampaignReminders(): Promise<number> {
         roles: { contains: "SCOUT" },
         ...(c.unit ? { unit: c.unit } : {}),
       },
-      select: { id: true, roles: true },
+      select: {
+        id: true,
+        roles: true,
+        socialBracket: { select: { coefficientPermille: true } },
+      },
     });
-    const jeunes = candidates
-      .filter((u) => hasRole(u.roles, "SCOUT"))
-      .map((u) => u.id);
+    const scouts = candidates.filter((u) => hasRole(u.roles, "SCOUT"));
+    const jeunes = scouts.map((u) => u.id);
     if (jeunes.length === 0) continue;
+    const permilleByUser = new Map(
+      scouts.map((u) => [u.id, u.socialBracket?.coefficientPermille ?? 1000]),
+    );
 
     const [payments, exemptions, reminders, links, socialCases] = await Promise.all([
       db.campaignPayment.findMany({
@@ -107,7 +113,13 @@ export async function sendCampaignReminders(): Promise<number> {
     for (const p of payments) {
       paidBy.set(p.userId, (paidBy.get(p.userId) ?? 0) + p.amountCents);
     }
-    const tiers = computeTiers(c, jeunes, links, new Set(socialCases.map((s) => s.userId)));
+    const tiers = computeTiers(
+      c,
+      jeunes,
+      links,
+      new Set(socialCases.map((s) => s.userId)),
+      permilleByUser,
+    );
     const exempt = new Set(exemptions.map((e) => e.userId));
     const remindedAt = new Set(reminders.map((r) => `${r.userId}:${r.dayOffset}`));
     const parentsByChild = new Map<string, string[]>();

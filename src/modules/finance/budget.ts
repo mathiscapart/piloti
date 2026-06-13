@@ -3,8 +3,11 @@ import "server-only";
 import { db } from "@/lib/db";
 import { EXPENSE_CATEGORIES } from "@/lib/enums";
 
+import { bracketedPriceCents } from "./brackets";
+
 // US-F04/F05 — budget d'événement (prévisionnel par catégorie vs réel dérivé des
 // notes de frais remboursées liées) + encaissement des inscriptions payantes.
+// Le tarif de chaque jeune dépend de sa tranche de quotient familial (globale).
 export async function getEventBudget(eventId: string) {
   const event = await db.event.findUnique({
     where: { id: eventId },
@@ -12,7 +15,6 @@ export async function getEventBudget(eventId: string) {
       id: true,
       name: true,
       priceCents: true,
-      socialPriceCents: true,
       requirePayment: true,
       startDate: true,
       endDate: true,
@@ -35,8 +37,17 @@ export async function getEventBudget(eventId: string) {
       orderBy: { createdAt: "asc" },
       select: {
         paidCents: true,
-        social: true,
-        user: { select: { id: true, firstName: true, lastName: true, image: true } },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            image: true,
+            socialBracket: {
+              select: { name: true, coefficientPermille: true },
+            },
+          },
+        },
       },
     }),
   ]);
@@ -57,14 +68,31 @@ export async function getEventBudget(eventId: string) {
 
   const attendeeCount = registrations.length;
   const price = event.priceCents ?? 0;
-  const socialPrice = event.socialPriceCents ?? price; // tarif cas social
   const collected = registrations.reduce((a, r) => a + r.paidCents, 0);
 
-  // Le revenu attendu tient compte du tarif effectif de chaque inscrit.
-  const expectedRevenue = registrations.reduce(
-    (a, r) => a + (r.social ? socialPrice : price),
-    0,
-  );
+  // Tarif effectif par inscrit = tarif de base × coefficient de sa tranche.
+  const detailed = registrations.map((r) => {
+    const permille = r.user.socialBracket?.coefficientPermille ?? 1000;
+    const effective = bracketedPriceCents(price, permille);
+    const dueCents = Math.max(0, effective - r.paidCents);
+    return {
+      user: {
+        id: r.user.id,
+        firstName: r.user.firstName,
+        lastName: r.user.lastName,
+        image: r.user.image,
+      },
+      paidCents: r.paidCents,
+      priceCents: effective,
+      bracketName: r.user.socialBracket?.name ?? null,
+      coefficientPermille: permille,
+      dueCents,
+      // Inscription provisoire : option activée + reste à payer.
+      provisional: event.requirePayment && dueCents > 0,
+    };
+  });
+
+  const expectedRevenue = detailed.reduce((a, r) => a + r.priceCents, 0);
 
   return {
     event,
@@ -75,24 +103,12 @@ export async function getEventBudget(eventId: string) {
     costPerYouthCents:
       attendeeCount > 0 ? Math.round(totalPlanned / attendeeCount) : 0,
     price,
-    socialPrice,
     expectedRevenueCents: expectedRevenue,
     collectedCents: collected,
-    // Marge : les tarifs demandés couvrent-ils le budget prévu ?
+    // Marge : la somme des contributions (pondérées par tranche) couvre-t-elle
+    // le budget prévu ? ≥ 0 ⇒ « équilibré » (objectif « 0 à la fin »).
     marginCents: expectedRevenue - totalPlanned,
-    registrations: registrations.map((r) => {
-      const effective = r.social ? socialPrice : price;
-      const dueCents = Math.max(0, effective - r.paidCents);
-      return {
-        user: r.user,
-        paidCents: r.paidCents,
-        priceCents: effective,
-        social: r.social,
-        dueCents,
-        // Inscription provisoire : option activée + reste à payer.
-        provisional: event.requirePayment && dueCents > 0,
-      };
-    }),
+    registrations: detailed,
   };
 }
 

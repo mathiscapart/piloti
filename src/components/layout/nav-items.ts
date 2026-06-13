@@ -15,6 +15,7 @@ import {
   Package,
   PieChart,
   PiggyBank,
+  Scale,
   Truck,
   UserPlus,
   Users,
@@ -78,6 +79,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/finances/tableau-de-bord", label: "Tableau de bord", icon: PieChart, requires: "campaign.view" },
       { href: "/finances/cotisations", label: "Cotisations", icon: CreditCard, requires: "campaign.view" },
+      { href: "/finances/tranches", label: "Tranches QF", icon: Scale, requires: "campaign.view" },
       { href: "/finances/notes", label: "Notes de frais", icon: Wallet, requires: "expense.view" },
       { href: "/finances/caisses", label: "Caisses", icon: PiggyBank, requires: "campaign.view" },
       { href: "/finances/bilan", label: "Bilan annuel", icon: FileText, requires: "campaign.view" },

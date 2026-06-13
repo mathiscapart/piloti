@@ -413,6 +413,35 @@ model Campaign {
   @@index([unit])
 }
 
+// US-F10 — caisse (compte de trésorerie). Le solde est dérivé du grand livre.
+model CashBox {
+  id          String   @id @default(cuid())
+  name        String
+  archived    Boolean  @default(false)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  transactions CashTransaction[]
+}
+
+// US-F10 — mouvement de caisse (montant signé : + entrée, − sortie). Un
+// transfert entre caisses = deux mouvements partageant `transferGroupId`.
+model CashTransaction {
+  id              String   @id @default(cuid())
+  cashBoxId       String
+  amountCents     Int // signé : + entrée, − sortie
+  label           String
+  kind            String // DEPOSIT | WITHDRAWAL | TRANSFER
+  date            DateTime
+  transferGroupId String?
+  createdById     String?
+  createdAt       DateTime @default(now())
+
+  cashBox CashBox @relation(fields: [cashBoxId], references: [id], onDelete: Cascade)
+
+  @@index([cashBoxId])
+}
+
 // US-F03 — relance envoyée pour un jeune non à jour (dédup + historique).
 model CampaignReminder {
   id         String   @id @default(cuid())

@@ -285,5 +285,8 @@ export const AUDIT_ACTIONS = [
   "BUDGET_LINE_SET",
   "EVENT_PRICE_SET",
   "EVENT_PAYMENT_RECORDED",
+  "CASHBOX_CREATED",
+  "CASH_MOVEMENT",
+  "CASH_TRANSFER",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

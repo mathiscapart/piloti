@@ -179,6 +179,47 @@ export async function approveExpense(id: string): Promise<ActionResult> {
   return { error: null };
 }
 
+// US-F07 — validation en lot : approuve toutes les notes en attente fournies.
+export async function approveExpenses(
+  ids: string[],
+): Promise<ActionResult & { approved?: number }> {
+  const user = await getCurrentUser();
+  if (!can(user, "expense.manage")) return { error: "Réservé au trésorier." };
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return { error: "Aucune note sélectionnée." };
+  }
+
+  const pending = await db.expense.findMany({
+    where: { id: { in: ids }, status: "PENDING" },
+    select: { id: true, declarantId: true, amountCents: true },
+  });
+  if (pending.length === 0) {
+    return { error: "Aucune note en attente dans la sélection." };
+  }
+
+  await withAudit(
+    (tx) =>
+      tx.expense.updateMany({
+        where: { id: { in: pending.map((p) => p.id) }, status: "PENDING" },
+        data: { status: "APPROVED", reviewedById: user.id, reviewedAt: new Date() },
+      }),
+    {
+      action: "EXPENSE_APPROVED",
+      userId: user.id,
+      metadata: { batch: true, count: pending.length },
+    },
+  );
+
+  after(async () => {
+    for (const e of pending) {
+      await notifyDeclarant(e.declarantId, e.id, "approuvée", e.amountCents);
+    }
+  });
+
+  revalidatePath("/finances/notes");
+  return { error: null, approved: pending.length };
+}
+
 // US-F07 — refuser une note de frais avec motif (trésorier).
 export async function rejectExpense(
   id: string,

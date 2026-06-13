@@ -1,4 +1,4 @@
-import { Plus, Receipt, Wallet } from "lucide-react";
+import { Download, Plus, Receipt, Wallet } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -23,6 +23,7 @@ import {
   type ExpenseStatusFilter,
 } from "@/modules/finance/queries";
 
+import { BatchApproveButton } from "./BatchApproveButton";
 import { ExpenseActions } from "./ExpenseActions";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -128,6 +129,24 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
           </Link>
         ))}
       </div>
+
+      {/* US-F07 — outils trésorier : validation en lot + export bancaire. */}
+      {canManage ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {statusFilter === "pending" ? (
+            <BatchApproveButton
+              ids={expenses.filter((e) => e.status === "PENDING").map((e) => e.id)}
+            />
+          ) : null}
+          <Link
+            href="/finances/notes/export"
+            className="inline-flex h-9 items-center gap-1 rounded-full border border-input px-3 text-sm font-bold text-earth hover:bg-sand"
+          >
+            <Download className="size-4" />
+            Exporter (à rembourser)
+          </Link>
+        </div>
+      ) : null}
 
       {expenses.length === 0 ? (
         <EmptyState

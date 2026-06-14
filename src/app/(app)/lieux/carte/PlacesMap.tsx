@@ -1,7 +1,5 @@
 "use client";
 
-import "leaflet/dist/leaflet.css";
-
 import { useEffect, useRef, useState } from "react";
 
 export interface MapPin {
@@ -12,10 +10,23 @@ export interface MapPin {
   avgRating: number | null;
 }
 
+// Injecte la CSS Leaflet auto-hébergée (public/leaflet.css) une seule fois.
+// Plus fiable que l'import bundlé (qui n'était pas appliqué côté client).
+function ensureLeafletCss() {
+  const id = "leaflet-css";
+  if (document.getElementById(id)) return;
+  const link = document.createElement("link");
+  link.id = id;
+  link.rel = "stylesheet";
+  link.href = "/leaflet.css";
+  document.head.appendChild(link);
+}
+
 export function PlacesMap({ pins }: { pins: MapPin[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  // Diagnostic visible (sans console) : "loading" → "ready" ou message d'erreur.
   const [status, setStatus] = useState("init");
+  const [tiles, setTiles] = useState({ ok: 0, err: 0 });
+  const [cssOk, setCssOk] = useState<boolean | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -23,11 +34,11 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
     let cancelled = false;
     let cleanup: (() => void) | undefined;
 
+    ensureLeafletCss();
     setStatus("loading-leaflet");
     import("leaflet")
       .then((mod) => {
         if (cancelled || !el) return;
-        // Interop CJS↔ESM : l'objet Leaflet est soit le namespace, soit `.default`.
         const L = mod.default ?? mod;
         if (typeof L?.map !== "function") {
           setStatus("erreur: L.map indisponible (interop)");
@@ -36,10 +47,18 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         if ((el as unknown as { _leaflet_id?: number })._leaflet_id) return;
 
         const map = L.map(el, { scrollWheelZoom: false }).setView([46.6, 2.4], 6);
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: "© OpenStreetMap",
-          maxZoom: 18,
-        }).addTo(map);
+        const layer = L.tileLayer(
+          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          {
+            attribution: "© OpenStreetMap",
+            maxZoom: 18,
+            subdomains: "abc",
+            crossOrigin: true,
+          },
+        );
+        layer.on("tileload", () => setTiles((t) => ({ ...t, ok: t.ok + 1 })));
+        layer.on("tileerror", () => setTiles((t) => ({ ...t, err: t.err + 1 })));
+        layer.addTo(map);
 
         const latlngs: [number, number][] = [];
         for (const p of pins) {
@@ -62,11 +81,17 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         if (latlngs.length === 1) map.setView(latlngs[0], 11);
         else if (latlngs.length > 1) map.fitBounds(latlngs, { padding: [40, 40] });
 
-        // Recalcule la taille plusieurs fois (layout mobile parfois tardif).
-        const fix = () => map.invalidateSize();
+        const fix = () => {
+          map.invalidateSize();
+          // La CSS est-elle appliquée ? (panneau Leaflet en position absolue)
+          const pane = el.querySelector(".leaflet-pane") as HTMLElement | null;
+          if (pane) {
+            setCssOk(getComputedStyle(pane).position === "absolute");
+          }
+        };
         setTimeout(fix, 100);
-        setTimeout(fix, 400);
-        setTimeout(fix, 1000);
+        setTimeout(fix, 500);
+        setTimeout(fix, 1500);
         setStatus("ready");
         cleanup = () => map.remove();
       })
@@ -86,12 +111,13 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         ref={containerRef}
         className="h-[70vh] w-full overflow-hidden rounded-2xl border border-stone/40 bg-sand shadow-card"
       />
-      {/* Bandeau diagnostic (temporaire) : confirme la version + l'état. */}
       <div className="pointer-events-none absolute left-2 top-2 z-[500] rounded-md bg-snow/90 px-2 py-1 text-xs font-bold text-earth shadow-card">
-        carte v3 · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
+        carte v4 · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
         <span className={status === "ready" ? "text-forest" : "text-brick"}>
           {status}
-        </span>
+        </span>{" "}
+        · tuiles {tiles.ok}/err {tiles.err} · css{" "}
+        {cssOk === null ? "?" : cssOk ? "ok" : "KO"}
       </div>
     </div>
   );

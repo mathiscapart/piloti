@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 export interface MapPin {
   id: string;
@@ -11,7 +11,6 @@ export interface MapPin {
 }
 
 // Injecte la CSS Leaflet auto-hébergée (public/leaflet.css) une seule fois.
-// Plus fiable que l'import bundlé (qui n'était pas appliqué côté client).
 function ensureLeafletCss() {
   const id = "leaflet-css";
   if (document.getElementById(id)) return;
@@ -24,9 +23,6 @@ function ensureLeafletCss() {
 
 export function PlacesMap({ pins }: { pins: MapPin[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState("init");
-  const [tiles, setTiles] = useState({ ok: 0, err: 0 });
-  const [cssOk, setCssOk] = useState<boolean | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -35,15 +31,12 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
     let cleanup: (() => void) | undefined;
 
     ensureLeafletCss();
-    setStatus("loading-leaflet");
     import("leaflet")
       .then((mod) => {
         if (cancelled || !el) return;
+        // Interop CJS↔ESM : l'objet Leaflet est soit le namespace, soit `.default`.
         const L = mod.default ?? mod;
-        if (typeof L?.map !== "function") {
-          setStatus("erreur: L.map indisponible (interop)");
-          return;
-        }
+        if (typeof L?.map !== "function") return;
         if ((el as unknown as { _leaflet_id?: number })._leaflet_id) return;
 
         const map = L.map(el, { scrollWheelZoom: false }).setView([46.6, 2.4], 6);
@@ -56,8 +49,7 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
             maxZoom: 19,
           },
         );
-        // Plan de rues Carto (basé OSM, CORS *) — fond de secours fiable
-        // (OSM bloque ses tuiles publiques, d'où ce choix).
+        // Plan de rues Carto (basé OSM, CORS *). OSM bloque ses tuiles publiques.
         const streets = L.tileLayer(
           "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
           {
@@ -66,18 +58,9 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
             subdomains: "abcd",
           },
         );
-        // Compteurs de diagnostic sur les deux fonds (n'importe lequel qui charge).
-        for (const lyr of [satellite, streets]) {
-          lyr.on("tileload", () => setTiles((t) => ({ ...t, ok: t.ok + 1 })));
-          lyr.on("tileerror", () => setTiles((t) => ({ ...t, err: t.err + 1 })));
-        }
         satellite.addTo(map);
         L.control
-          .layers(
-            { Satellite: satellite, Plan: streets },
-            {},
-            { collapsed: false },
-          )
+          .layers({ Satellite: satellite, Plan: streets }, {}, { collapsed: true })
           .addTo(map);
 
         const latlngs: [number, number][] = [];
@@ -101,22 +84,15 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         if (latlngs.length === 1) map.setView(latlngs[0], 11);
         else if (latlngs.length > 1) map.fitBounds(latlngs, { padding: [40, 40] });
 
-        const fix = () => {
-          map.invalidateSize();
-          // La CSS est-elle appliquée ? (panneau Leaflet en position absolue)
-          const pane = el.querySelector(".leaflet-pane") as HTMLElement | null;
-          if (pane) {
-            setCssOk(getComputedStyle(pane).position === "absolute");
-          }
-        };
+        // Recalcule la taille plusieurs fois (layout mobile parfois tardif).
+        const fix = () => map.invalidateSize();
         setTimeout(fix, 100);
         setTimeout(fix, 500);
         setTimeout(fix, 1500);
-        setStatus("ready");
         cleanup = () => map.remove();
       })
-      .catch((err: unknown) => {
-        setStatus(`erreur: ${err instanceof Error ? err.message : String(err)}`);
+      .catch(() => {
+        // Échec d'init Leaflet : la carte reste vide, sans casser la page.
       });
 
     return () => {
@@ -126,20 +102,10 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
   }, [pins]);
 
   return (
-    <div className="relative">
-      <div
-        ref={containerRef}
-        className="h-[70vh] w-full overflow-hidden rounded-2xl border border-stone/40 bg-sand shadow-card"
-      />
-      <div className="pointer-events-none absolute left-2 top-2 z-[500] rounded-md bg-snow/90 px-2 py-1 text-xs font-bold text-earth shadow-card">
-        carte v7 · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
-        <span className={status === "ready" ? "text-forest" : "text-brick"}>
-          {status}
-        </span>{" "}
-        · tuiles {tiles.ok}/err {tiles.err} · css{" "}
-        {cssOk === null ? "?" : cssOk ? "ok" : "KO"}
-      </div>
-    </div>
+    <div
+      ref={containerRef}
+      className="h-[70vh] w-full overflow-hidden rounded-2xl border border-stone/40 bg-sand shadow-card"
+    />
   );
 }
 

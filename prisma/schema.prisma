@@ -961,3 +961,104 @@ model DirectMessage {
 
   @@index([conversationId, createdAt])
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// V7 — Suivi pédagogique (US-S01…S10). Les références aux jeunes/chefs se font
+// par `userId`/`authorId` (String, sans relation) pour ne pas alourdir le
+// modèle User, comme CampPlaceReview. Les noms sont résolus côté requête.
+// ─────────────────────────────────────────────────────────────────────────
+
+// US-S01 — référentiel d'étapes de progression, par branche (Unit).
+model ProgressionStep {
+  id          String   @id @default(cuid())
+  unit        String // Unit (branche)
+  name        String
+  description String?
+  order       Int      @default(0)
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  validations StepValidation[]
+  goals       PedagogicalGoal[]
+
+  @@index([unit, archived])
+}
+
+// US-S02 — catalogue de badges (techniques/thématiques), par branche(s).
+model Badge {
+  id        String   @id @default(cuid())
+  name      String
+  icon      String? // emoji
+  unitsJson String   @default("[]") // Unit[] concernées ([] = toutes)
+  criteria  String?
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  awards BadgeAward[]
+  goals  PedagogicalGoal[]
+
+  @@index([archived])
+}
+
+// US-S04 — validation d'étape pour un jeune (workflow à 2 chefs).
+model StepValidation {
+  id            String    @id @default(cuid())
+  stepId        String
+  userId        String // jeune
+  status        String    @default("PROPOSED") // PROPOSED | CONFIRMED
+  proposedById  String?
+  confirmedById String?
+  proposedAt    DateTime  @default(now())
+  confirmedAt   DateTime?
+
+  step ProgressionStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, userId])
+  @@index([userId])
+}
+
+// US-S05 — badge attribué à un jeune.
+model BadgeAward {
+  id          String   @id @default(cuid())
+  badgeId     String
+  userId      String // jeune
+  awardedById String?
+  awardedAt   DateTime @default(now())
+
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([badgeId, userId])
+  @@index([userId])
+}
+
+// US-S06 — objectif personnel d'un jeune (lié à une étape ou un badge).
+model PedagogicalGoal {
+  id          String    @id @default(cuid())
+  userId      String // jeune
+  title       String
+  dueDate     DateTime?
+  stepId      String?
+  badgeId     String?
+  status      String    @default("IN_PROGRESS") // IN_PROGRESS | ACHIEVED
+  createdById String?
+  createdAt   DateTime  @default(now())
+  achievedAt  DateTime?
+
+  step  ProgressionStep? @relation(fields: [stepId], references: [id], onDelete: SetNull)
+  badge Badge?           @relation(fields: [badgeId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+// US-S07 — note de suivi qualitative (donnée sensible : chefs uniquement).
+model PedagogicalNote {
+  id        String   @id @default(cuid())
+  userId    String // jeune
+  authorId  String?
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}

@@ -247,8 +247,18 @@ export const NOTIFICATION_TYPES = [
   "EXPENSE_UPDATE", // US-F07 — note de frais approuvée / remboursée / refusée
   "CAMPAIGN_LAUNCHED", // US-F01 — campagne de cotisation lancée (→ familles)
   "CAMPAIGN_REMINDER", // US-F03 — relance d'une cotisation en retard
+  "STEP_VALIDATION_REQUEST", // US-S04 — 2e chef sollicité pour confirmer une étape
+  "STEP_VALIDATED", // US-S04 — étape confirmée (→ jeune / parent)
+  "BADGE_AWARDED", // US-S05 — badge attribué (→ jeune / parent)
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// V7 — statuts du suivi pédagogique.
+export const STEP_VALIDATION_STATUSES = ["PROPOSED", "CONFIRMED"] as const;
+export type StepValidationStatus = (typeof STEP_VALIDATION_STATUSES)[number];
+
+export const GOAL_STATUSES = ["IN_PROGRESS", "ACHIEVED"] as const;
+export type GoalStatus = (typeof GOAL_STATUSES)[number];
 
 // US-C01 — audience d'une annonce : tout le groupe, les parents, ou une branche.
 // Stockée en `Announcement.audience` ("ALL" | "PARENTS" | <Unit>).
@@ -325,5 +335,19 @@ export const AUDIT_ACTIONS = [
   "PLACE_ARCHIVED",
   "PLACE_REVIEW_ADDED",
   "EVENT_PLACE_LINKED",
+  "STEP_CREATED",
+  "STEP_UPDATED",
+  "STEP_ARCHIVED",
+  "BADGE_CREATED",
+  "BADGE_UPDATED",
+  "BADGE_ARCHIVED",
+  "STEP_VALIDATION_PROPOSED",
+  "STEP_VALIDATION_CONFIRMED",
+  "STEP_VALIDATION_REMOVED",
+  "BADGE_AWARD_GRANTED",
+  "BADGE_AWARD_REVOKED",
+  "PEDAGO_GOAL_SET",
+  "PEDAGO_GOAL_UPDATED",
+  "PEDAGO_NOTE_ADDED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

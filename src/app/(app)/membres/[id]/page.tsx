@@ -100,7 +100,14 @@ export default async function MemberDetailPage({ params }: PageProps) {
           <ArrowLeft className="size-4" />
           Retour aux prêts
         </Link>
-        {canManageProfile ? (
+        {isJeune && can(currentUser, "pedago.view") ? (
+          <Link
+            href={`/membres/${user.id}/progression`}
+            className="text-sm font-bold text-forest hover:underline"
+          >
+            Progression →
+          </Link>
+        ) : canManageProfile ? (
           <Link
             href="/membres/annuaire"
             className="text-sm font-bold text-forest hover:underline"

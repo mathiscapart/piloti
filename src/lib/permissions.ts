@@ -67,6 +67,10 @@ export const ACTIONS = [
   "place.create", // créer un lieu de camp
   "place.manage", // modifier / archiver un lieu (créateur ou admin, cf. action)
   "place.review", // déposer un avis après un camp
+  // Suivi pédagogique (US-S01…S10)
+  "pedago.view", // consulter la progression / fiches (encadrement + RG)
+  "pedago.manage", // valider étape, attribuer badge, objectifs, notes (chef)
+  "pedago.referential", // gérer le référentiel d'étapes & le catalogue de badges
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -160,6 +164,12 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "place.create": [CHEF],
   "place.manage": [CHEF],
   "place.review": [CHEF],
+  // Suivi pédagogique — gestion par les chefs ; RG en lecture seule. Le jeune
+  // et le parent accèdent à LEURS ressources via une logique dédiée dans la
+  // page (pas par `can()`), hors notes sensibles (US-S07/S10).
+  "pedago.view": [CHEF, RG],
+  "pedago.manage": [CHEF],
+  "pedago.referential": [CHEF],
 };
 
 /**

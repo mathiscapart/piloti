@@ -2,10 +2,12 @@ import {
   AlertTriangle,
   CalendarDays,
   Contact,
+  Award,
   CreditCard,
   FileText,
   FolderOpen,
   Gift,
+  GraduationCap,
   History,
   LayoutDashboard,
   ListTodo,
@@ -74,6 +76,13 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/membres", label: "Membres", icon: Users, requires: "member.view" },
       { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
       { href: "/lieux", label: "Lieux de camp", icon: Tent, requires: "place.view" },
+    ],
+  },
+  {
+    title: "Pédagogie",
+    items: [
+      { href: "/pedagogie/attribuer", label: "Attribuer un badge", icon: Award, requires: "pedago.manage" },
+      { href: "/pedagogie/referentiel", label: "Référentiels", icon: GraduationCap, requires: "pedago.referential" },
     ],
   },
   {

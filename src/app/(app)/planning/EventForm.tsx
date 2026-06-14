@@ -28,6 +28,7 @@ export interface EventFormValues {
   unit: string; // "" = tout le groupe
   location: string;
   description: string;
+  campPlaceId: string; // "" = aucun lieu de camp rattaché
   registrationOpen: boolean;
   registrationDeadline: string; // "" = pas de limite
 }
@@ -36,10 +37,12 @@ export function EventForm({
   action,
   defaults,
   submitLabel,
+  places = [],
 }: {
   action: (prev: ActionResult, formData: FormData) => Promise<ActionResult>;
   defaults?: Partial<EventFormValues>;
   submitLabel: string;
+  places?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
@@ -135,6 +138,29 @@ export function EventForm({
           placeholder="Local scout, gare de…"
         />
       </div>
+
+      {places.length > 0 ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="campPlaceId">Lieu de camp (base)</Label>
+          <select
+            id="campPlaceId"
+            name="campPlaceId"
+            defaultValue={defaults?.campPlaceId ?? ""}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-earth"
+          >
+            <option value="">Aucun</option>
+            {places.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-trail">
+            Rattache l&apos;événement à un lieu de la base pour l&apos;historique
+            et l&apos;avis de fin de camp.
+          </p>
+        </div>
+      ) : null}
 
       <div className="space-y-1.5">
         <Label htmlFor="description">Description</Label>

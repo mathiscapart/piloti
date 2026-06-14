@@ -62,6 +62,11 @@ export const ACTIONS = [
   // Finances — budget d'événement & encaissement (US-F04/F05)
   "budget.view", // consulter le budget d'un événement
   "budget.manage", // éditer le budget, le tarif, encaisser (chef / trésorier)
+  // Lieux de camp (US-L01…L06)
+  "place.view", // consulter les lieux de camp (encadrement)
+  "place.create", // créer un lieu de camp
+  "place.manage", // modifier / archiver un lieu (créateur ou admin, cf. action)
+  "place.review", // déposer un avis après un camp
 ] as const;
 export type Action = (typeof ACTIONS)[number];
 
@@ -148,6 +153,13 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // trésorier ») ; lecture + RG.
   "budget.view": [CHEF, TRES, RG],
   "budget.manage": [CHEF, TRES],
+  // Lieux de camp — consultation pour l'encadrement (RG en lecture) ; création
+  // et avis par les chefs ; la modification ajoute un contrôle « créateur ou
+  // admin » dans l'action (US-L05).
+  "place.view": [CHEF, RG, MAT, TRES, SEC, LOCAL],
+  "place.create": [CHEF],
+  "place.manage": [CHEF],
+  "place.review": [CHEF],
 };
 
 /**

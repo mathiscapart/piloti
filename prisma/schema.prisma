@@ -366,6 +366,10 @@ model Event {
   // US-F05 — si vrai, l'inscription reste provisoire tant qu'elle n'est pas payée.
   requirePayment Boolean @default(false)
 
+  // US-L03/L06 — lieu de camp rattaché (pour un événement de type CAMP/WEEK_END).
+  campPlaceId String?
+  campPlace   CampPlace? @relation(fields: [campPlaceId], references: [id], onDelete: SetNull)
+
   registrations EventRegistration[]
   reminders     EventReminder[]
   attendances   Attendance[]
@@ -374,6 +378,50 @@ model Event {
   budgetLines   BudgetLine[]
 
   @@index([startDate])
+  @@index([campPlaceId])
+}
+
+// US-L04 — lieu de camp : fiche partagée par le groupe (adresse géocodée,
+// capacité, équipements, contact propriétaire, photos, avis).
+model CampPlace {
+  id            String   @id @default(cuid())
+  name          String
+  address       String?
+  region        String? // pour le filtre régional (US-L01)
+  latitude      Float? // coordonnées GPS auto-complétées (géocodage)
+  longitude     Float?
+  capacity      Int? // nombre de personnes
+  equipmentJson String   @default("[]") // CampEquipment[] (JSON array)
+  ownerName     String?
+  ownerPhone    String?
+  ownerEmail    String?
+  notes         String? // notes pratiques
+  photosJson    String   @default("[]") // string[] (URLs /uploads/…)
+  createdById   String? // chef créateur (US-L05 : lui seul ou admin modifie)
+  archived      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @default(now()) @updatedAt
+
+  reviews CampPlaceReview[]
+  events  Event[]
+
+  @@index([archived])
+}
+
+// US-L06 — avis déposé sur un lieu après un camp (note 1–5 + commentaire).
+// Plusieurs avis possibles par lieu (historique). La note moyenne est dérivée.
+model CampPlaceReview {
+  id        String   @id @default(cuid())
+  placeId   String
+  authorId  String? // chef auteur (null si compte supprimé)
+  eventId   String? // camp à l'origine de l'avis (US-P01), facultatif
+  rating    Int // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  place CampPlace @relation(fields: [placeId], references: [id], onDelete: Cascade)
+
+  @@index([placeId])
 }
 
 // US-F04 — ligne de budget prévisionnel d'un événement (un montant prévu par

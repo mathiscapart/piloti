@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { listPlaceOptions } from "@/modules/camp/places";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { updateEvent } from "@/modules/planning/actions";
@@ -22,6 +23,7 @@ export default async function EditEventPage({ params }: PageProps) {
   const event = await getEvent(id);
   if (!event) notFound();
 
+  const places = await listPlaceOptions();
   const action = updateEvent.bind(null, event.id);
 
   return (
@@ -40,6 +42,7 @@ export default async function EditEventPage({ params }: PageProps) {
         <EventForm
           action={action}
           submitLabel="Enregistrer les modifications"
+          places={places}
           defaults={{
             name: event.name,
             type: event.type,
@@ -48,6 +51,7 @@ export default async function EditEventPage({ params }: PageProps) {
             unit: event.unit ?? "",
             location: event.location ?? "",
             description: event.description ?? "",
+            campPlaceId: event.campPlaceId ?? "",
             registrationOpen: event.registrationOpen,
             registrationDeadline: event.registrationDeadline
               ? toDatetimeLocal(event.registrationDeadline)

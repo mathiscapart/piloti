@@ -137,6 +137,34 @@ export const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> = {
   AUTRE: "Autre",
 };
 
+// US-L04 — équipements d'un lieu de camp (cases à cocher + filtre US-L01).
+export const CAMP_EQUIPMENT = [
+  "WATER",
+  "TOILETS",
+  "SHOWERS",
+  "SHELTER",
+  "ELECTRICITY",
+  "KITCHEN",
+  "FIREWOOD",
+  "PARKING",
+  "WOOD",
+  "RIVER",
+] as const;
+export type CampEquipment = (typeof CAMP_EQUIPMENT)[number];
+
+export const CAMP_EQUIPMENT_LABEL: Record<CampEquipment, string> = {
+  WATER: "Eau potable",
+  TOILETS: "Sanitaires",
+  SHOWERS: "Douches",
+  SHELTER: "Abri / bâtiment",
+  ELECTRICITY: "Électricité",
+  KITCHEN: "Cuisine",
+  FIREWOOD: "Feu autorisé",
+  PARKING: "Parking",
+  WOOD: "Bois / forêt",
+  RIVER: "Point d'eau / rivière",
+};
+
 export const EXPENSE_STATUSES = [
   "PENDING",
   "APPROVED",
@@ -292,5 +320,10 @@ export const AUDIT_ACTIONS = [
   "BRACKET_UPDATED",
   "BRACKET_ARCHIVED",
   "USER_BRACKET_SET",
+  "PLACE_CREATED",
+  "PLACE_UPDATED",
+  "PLACE_ARCHIVED",
+  "PLACE_REVIEW_ADDED",
+  "EVENT_PLACE_LINKED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

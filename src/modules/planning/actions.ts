@@ -54,6 +54,7 @@ function readForm(formData: FormData) {
     unit: formData.get("unit"),
     location: formData.get("location"),
     description: formData.get("description"),
+    campPlaceId: formData.get("campPlaceId"),
     registrationOpen: formData.get("registrationOpen"),
     registrationDeadline: formData.get("registrationDeadline"),
   };
@@ -100,6 +101,7 @@ export async function createEvent(
           unit: parsed.data.unit,
           location: parsed.data.location,
           description: parsed.data.description,
+          campPlaceId: parsed.data.campPlaceId,
           registrationOpen: parsed.data.registrationOpen,
           registrationDeadline: deadline.value,
           createdById: user.id,
@@ -157,6 +159,7 @@ export async function updateEvent(
           unit: parsed.data.unit,
           location: parsed.data.location,
           description: parsed.data.description,
+          campPlaceId: parsed.data.campPlaceId,
           registrationOpen: parsed.data.registrationOpen,
           registrationDeadline: deadline.value,
         },

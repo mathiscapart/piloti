@@ -27,6 +27,8 @@ export const eventSchema = z.object({
     ),
   location: optionalText,
   description: optionalText,
+  // US-L03 — lieu de camp rattaché ("" = aucun → null).
+  campPlaceId: optionalText,
   // US-P04 — inscriptions.
   registrationOpen: z.preprocess(
     (v) => v === "on" || v === "true" || v === true,

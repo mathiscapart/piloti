@@ -16,6 +16,7 @@ import {
   PieChart,
   PiggyBank,
   Scale,
+  Tent,
   Truck,
   UserPlus,
   Users,
@@ -72,6 +73,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/communication", label: "Messagerie", icon: MessageSquare, aliases: ["/messages"] },
       { href: "/membres", label: "Membres", icon: Users, requires: "member.view" },
       { href: "/membres/annuaire", label: "Annuaire des compétences", icon: Contact, requires: "member.directory" },
+      { href: "/lieux", label: "Lieux de camp", icon: Tent, requires: "place.view" },
     ],
   },
   {

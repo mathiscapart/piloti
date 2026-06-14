@@ -5,6 +5,8 @@ import {
   MapPin,
   Package,
   Pencil,
+  Star,
+  Tent,
   TriangleAlert,
   Users,
   Wallet,
@@ -23,6 +25,7 @@ import {
   type RsvpResponse,
   type Unit,
 } from "@/lib/enums";
+import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -85,6 +88,17 @@ export default async function EventDetailPage({ params }: PageProps) {
   // US-F04/F05 — accès au budget de l'événement.
   const canViewBudget = can(user, "budget.view");
 
+  // US-L03/L06 — lieu de camp rattaché + invitation à déposer un avis une fois
+  // le camp terminé.
+  const linkedPlace = event.campPlaceId
+    ? await db.campPlace.findUnique({
+        where: { id: event.campPlaceId },
+        select: { id: true, name: true },
+      })
+    : null;
+  const eventEnded = event.endDate < new Date();
+  const canReviewPlace = can(user, "place.review");
+
   // US-P12 — matériel mobilisé (prêts rattachés), pour qui peut voir les prêts.
   const canViewLoans = can(user, "loan.view");
   const eventLoans = canViewLoans ? await getEventLoans(event.id) : [];
@@ -131,6 +145,31 @@ export default async function EventDetailPage({ params }: PageProps) {
             <MapPin className="size-4 text-trail" />
             {event.location}
           </p>
+        ) : null}
+        {linkedPlace ? (
+          <p className="flex items-center gap-2 text-sm text-earth">
+            <Tent className="size-4 text-trail" />
+            <Link
+              href={`/lieux/${linkedPlace.id}`}
+              className="font-bold text-forest hover:underline"
+            >
+              {linkedPlace.name}
+            </Link>
+          </p>
+        ) : null}
+
+        {linkedPlace && eventEnded && canReviewPlace ? (
+          <div className="rounded-xl bg-sun-soft px-4 py-3">
+            <p className="text-sm font-bold text-sun-ink">
+              Camp terminé — partage ton avis sur le lieu.
+            </p>
+            <Button asChild size="sm" className="mt-2">
+              <Link href={`/lieux/${linkedPlace.id}`}>
+                <Star className="size-4" />
+                Déposer un avis
+              </Link>
+            </Button>
+          </div>
         ) : null}
 
         {event.description ? (

@@ -113,7 +113,7 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         className="h-[70vh] w-full overflow-hidden rounded-2xl border border-stone/40 bg-sand shadow-card"
       />
       <div className="pointer-events-none absolute left-2 top-2 z-[500] rounded-md bg-snow/90 px-2 py-1 text-xs font-bold text-earth shadow-card">
-        carte v4 · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
+        carte v5 · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
         <span className={status === "ready" ? "text-forest" : "text-brick"}>
           {status}
         </span>{" "}

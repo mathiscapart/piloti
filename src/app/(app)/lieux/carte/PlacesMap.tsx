@@ -22,8 +22,13 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
     // Import dynamique : Leaflet ne s'exécute que côté client (lazy load).
     let cleanup: (() => void) | undefined;
 
-    import("leaflet").then((L) => {
+    import("leaflet").then((mod) => {
       if (cancelled || !el) return;
+      // Interop CJS↔ESM : selon le bundler, l'objet Leaflet est soit le
+      // namespace, soit sous `.default`. `?? mod` couvre les deux cas.
+      const L = mod.default ?? mod;
+      // Évite « Map container is already initialized » (effets rejoués en dev).
+      if ((el as unknown as { _leaflet_id?: number })._leaflet_id) return;
 
       const map = L.map(el, { scrollWheelZoom: false }).setView([46.6, 2.4], 6);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -59,6 +64,8 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
       // Leaflet a besoin d'un recalcul de taille après le montage.
       setTimeout(() => map.invalidateSize(), 100);
       cleanup = () => map.remove();
+    }).catch((err) => {
+      console.error("[PlacesMap] Leaflet init failed", err);
     });
 
     return () => {

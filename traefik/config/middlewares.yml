@@ -20,14 +20,17 @@ http:
         # Referrer policy stricte (jamais exposer le chemin complet au tiers)
         referrerPolicy: "strict-origin-when-cross-origin"
 
-        # CSP minimaliste — adapter quand on ajoutera des CDN externes
+        # CSP minimaliste — adapter quand on ajoutera des CDN externes.
+        # img-src : tuiles de carte (US-L02) — Esri (satellite), Carto (plan),
+        #   OSM. frame-src : carte OSM embarquée de la fiche lieu (US-L03).
         contentSecurityPolicy: >-
           default-src 'self';
-          img-src 'self' data: blob:;
+          img-src 'self' data: blob: https://*.arcgisonline.com https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org;
           font-src 'self' https://fonts.gstatic.com data:;
           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
           script-src 'self' 'unsafe-inline';
           connect-src 'self';
+          frame-src https://www.openstreetmap.org;
           frame-ancestors 'none';
           base-uri 'self';
           form-action 'self';

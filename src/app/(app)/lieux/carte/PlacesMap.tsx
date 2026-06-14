@@ -47,13 +47,14 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         if ((el as unknown as { _leaflet_id?: number })._leaflet_id) return;
 
         const map = L.map(el, { scrollWheelZoom: false }).setView([46.6, 2.4], 6);
+        // OSM bloque ses tuiles publiques (x-blocked) → on utilise les fonds
+        // Carto (basés OSM, CORS-friendly, permissifs).
         const layer = L.tileLayer(
-          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
           {
-            attribution: "© OpenStreetMap",
-            maxZoom: 18,
-            subdomains: "abc",
-            crossOrigin: true,
+            attribution: "© OpenStreetMap, © CARTO",
+            maxZoom: 19,
+            subdomains: "abcd",
           },
         );
         layer.on("tileload", () => setTiles((t) => ({ ...t, ok: t.ok + 1 })));

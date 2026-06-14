@@ -47,14 +47,14 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         if ((el as unknown as { _leaflet_id?: number })._leaflet_id) return;
 
         const map = L.map(el, { scrollWheelZoom: false }).setView([46.6, 2.4], 6);
-        // OSM bloque ses tuiles publiques (x-blocked) → on utilise les fonds
-        // Carto (basés OSM, CORS-friendly, permissifs).
+        // Imagerie satellite Esri World Imagery (gratuit, sans clé, CORS *).
+        // OSM bloque ses tuiles publiques (x-blocked).
         const layer = L.tileLayer(
-          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
           {
-            attribution: "© OpenStreetMap, © CARTO",
+            attribution:
+              "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
             maxZoom: 19,
-            subdomains: "abcd",
           },
         );
         layer.on("tileload", () => setTiles((t) => ({ ...t, ok: t.ok + 1 })));
@@ -113,7 +113,7 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         className="h-[70vh] w-full overflow-hidden rounded-2xl border border-stone/40 bg-sand shadow-card"
       />
       <div className="pointer-events-none absolute left-2 top-2 z-[500] rounded-md bg-snow/90 px-2 py-1 text-xs font-bold text-earth shadow-card">
-        carte v5 · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
+        carte v6 (satellite) · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
         <span className={status === "ready" ? "text-forest" : "text-brick"}>
           {status}
         </span>{" "}

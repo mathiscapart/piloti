@@ -48,18 +48,37 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
 
         const map = L.map(el, { scrollWheelZoom: false }).setView([46.6, 2.4], 6);
         // Imagerie satellite Esri World Imagery (gratuit, sans clé, CORS *).
-        // OSM bloque ses tuiles publiques (x-blocked).
-        const layer = L.tileLayer(
+        const satellite = L.tileLayer(
           "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
           {
             attribution:
-              "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+              "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics",
             maxZoom: 19,
           },
         );
-        layer.on("tileload", () => setTiles((t) => ({ ...t, ok: t.ok + 1 })));
-        layer.on("tileerror", () => setTiles((t) => ({ ...t, err: t.err + 1 })));
-        layer.addTo(map);
+        // Plan de rues Carto (basé OSM, CORS *) — fond de secours fiable
+        // (OSM bloque ses tuiles publiques, d'où ce choix).
+        const streets = L.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+          {
+            attribution: "© OpenStreetMap, © CARTO",
+            maxZoom: 19,
+            subdomains: "abcd",
+          },
+        );
+        // Compteurs de diagnostic sur les deux fonds (n'importe lequel qui charge).
+        for (const lyr of [satellite, streets]) {
+          lyr.on("tileload", () => setTiles((t) => ({ ...t, ok: t.ok + 1 })));
+          lyr.on("tileerror", () => setTiles((t) => ({ ...t, err: t.err + 1 })));
+        }
+        satellite.addTo(map);
+        L.control
+          .layers(
+            { Satellite: satellite, Plan: streets },
+            {},
+            { collapsed: false },
+          )
+          .addTo(map);
 
         const latlngs: [number, number][] = [];
         for (const p of pins) {
@@ -113,7 +132,7 @@ export function PlacesMap({ pins }: { pins: MapPin[] }) {
         className="h-[70vh] w-full overflow-hidden rounded-2xl border border-stone/40 bg-sand shadow-card"
       />
       <div className="pointer-events-none absolute left-2 top-2 z-[500] rounded-md bg-snow/90 px-2 py-1 text-xs font-bold text-earth shadow-card">
-        carte v6 (satellite) · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
+        carte v7 · {pins.length} lieu{pins.length > 1 ? "x" : ""} ·{" "}
         <span className={status === "ready" ? "text-forest" : "text-brick"}>
           {status}
         </span>{" "}

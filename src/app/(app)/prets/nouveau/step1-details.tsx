@@ -132,7 +132,7 @@ export function Step1Details({ borrowers, self, details, events }: Props) {
           id="eventName"
           name="eventName"
           defaultValue={details.eventName}
-          placeholder="Week-end Pios 9/10, Réunion Bleus…"
+          placeholder="Week-end Pionniers, Réunion Scouts…"
         />
       </div>
 

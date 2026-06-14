@@ -35,7 +35,7 @@ model User {
   // rôle principal (ex. RESPONSABLE_GROUPE, TRESORIER, SECRETAIRE, MEMBRE_LOCAL).
   roles          String  @default("[]")
   status         String  @default("PENDING") // AccountStatus: PENDING | ACTIVE | REJECTED | SUSPENDED
-  unit           String? // Unit: BLEUS | VERTS | ROUGES | PIOS | COMPAS
+  unit           String? // Unit: FARFADETS | LOUVETEAUX | SCOUTS | PIONNIERS | COMPAGNONS | ADULTES
   phone          String?
   rejectedReason String?
   // US-26 — profil demandé à l'inscription (ex. "PARENT") : simple indication

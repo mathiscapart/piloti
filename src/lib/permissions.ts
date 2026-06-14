@@ -203,7 +203,7 @@ export function can(user: AuthCtx, action: Action): boolean {
   if (
     action === "loan.create" &&
     roles.includes("SCOUT") &&
-    (user.unit === "PIOS" || user.unit === "COMPAS")
+    (user.unit === "PIONNIERS" || user.unit === "COMPAGNONS")
   ) {
     return true;
   }

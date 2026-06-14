@@ -79,7 +79,7 @@ async function main() {
     lastName: "Martin",
     role: "CHEF",
     status: "ACTIVE",
-    unit: "PIOS",
+    unit: "PIONNIERS",
     phone: "06 12 34 56 78",
   });
 
@@ -90,7 +90,7 @@ async function main() {
     lastName: "Bernard",
     role: "CHEF",
     status: "ACTIVE",
-    unit: "BLEUS",
+    unit: "SCOUTS",
     phone: "06 98 76 54 32",
   });
 
@@ -101,7 +101,7 @@ async function main() {
     lastName: "Durand",
     role: "CHEF",
     status: "PENDING",
-    unit: "VERTS",
+    unit: "COMPAGNONS",
     phone: "06 11 22 33 44",
   });
 
@@ -112,7 +112,7 @@ async function main() {
       category: "TENTE",
       totalQty: 1,
       condition: "BON",
-      location: "Local Bleus",
+      location: "Local Scouts",
       notes: "Achat 2022, état correct.",
     },
   });
@@ -123,7 +123,7 @@ async function main() {
       category: "TENTE",
       totalQty: 1,
       condition: "BON",
-      location: "Local Bleus",
+      location: "Local Scouts",
     },
   });
 
@@ -133,7 +133,7 @@ async function main() {
       category: "TENTE",
       totalQty: 1,
       condition: "USE",
-      location: "Local Pios",
+      location: "Local Pionniers",
       notes: "Beaucoup utilisée, piquets fragiles.",
     },
   });
@@ -150,21 +150,21 @@ async function main() {
 
   const malleCuisine = await db.equipment.create({
     data: {
-      name: "Malle cuisine Bleus",
+      name: "Malle cuisine Scouts",
       category: "MALLE",
       totalQty: 1,
       condition: "BON",
-      location: "Local Bleus",
+      location: "Local Scouts",
     },
   });
 
   await db.equipment.create({
     data: {
-      name: "Malle bivouac Pios",
+      name: "Malle bivouac Pionniers",
       category: "MALLE",
       totalQty: 1,
       condition: "BON",
-      location: "Local Pios",
+      location: "Local Pionniers",
     },
   });
 
@@ -174,7 +174,7 @@ async function main() {
       category: "CUISINE",
       totalQty: 2,
       condition: "BON",
-      location: "Malle cuisine Bleus",
+      location: "Malle cuisine Scouts",
     },
   });
 
@@ -205,7 +205,7 @@ async function main() {
       category: "JEU",
       totalQty: 1,
       condition: "BON",
-      location: "Local Bleus",
+      location: "Local Scouts",
     },
   });
 

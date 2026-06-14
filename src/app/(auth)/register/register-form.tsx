@@ -21,12 +21,12 @@ import { signUpAction, type SignUpActionResult } from "./actions";
 const initialState: SignUpActionResult = { error: null, success: null };
 
 const UNIT_LABELS: Record<(typeof UNITS)[number], string> = {
-  BLEUS: "Bleus (8-11 ans)",
-  VERTS: "Verts (8-11 ans)",
-  ROUGES: "Rouges (8-11 ans)",
-  PIOS: "Pionniers (14-17 ans)",
-  COMPAS: "Compagnons (17-21 ans)",
-  VIOLETS: "Violets (chefs et responsables)",
+  FARFADETS: "Farfadets (6-8 ans)",
+  LOUVETEAUX: "Louveteaux-Jeannettes (8-11 ans)",
+  SCOUTS: "Scouts-Guides (11-14 ans)",
+  PIONNIERS: "Pionniers-Caravelles (14-17 ans)",
+  COMPAGNONS: "Compagnons (17-21 ans)",
+  ADULTES: "Adultes (responsables, local)",
 };
 
 type ProfileType = "UNIT" | "PARENT";

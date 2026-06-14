@@ -140,12 +140,12 @@ export function RolesEditor({
 
 // US-32 — éditeur d'unité/branche (ADMIN + SECRÉTAIRE). "" = aucune unité.
 const UNIT_SHORT: Record<string, string> = {
-  BLEUS: "Bleus",
-  VERTS: "Verts",
-  ROUGES: "Rouges",
-  PIOS: "Pios",
-  COMPAS: "Compas",
-  VIOLETS: "Violets",
+  FARFADETS: "Farfadets",
+  LOUVETEAUX: "Louveteaux-Jeannettes",
+  SCOUTS: "Scouts-Guides",
+  PIONNIERS: "Pionniers-Caravelles",
+  COMPAGNONS: "Compagnons",
+  ADULTES: "Adultes",
 };
 
 export function UnitEditor({

@@ -51,23 +51,24 @@ export const ACCOUNT_STATUSES = [
 ] as const;
 export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 
+// Branches officielles SGDF (+ branche adulte « Adultes » : responsables, local).
 export const UNITS = [
-  "BLEUS",
-  "VERTS",
-  "ROUGES",
-  "PIOS",
-  "COMPAS",
-  "VIOLETS",
+  "FARFADETS",
+  "LOUVETEAUX",
+  "SCOUTS",
+  "PIONNIERS",
+  "COMPAGNONS",
+  "ADULTES",
 ] as const;
 export type Unit = (typeof UNITS)[number];
 
 export const UNIT_LABEL: Record<Unit, string> = {
-  BLEUS: "Bleus (8-11 ans)",
-  VERTS: "Verts (8-11 ans)",
-  ROUGES: "Rouges (8-11 ans)",
-  PIOS: "Pionniers (14-17 ans)",
-  COMPAS: "Compagnons (17-21 ans)",
-  VIOLETS: "Violets (chefs et responsables)",
+  FARFADETS: "Farfadets (6-8 ans)",
+  LOUVETEAUX: "Louveteaux-Jeannettes (8-11 ans)",
+  SCOUTS: "Scouts-Guides (11-14 ans)",
+  PIONNIERS: "Pionniers-Caravelles (14-17 ans)",
+  COMPAGNONS: "Compagnons (17-21 ans)",
+  ADULTES: "Adultes (responsables, local)",
 };
 
 export const EQUIPMENT_CONDITIONS = [

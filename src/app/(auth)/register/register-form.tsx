@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PASSWORD_HINT } from "@/lib/password-policy";
@@ -20,6 +22,23 @@ import { signUpAction, type SignUpActionResult } from "./actions";
 
 const initialState: SignUpActionResult = { error: null, success: null };
 
+// RGPD-02 — même seuil que src/app/(auth)/register/actions.ts (calcul côté
+// client, purement pour l'affichage conditionnel du bloc parental).
+const MINOR_AGE_THRESHOLD = 15;
+
+function isMinor(birthDate: string): boolean {
+  if (!birthDate) return false;
+  const dob = new Date(birthDate);
+  if (Number.isNaN(dob.getTime())) return false;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const birthdayPassedThisYear =
+    today.getMonth() > dob.getMonth() ||
+    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+  if (!birthdayPassedThisYear) age -= 1;
+  return age < MINOR_AGE_THRESHOLD;
+}
+
 const UNIT_LABELS: Record<(typeof UNITS)[number], string> = {
   FARFADETS: "Farfadets (6-8 ans)",
   LOUVETEAUX: "Louveteaux-Jeannettes (8-11 ans)",
@@ -34,6 +53,8 @@ type ProfileType = "UNIT" | "PARENT";
 export function RegisterForm() {
   const [state, action, pending] = useActionState(signUpAction, initialState);
   const [profileType, setProfileType] = useState<ProfileType>("UNIT");
+  const [birthDate, setBirthDate] = useState("");
+  const minor = isMinor(birthDate);
 
   if (state.success) {
     return (
@@ -103,6 +124,18 @@ export function RegisterForm() {
         />
       </div>
 
+      <div className="space-y-1.5">
+        <Label htmlFor="birthDate">Date de naissance</Label>
+        <Input
+          id="birthDate"
+          name="birthDate"
+          type="date"
+          required
+          value={birthDate}
+          onChange={(e) => setBirthDate(e.target.value)}
+        />
+      </div>
+
       {/* US-26 — type de profil : parent (sans unité) ou membre d'une unité. */}
       <div className="space-y-1.5">
         <Label>Vous êtes</Label>
@@ -165,6 +198,46 @@ export function RegisterForm() {
           placeholder="06 12 34 56 78"
         />
       </div>
+
+      {/* RGPD-02 — consentement obligatoire à l'inscription. */}
+      <div className="flex items-start gap-2">
+        <Checkbox id="acceptPrivacy" name="acceptPrivacy" value="on" required className="mt-0.5" />
+        <Label htmlFor="acceptPrivacy" className="text-sm font-normal text-earth">
+          J&apos;ai lu et j&apos;accepte la{" "}
+          <Link href="/confidentialite" target="_blank" className="font-bold text-forest underline-offset-4 hover:underline">
+            politique de confidentialité
+          </Link>
+          , les{" "}
+          <Link href="/cgu" target="_blank" className="font-bold text-forest underline-offset-4 hover:underline">
+            CGU
+          </Link>{" "}
+          et les{" "}
+          <Link href="/mentions-legales" target="_blank" className="font-bold text-forest underline-offset-4 hover:underline">
+            mentions légales
+          </Link>{" "}
+          de Piloti.
+        </Label>
+      </div>
+
+      {minor ? (
+        <div className="space-y-3 rounded-lg border border-sun/40 bg-sun-soft p-3">
+          <p className="text-xs font-medium text-sun-ink">
+            Compte d&apos;un mineur de moins de 15 ans : l&apos;autorisation d&apos;un
+            responsable légal est requise.
+          </p>
+          <div className="flex items-start gap-2">
+            <Checkbox id="acceptParental" name="acceptParental" value="on" required className="mt-0.5" />
+            <Label htmlFor="acceptParental" className="text-sm font-normal text-earth">
+              J&apos;atteste être titulaire de l&apos;autorité parentale sur ce jeune
+              et j&apos;autorise la création de ce compte.
+            </Label>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="guardianName">Nom du responsable légal</Label>
+            <Input id="guardianName" name="guardianName" required />
+          </div>
+        </div>
+      ) : null}
 
       {state.error ? (
         <p

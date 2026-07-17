@@ -76,6 +76,10 @@ export const auth = betterAuth({
       unit: { type: "string", required: false, input: true },
       phone: { type: "string", required: false, input: true },
       rejectedReason: { type: "string", required: false, input: false },
+      // RGPD-02 — date de naissance, saisie à l'inscription (détermine le
+      // besoin de consentement parental). Le consentement lui-même n'est PAS
+      // un additionalField : il vit dans la table Consent (append-only).
+      birthDate: { type: "date", required: false, input: true },
     },
   },
 

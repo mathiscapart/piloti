@@ -4,6 +4,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/lib/auth";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password"]);
+// RGPD-01 — pages légales, accessibles à tous sans compte ni base de données
+// (même avant le premier lancement / setup).
+const LEGAL_PATHS = new Set(["/confidentialite", "/mentions-legales", "/cgu"]);
 const SETUP_PATH = "/setup";
 const COOKIE_NAME = "piloti.session_token";
 
@@ -15,6 +18,9 @@ function noStoreRedirect(url: URL): NextResponse {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (LEGAL_PATHS.has(pathname)) return NextResponse.next();
+
   const sessionCookie = getSessionCookie(request, { cookiePrefix: "piloti" });
 
   // ── Requêtes non-authentifiées ────────────────────────────────────────────

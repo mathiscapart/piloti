@@ -30,6 +30,9 @@ model User {
   // Piloti additional fields (exposed via better-auth `additionalFields`)
   firstName      String
   lastName       String
+  // RGPD-02 — date de naissance, saisie obligatoire à l'inscription (détermine
+  // le besoin de consentement parental, cf. src/lib/legal + Consent ci-dessous).
+  birthDate      DateTime?
   role           String  @default("CHEF") // Role principal: ADMIN | CHEF | PARENT | SCOUT
   // US-29 — rôles fonctionnels additionnels (JSON: Role[]) cumulables avec le
   // rôle principal (ex. RESPONSABLE_GROUPE, TRESORIER, SECRETAIRE, MEMBRE_LOCAL).
@@ -86,6 +89,8 @@ model User {
   expensesDeclared  Expense[]          @relation("ExpenseDeclarant")
   expensesReviewed  Expense[]          @relation("ExpenseReviewer")
   campaignPayments  CampaignPayment[]  @relation("CampaignPaymentUser")
+  // RGPD-02 — historique append-only des consentements donnés à l'inscription.
+  consents          Consent[]
   // US — rattachement familial : liens parent↔jeune (un compte peut être parent
   // de plusieurs jeunes et un jeune avoir plusieurs responsables).
   familyAsParent    FamilyLink[]       @relation("FamilyParent")
@@ -337,6 +342,30 @@ model AuditLog {
   @@index([action])
   @@index([userId])
   @@index([createdAt])
+}
+
+// ----------------------------------------------------------------------------
+// RGPD-02 — Consentement à l'inscription. Append-only : jamais mis à jour ni
+// supprimé (preuve juridique). `type` = SELF (majeur) ou PARENTAL (mineur,
+// attestation du responsable légal). `privacyVersion`/`termsVersion` figent la
+// version des textes acceptés (cf. src/lib/legal/versions.ts).
+// ----------------------------------------------------------------------------
+
+model Consent {
+  id             String   @id @default(cuid())
+  userId         String
+  type           String // ConsentType: SELF | PARENTAL
+  privacyVersion String
+  termsVersion   String?
+  // Attestation parentale (US mineur < 15 ans) : nom du responsable légal.
+  guardianName   String?
+  ipAddress      String?
+  userAgent      String?
+  acceptedAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ----------------------------------------------------------------------------

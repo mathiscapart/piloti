@@ -131,3 +131,13 @@ Choix techniques autonomes du projet Piloti. Une décision = un paragraphe (Cont
 **Choix** : `resend` ajouté aux dépendances. Le client `new Resend(key)` est instancié de façon paresseuse (à l'intérieur du callback `sendResetPassword`) pour éviter une erreur à `next build` quand la clé n'est pas disponible.
 
 **Conséquences** : si `RESEND_API_KEY` est absent, le lancement de l'app ne plante pas — seul le flux "mot de passe oublié" renvoie une erreur. En production, la clé est injectée dans `.env.production` (jamais commitée).
+
+---
+
+## D-014 — Consentement RGPD : table `Consent` append-only + contenu légal versionné en code
+
+**Contexte** : RGPD-01 (pages légales) et RGPD-02 (consentement à l'inscription) exigent une preuve durable du consentement donné (qui, quand, quelle version des textes), y compris pour l'attestation d'un responsable légal quand l'inscrit est mineur de moins de 15 ans. Un simple booléen sur `User` ne suffit pas : il serait écrasable et ne garderait pas l'historique des versions acceptées.
+
+**Choix** : table `Consent` (append-only, jamais modifiée ni supprimée hors cascade de suppression du compte) — un enregistrement par inscription, avec `type` (SELF | PARENTAL), `privacyVersion`/`termsVersion` (figées au moment de l'acceptation), `guardianName` pour le cas mineur, `ipAddress`/`userAgent`. Les versions des textes légaux (`PRIVACY_VERSION`, `TERMS_VERSION`, `LEGAL_VERSION`) vivent en code dans `src/lib/legal/versions.ts`, pas en base : le contenu légal évolue avec le code, pas via une interface d'admin. L'écriture du `Consent` + l'`AuditLog` (`USER_REGISTERED`) se fait dans une seule transaction (`withAudit`) ; si elle échoue après la création du compte par better-auth, le compte tout juste créé est immédiatement supprimé (hard-delete) — jamais de compte sans preuve de consentement.
+
+**Conséquences** : pas de ré-consentement rétroactif des comptes existants lors d'une évolution mineure des textes (hors périmètre V1). Le contenu réel des pages légales (dénomination du groupe, adresse, contact, hébergeur) contient des placeholders `[À COMPLÉTER : …]` à remplir avant mise en production.

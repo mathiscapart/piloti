@@ -43,6 +43,12 @@ export const EXTRA_ROLES = [
   "MEMBRE_LOCAL",
 ] as const;
 
+// RGPD-02 — type de consentement à l'inscription (Consent.type). SELF = donné
+// par la personne elle-même (≥ 15 ans). PARENTAL = attestation du responsable
+// légal pour un mineur de moins de 15 ans (cf. src/lib/legal/versions.ts).
+export const CONSENT_TYPES = ["SELF", "PARENTAL"] as const;
+export type ConsentType = (typeof CONSENT_TYPES)[number];
+
 export const ACCOUNT_STATUSES = [
   "PENDING",
   "ACTIVE",

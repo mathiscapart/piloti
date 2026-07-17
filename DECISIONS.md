@@ -104,13 +104,15 @@ Choix techniques autonomes du projet Piloti. Une décision = un paragraphe (Cont
 
 ---
 
-## D-011 — Soft-delete des utilisateurs (préservation FK)
+## D-011 — Soft-delete des utilisateurs (préservation FK) → RGPD-04 : anonymisation complète
 
 **Contexte** : Prisma + SQLite n'ont pas de `ON DELETE SET NULL` automatique sur les relations `AuditLog.user`, `Loan.borrower`, `Incident.reporter`. Un hard-delete violerait les contraintes FK et détruirait l'historique.
 
-**Choix** : "suppression" = passage du statut à `DELETED` + anonymisation de l'email (`deleted+<id>@piloti.invalid`). Les sessions et comptes (mots de passe) sont supprimés pour empêcher toute connexion. Les données liées (prêts, incidents, audit) restent intactes.
+**Choix** : "suppression" = passage du statut à `DELETED` + anonymisation complète de la PII portée par `User` (email → `deleted+<id>@piloti.invalid`, `name`/`firstName`/`lastName` → valeurs génériques, `phone`/`birthDate`/`image`/`rejectedReason`/`calendarToken`/`profession`/`skills`/`availability`/`helpNotes` → `null`, `skillsConsent` → `false`), ainsi que des snapshots de nom qui subsistaient ailleurs : `Loan.dryingPersonName` (contact de séchage, `dryingContactId=userId`) et `Donation.donorName` (don soumis, `donorId=userId`) sont réécrits à `"Compte supprimé"`. `User.socialBracketId` (tranche sociale, FK vers `SocialBracket`) n'est volontairement PAS réinitialisé : ce n'est pas une donnée identifiante une fois le compte anonymisé, et elle peut rester utile pour des statistiques agrégées. Les sessions et comptes (mots de passe) sont supprimés pour empêcher toute connexion. Les données liées (prêts, incidents, audit) restent intactes — seul le lien vers une personne identifiable disparaît. Logique portée par `src/lib/anonymize.ts` (`anonymizeUserInTx`), appelée dans la même transaction que l'`AuditLog` (RGPD-04).
 
-**Conséquences** : l'historique d'audit reste cohérent. L'utilisateur ne peut plus se connecter. L'email est libéré pour ré-inscription. L'interface admin filtre les comptes `DELETED` de la liste principale.
+**Conséquences** : l'historique d'audit reste cohérent, sans PII résiduelle (la metadata de l'`AuditLog` `USER_DELETED` ne contient plus que `targetUserId` + `mode`). L'utilisateur ne peut plus se connecter. L'email est libéré pour ré-inscription. L'interface admin filtre les comptes `DELETED` de la liste principale. L'effacement reste réservé à l'admin (V1 — pas de self-service).
+
+**Suivi possible (hors périmètre V1)** : les notes pédagogiques concernant un jeune effacé (`PedagogicalNote.content` et données pédagogiques sans FK vers `User`) ne sont pas nettoyées par cette anonymisation. De même, `Equipment.notes` peut contenir un texte libre recopiant le nom du donateur à la validation d'un don (« Don de X ») — on ne tente pas de nettoyer ce texte libre de façon fuzzy ; résidu connu, non traité en V1.
 
 ---
 
@@ -141,3 +143,21 @@ Choix techniques autonomes du projet Piloti. Une décision = un paragraphe (Cont
 **Choix** : table `Consent` (append-only, jamais modifiée ni supprimée hors cascade de suppression du compte) — un enregistrement par inscription, avec `type` (SELF | PARENTAL), `privacyVersion`/`termsVersion` (figées au moment de l'acceptation), `guardianName` pour le cas mineur, `ipAddress`/`userAgent`. Les versions des textes légaux (`PRIVACY_VERSION`, `TERMS_VERSION`, `LEGAL_VERSION`) vivent en code dans `src/lib/legal/versions.ts`, pas en base : le contenu légal évolue avec le code, pas via une interface d'admin. L'écriture du `Consent` + l'`AuditLog` (`USER_REGISTERED`) se fait dans une seule transaction (`withAudit`) ; si elle échoue après la création du compte par better-auth, le compte tout juste créé est immédiatement supprimé (hard-delete) — jamais de compte sans preuve de consentement.
 
 **Conséquences** : pas de ré-consentement rétroactif des comptes existants lors d'une évolution mineure des textes (hors périmètre V1). Le contenu réel des pages légales (dénomination du groupe, adresse, contact, hébergeur) contient des placeholders `[À COMPLÉTER : …]` à remplir avant mise en production.
+
+**RGPD-04 (effacement)** : à l'anonymisation d'un compte, `Consent.guardianName`/`ipAddress`/`userAgent` sont scrubés (`null`) — ces champs identifient une personne (le responsable légal, l'adresse IP) et n'ont plus de raison d'être conservés une fois le compte effacé. `type`/`privacyVersion`/`termsVersion`/`acceptedAt` restent intacts : c'est la preuve du consentement donné, qui doit survivre à l'effacement de son titulaire.
+
+---
+
+## D-015 — OSS-02 : migrations Prisma versionnées, procédure de baseline
+
+**Contexte** : `prisma/migrations/` était ignoré par git (généré en dev via `db push`/`migrate dev` sans être commité). Pour un projet open-source, l'historique des migrations doit être versionné et reproductible. La migration `20260514210509_init` a été régénérée depuis le schéma courant (elle n'a pas été construite incrémentalement au fil de l'historique réel du projet) : elle contient donc déjà toutes les tables telles qu'elles existent aujourd'hui.
+
+**Choix** : `prisma/migrations/` est désormais suivi par git (retrait de la ligne correspondante dans `.gitignore`). `pnpm prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code` confirme qu'il n'y a aucune divergence entre les migrations versionnées et le schéma courant.
+
+**Conséquences** : sur une base **vierge**, `prisma migrate deploy` s'applique normalement. Sur un environnement **existant** créé avant ce commit (via `db push`, donc sans table `_prisma_migrations`), un `migrate deploy` échouera avec « table already exists » puisque les tables sont déjà là. Il faut d'abord **baseliner** cet environnement avant le premier déploiement versionné :
+```
+pnpm prisma migrate resolve --applied 20260514210509_init
+pnpm prisma migrate resolve --applied 20260716120000_add_consent_and_birthdate
+pnpm prisma migrate deploy
+```
+Cette étape de baseline n'est à faire qu'une seule fois, sur les environnements pré-existant à ce commit (typiquement la prod actuelle si elle est déjà en service).

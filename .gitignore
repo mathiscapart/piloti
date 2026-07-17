@@ -55,5 +55,3 @@ next-env.d.ts
 
 # uploads (Phase 7)
 /public/uploads/
-
-prisma/migrations/

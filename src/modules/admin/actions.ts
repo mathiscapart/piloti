@@ -1,8 +1,12 @@
 "use server";
 
+import { unlink } from "fs/promises";
+import { join } from "path";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
+import { anonymizeUserInTx } from "@/lib/anonymize";
 import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
@@ -472,28 +476,22 @@ export async function deleteUser(
 
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { email: true, firstName: true, lastName: true },
+    select: { image: true },
   });
   if (!target) return { error: "Utilisateur introuvable." };
 
-  // Soft-delete via withAudit : anonymise l'email (préserve l'intégrité
-  // référentielle des prêts/incidents/audit historiques).
+  // RGPD-04 — effacement réel : anonymise toute la PII (email, identité,
+  // profil parent enrichi) et scrube le Consent lié, dans une même
+  // transaction avec l'AuditLog (préserve l'intégrité référentielle des
+  // prêts/incidents/audit historiques, cf. D-011).
   await withAudit(
-    (tx) =>
-      tx.user.update({
-        where: { id: parsed.data.userId },
-        data: {
-          status: "DELETED",
-          email: `deleted+${parsed.data.userId}@piloti.invalid`,
-        },
-      }),
+    (tx) => anonymizeUserInTx(tx, parsed.data.userId),
     {
       action: "USER_DELETED",
       userId: actor.id,
       metadata: {
-        deletedUserId: parsed.data.userId,
-        deletedEmail: target.email,
-        deletedName: `${target.firstName} ${target.lastName}`,
+        targetUserId: parsed.data.userId,
+        mode: "anonymized",
       },
     },
   );
@@ -502,6 +500,16 @@ export async function deleteUser(
   // (non-critique si l'une échoue après que le compte soit marqué DELETED).
   await db.session.deleteMany({ where: { userId: parsed.data.userId } });
   await db.account.deleteMany({ where: { userId: parsed.data.userId } });
+
+  // Best-effort : supprime l'avatar uploadé sur disque (ne bloque jamais
+  // l'effacement si le fichier est déjà absent ou illisible).
+  if (target.image?.startsWith("/uploads/")) {
+    try {
+      await unlink(join("public", target.image));
+    } catch {
+      // Silencieux : le fichier peut déjà être absent.
+    }
+  }
 
   revalidatePath("/admin/utilisateurs");
   return { error: null };

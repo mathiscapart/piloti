@@ -55,6 +55,12 @@ jobs:
       - name: Vérification des types (tsc)
         run: pnpm typecheck
 
+      # Avant le build : ce sont des tests unitaires de logique pure (aucune
+      # dépendance au build Next.js), plus rapides à faire échouer que
+      # d'attendre `pnpm build` pour un bug qu'un test aurait déjà signalé.
+      - name: Tests unitaires (Vitest)
+        run: pnpm test
+
       - name: Build (Next.js)
         run: pnpm build
 

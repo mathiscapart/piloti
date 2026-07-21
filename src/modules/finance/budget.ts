@@ -27,10 +27,22 @@ export async function getEventBudget(eventId: string) {
       where: { eventId },
       select: { category: true, plannedCents: true },
     }),
-    // « Réel » = notes de frais remboursées rattachées à l'événement.
+    // US-F14 — « réel » = dépenses/tickets de caisse rattachés à l'événement,
+    // non refusés (en attente comprise → mise à jour en direct au fil des
+    // tickets, avant même le remboursement).
     db.expense.findMany({
-      where: { eventId, status: "REIMBURSED" },
-      select: { category: true, amountCents: true },
+      where: { eventId, status: { not: "REJECTED" } },
+      orderBy: { date: "desc" },
+      select: {
+        id: true,
+        category: true,
+        amountCents: true,
+        date: true,
+        receiptUrl: true,
+        status: true,
+        note: true,
+        declarant: { select: { firstName: true, lastName: true } },
+      },
     }),
     db.eventRegistration.findMany({
       where: { eventId, response: "PRESENT" },
@@ -109,6 +121,20 @@ export async function getEventBudget(eventId: string) {
     // le budget prévu ? ≥ 0 ⇒ « équilibré » (objectif « 0 à la fin »).
     marginCents: expectedRevenue - totalPlanned,
     registrations: detailed,
+    // US-F14 — tickets de caisse (dépenses) rattachés à l'événement.
+    tickets: expenses.map((e) => ({
+      id: e.id,
+      amountCents: e.amountCents,
+      category: e.category,
+      date: e.date,
+      receiptUrl: e.receiptUrl,
+      status: e.status,
+      note: e.note,
+      declarant: e.declarant
+        ? `${e.declarant.firstName} ${e.declarant.lastName}`
+        : "—",
+    })),
+    ticketsTotalCents: expenses.reduce((a, e) => a + e.amountCents, 0),
   };
 }
 

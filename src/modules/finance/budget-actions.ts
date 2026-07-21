@@ -1,14 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
-import { EXPENSE_CATEGORIES } from "@/lib/enums";
+import {
+  EXPENSE_CATEGORIES,
+  RECEIPT_REQUIRED_ABOVE_CENTS,
+  type ExpenseCategory,
+} from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
+import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 
+import { notifyTreasurers } from "./expense-notify";
 import { parseAmountToCents } from "./format";
 
 // US-F05 — définir le tarif (par défaut) d'un événement payant. Le tarif
@@ -148,6 +155,81 @@ export async function recordEventPayment(
       userId: actor.id,
       metadata: { eventId, userId, amountCents },
     },
+  );
+
+  revalidatePath(`/planning/${eventId}/budget`);
+  return { error: null };
+}
+
+// US-F14 — enregistrer un « ticket de caisse » sur un événement (photo +
+// montant + catégorie), au fil de l'eau. Crée une dépense (Expense) rattachée
+// à l'événement, en attente, qui remonte automatiquement à la trésorerie et
+// alimente le réel du budget.
+export async function addEventTicket(
+  eventId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, "expense.create")) return { error: "Permission refusée." };
+
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true },
+  });
+  if (!event) return { error: "Événement introuvable." };
+
+  const amountCents = parseAmountToCents(String(formData.get("amount") ?? ""));
+  if (amountCents === null || amountCents <= 0) return { error: "Montant invalide." };
+
+  const category = String(formData.get("category") ?? "");
+  if (!(EXPENSE_CATEGORIES as readonly string[]).includes(category)) {
+    return { error: "Catégorie invalide." };
+  }
+
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  // Photo du ticket (resize/WebP). Obligatoire au-dessus du seuil.
+  let receiptUrl: string | null = null;
+  const file = formData.get("receipt");
+  if (file instanceof File && file.size > 0) {
+    try {
+      receiptUrl = await saveUploadedPhoto(file);
+    } catch (err) {
+      return {
+        error: err instanceof UploadError ? err.message : "Échec de l'envoi du ticket.",
+      };
+    }
+  }
+  if (amountCents > RECEIPT_REQUIRED_ABOVE_CENTS && !receiptUrl) {
+    return {
+      error: `La photo du ticket est obligatoire au-dessus de ${RECEIPT_REQUIRED_ABOVE_CENTS / 100} €.`,
+    };
+  }
+
+  const created = await withAudit(
+    (tx) =>
+      tx.expense.create({
+        data: {
+          declarantId: user.id,
+          amountCents,
+          date: new Date(), // ticket saisi en direct
+          category,
+          eventId,
+          note,
+          receiptUrl,
+          status: "PENDING",
+        },
+      }),
+    (e) => ({
+      action: "EXPENSE_CREATED",
+      userId: user.id,
+      metadata: { expenseId: e.id, eventId, amountCents, category, ticket: true },
+    }),
+  );
+
+  // Remontée automatique à la trésorerie.
+  after(() =>
+    notifyTreasurers(created.id, user, amountCents, category as ExpenseCategory),
   );
 
   revalidatePath(`/planning/${eventId}/budget`);

@@ -8,18 +8,18 @@ import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import {
   EXPENSE_CATEGORIES,
-  EXPENSE_CATEGORY_LABEL,
   RECEIPT_REQUIRED_ABOVE_CENTS,
   REIMBURSEMENT_METHODS,
   type ExpenseCategory,
   type ReimbursementMethod,
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
-import { notify, notifyMany } from "@/modules/notifications/notify";
+import { notify } from "@/modules/notifications/notify";
 
+import { notifyTreasurers } from "./expense-notify";
 import { formatEuros, parseAmountToCents } from "./format";
 
 function parseDate(raw: string): Date | null {
@@ -27,35 +27,6 @@ function parseDate(raw: string): Date | null {
   if (!m) return null;
   const [, y, mo, d] = m.map(Number);
   return new Date(Date.UTC(y, mo - 1, d));
-}
-
-// Notifie les trésoriers (+ admin) d'une nouvelle note de frais.
-async function notifyTreasurers(
-  expenseId: string,
-  declarant: { id: string; firstName: string; lastName: string },
-  amountCents: number,
-  category: ExpenseCategory,
-): Promise<void> {
-  const users = await db.user.findMany({
-    where: { status: "ACTIVE" },
-    select: { id: true, role: true, roles: true },
-  });
-  const recipients = users
-    .filter((u) =>
-      effectiveRoles(u).some((r) => r === "TRESORIER" || r === "ADMIN"),
-    )
-    .map((u) => u.id)
-    .filter((id) => id !== declarant.id);
-  if (recipients.length === 0) return;
-
-  await notifyMany(recipients, (userId) => ({
-    userId,
-    type: "EXPENSE_SUBMITTED",
-    title: `Note de frais : ${formatEuros(amountCents)}`,
-    body: `${declarant.firstName} ${declarant.lastName} — ${EXPENSE_CATEGORY_LABEL[category]}`,
-    link: "/finances/notes",
-    messageId: expenseId,
-  }));
 }
 
 async function notifyDeclarant(

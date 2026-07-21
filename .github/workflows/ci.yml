@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Annule les runs obsolètes d'une même branche/PR quand un nouveau push arrive.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# GITHUB_TOKEN en lecture seule : aucun job ci-dessous ne pousse de commit,
+# de tag, ni n'écrit sur les Pull Requests.
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Qualité (lint, typecheck, build)
+    runs-on: ubuntu-latest
+    env:
+      # `prisma.config.ts` appelle env("DATABASE_URL") au chargement — nécessaire
+      # y compris pour `prisma generate`, qui ne se connecte jamais réellement à
+      # une base. `src/lib/auth.ts` plante volontairement (fail-fast) si
+      # BETTER_AUTH_SECRET est absent. Aucune de ces deux valeurs n'est une vraie
+      # base/un vrai secret : le build Next.js ne fait que du SSR à la demande
+      # (aucune page ne requête la DB au moment du build), ces placeholders
+      # suffisent et ne servent jamais à une authentification réelle.
+      DATABASE_URL: "file:./ci-build.db"
+      BETTER_AUTH_SECRET: "ci-build-placeholder-non-secret-0000000000000000"
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v7
+
+      - name: Installation de pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.1
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Installation des dépendances
+        run: pnpm install --frozen-lockfile
+
+      - name: Génération du client Prisma
+        run: pnpm db:generate
+
+      - name: Lint (ESLint)
+        run: pnpm lint
+
+      - name: Vérification des types (tsc)
+        run: pnpm typecheck
+
+      - name: Build (Next.js)
+        run: pnpm build
+
+  security:
+    name: Sécurité (secrets, dépendances, SAST)
+    runs-on: ubuntu-latest
+    steps:
+      # Historique complet : gitleaks scanne les commits, pas juste l'arbre courant.
+      - name: Récupération du code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Détection de secrets commités. On invoque le binaire gitleaks (OSS,
+      # MIT) directement via son image Docker officielle plutôt que via
+      # l'action `gitleaks/gitleaks-action`, qui exige une licence payante dès
+      # qu'elle tourne sur un dépôt privé — ce repo l'est probablement.
+      # `detect` (sans `--no-git`) parcourt l'historique des commits suivis
+      # par git, ce qui exclut naturellement node_modules/.pnpm-store.
+      - name: Scan de secrets (gitleaks)
+        uses: docker://zricethezav/gitleaks:v8.30.1
+        with:
+          args: detect --source=. --redact -v
+
+      - name: Installation de pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.15.1
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Installation des dépendances
+        run: pnpm install --frozen-lockfile
+
+      # Politique : bloquant uniquement sur "critical". Au moment d'écrire ce
+      # workflow, un `pnpm audit` complet remonte 18 vulnérabilités (2 low /
+      # 11 moderate / 5 high), toutes dans des dépendances transitives d'outils
+      # de build (chaîne ESLint, `@prisma/dev` embarqué par `prisma`) sans
+      # correctif amont disponible aujourd'hui et sans exposition en
+      # production (dev/build only). Faire échouer la CI dessus serait rouge
+      # en permanence pour un risque non actionnable — contre-productif.
+      - name: "Audit des dépendances — bloquant (critical)"
+        run: pnpm audit --audit-level=critical
+
+      # Rapport informatif, non bloquant : rend visibles les vulnérabilités
+      # moderate/high dans les logs sans casser la CI. À remonter en bloquant
+      # dès qu'un correctif amont existe pour les entrées actuelles.
+      - name: "Audit des dépendances — rapport (moderate+), non bloquant"
+        run: pnpm audit --audit-level=moderate
+        continue-on-error: true
+
+      # SAST sur le code TS/TSX applicatif. `semgrep-action` (le wrapper
+      # GitHub Marketplace) est archivé/déprécié depuis 2024 ; on invoque donc
+      # directement l'image Docker officielle et maintenue `semgrep/semgrep`.
+      # L'image `semgrep/semgrep` ne définit pas d'entrypoint (contrairement à
+      # celle de gitleaks) : `args` est donc pris comme commande complète et
+      # doit commencer par le binaire `semgrep`, sans quoi Docker cherche un
+      # exécutable nommé `scan`.
+      # Rulesets publics (`p/security-audit`, `p/typescript`, `p/react`),
+      # `--metrics=off` : aucun compte, aucun token Semgrep App requis.
+      # Scan de référence à la rédaction de ce workflow : 0 finding sur les
+      # 394 fichiers suivis par git — bloquant dès le départ.
+      - name: SAST (semgrep)
+        uses: docker://semgrep/semgrep:1.170.0
+        with:
+          args: >-
+            semgrep scan --config=p/security-audit --config=p/typescript --config=p/react
+            --metrics=off --error --exclude=node_modules --exclude=.next

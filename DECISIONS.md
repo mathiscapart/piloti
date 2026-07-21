@@ -161,3 +161,20 @@ pnpm prisma migrate resolve --applied 20260716120000_add_consent_and_birthdate
 pnpm prisma migrate deploy
 ```
 Cette étape de baseline n'est à faire qu'une seule fois, sur les environnements pré-existant à ce commit (typiquement la prod actuelle si elle est déjà en service).
+
+---
+
+## D-016 — CI GitHub Actions : deux jobs (qualité / sécurité), outils OSS sans jeton payant
+
+**Contexte** : le dépôt n'avait aucune CI. Le dépôt est très probablement privé, ce qui exclut d'office tout ce qui suppose GitHub Advanced Security (CodeQL, upload SARIF vers code-scanning) ou une licence payante (`gitleaks-action` exige une licence sur dépôt privé — la licence porte sur l'action GitHub elle-même, pas sur le binaire `gitleaks`, qui reste MIT). Il n'y a pas de runner de tests dans ce repo (pas de script `test`).
+
+**Choix** : `.github/workflows/ci.yml`, deux jobs sur `push`/`pull_request`, `concurrency` (annule les runs obsolètes d'une même branche/PR) et `permissions: contents: read` au niveau du workflow.
+- **`quality`** : `pnpm install --frozen-lockfile` → `prisma generate` → `pnpm lint` → `pnpm typecheck` → `pnpm build`. Le build a besoin d'un `DATABASE_URL` résolvable (`prisma.config.ts` appelle `env("DATABASE_URL")` dès le chargement de la config, y compris pour `prisma generate`) et d'un `BETTER_AUTH_SECRET` (fail-fast volontaire dans `src/lib/auth.ts`) — deux valeurs placeholder inertes suffisent : le build ne requête jamais réellement la base (aucune page ne fait de fetch DB au build, tout est SSR à la demande).
+- **`security`** : détection de secrets (`gitleaks` v8.30.1, image Docker officielle invoquée directement — pas `gitleaks/gitleaks-action`, gatée par une licence sur dépôt privé), audit de dépendances (`pnpm audit`), SAST (`semgrep` v1.170.0, rulesets publics `p/security-audit` + `p/typescript` + `p/react`, `--metrics=off`, image Docker officielle — `semgrep-action`, le wrapper GitHub Marketplace historique, est archivé/déprécié depuis 2024).
+- Toutes les actions/images sont pinnées sur un tag de version précis (`actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `zricethezav/gitleaks:v8.30.1`, `semgrep/semgrep:1.170.0`), jamais sur une branche mouvante.
+- Politique bloquant/avertissant sur l'audit de dépendances : **bloquant uniquement à partir de `critical`**. À la rédaction, `pnpm audit` remonte 18 vulnérabilités (2 low / 11 moderate / 5 high) toutes dans des dépendances transitives d'outillage de build (chaîne ESLint, `@prisma/dev` embarqué par `prisma`), sans correctif amont et sans exposition en production — bloquer la CI dessus la rendrait rouge en permanence pour un risque non actionnable. Un second step `--audit-level=moderate` en `continue-on-error: true` garde ces entrées visibles dans les logs sans casser le pipeline.
+- SAST bloquant dès le départ (`--error`) : le scan de référence ne remonte aucun finding sur les 394 fichiers suivis par git, donc pas de dette à absorber avant d'activer le blocage.
+
+**Conséquences** : un push/une PR qui casse le lint, le typecheck, le build, qui introduit un secret commité, une vulnérabilité `critical`, ou un finding SAST fera échouer la CI. Les vulnérabilités moderate/high déjà connues restent visibles sans bloquer tant qu'aucun correctif amont n'existe — à repasser en bloquant dès qu'un correctif est disponible pour les entrées listées ci-dessus. `pnpm-workspace.yaml` (`allowBuilds`) limite déjà les scripts d'installation exécutables lors du `pnpm install` en CI, indépendamment de ce choix.
+
+**Découverte annexe (hors périmètre de ce choix)** : en testant `prisma migrate deploy` sur une base neuve pour vérifier ce que le job `quality` devait réellement fournir, la migration `20260516000000_add_categories` échoue (`P3018`, table `Category` déjà créée par `20260514210509_init`) — un environnement vierge ne peut pas appliquer l'historique de migrations tel quel aujourd'hui. Sans rapport avec la CI elle-même (le build ne dépend pas de `migrate deploy`), mais à corriger dans `prisma/migrations` — hors périmètre de cette entrée.

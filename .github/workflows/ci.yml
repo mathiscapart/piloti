@@ -113,6 +113,10 @@ jobs:
       # SAST sur le code TS/TSX applicatif. `semgrep-action` (le wrapper
       # GitHub Marketplace) est archivé/déprécié depuis 2024 ; on invoque donc
       # directement l'image Docker officielle et maintenue `semgrep/semgrep`.
+      # L'image `semgrep/semgrep` ne définit pas d'entrypoint (contrairement à
+      # celle de gitleaks) : `args` est donc pris comme commande complète et
+      # doit commencer par le binaire `semgrep`, sans quoi Docker cherche un
+      # exécutable nommé `scan`.
       # Rulesets publics (`p/security-audit`, `p/typescript`, `p/react`),
       # `--metrics=off` : aucun compte, aucun token Semgrep App requis.
       # Scan de référence à la rédaction de ce workflow : 0 finding sur les
@@ -121,5 +125,5 @@ jobs:
         uses: docker://semgrep/semgrep:1.170.0
         with:
           args: >-
-            scan --config=p/security-audit --config=p/typescript --config=p/react
+            semgrep scan --config=p/security-audit --config=p/typescript --config=p/react
             --metrics=off --error --exclude=node_modules --exclude=.next

@@ -16,28 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UNITS } from "@/lib/enums";
+// RGPD-02 — le bloc parental s'affiche selon le même seuil que la Server Action
+// (`requiresParentalConsent`), depuis la source unique `src/lib/legal/age`.
+import { requiresParentalConsent } from "@/lib/legal/age";
 import { cn } from "@/lib/utils";
 
 import { signUpAction, type SignUpActionResult } from "./actions";
 
 const initialState: SignUpActionResult = { error: null, success: null };
-
-// RGPD-02 — même seuil que src/app/(auth)/register/actions.ts (calcul côté
-// client, purement pour l'affichage conditionnel du bloc parental).
-const MINOR_AGE_THRESHOLD = 15;
-
-function isMinor(birthDate: string): boolean {
-  if (!birthDate) return false;
-  const dob = new Date(birthDate);
-  if (Number.isNaN(dob.getTime())) return false;
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const birthdayPassedThisYear =
-    today.getMonth() > dob.getMonth() ||
-    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
-  if (!birthdayPassedThisYear) age -= 1;
-  return age < MINOR_AGE_THRESHOLD;
-}
 
 const UNIT_LABELS: Record<(typeof UNITS)[number], string> = {
   FARFADETS: "Farfadets (6-8 ans)",
@@ -54,7 +40,7 @@ export function RegisterForm() {
   const [state, action, pending] = useActionState(signUpAction, initialState);
   const [profileType, setProfileType] = useState<ProfileType>("UNIT");
   const [birthDate, setBirthDate] = useState("");
-  const minor = isMinor(birthDate);
+  const minor = requiresParentalConsent(birthDate);
 
   if (state.success) {
     return (

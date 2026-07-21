@@ -7,26 +7,13 @@ import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
+import { requiresParentalConsent } from "@/lib/legal/age";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 
 export interface SignUpActionResult {
   error: string | null;
   success: string | null;
-}
-
-// RGPD-02 — en-dessous de ce seuil, l'inscription requiert l'attestation d'un
-// responsable légal en plus du consentement de la personne elle-même.
-const MINOR_AGE_THRESHOLD = 15;
-
-function isMinor(birthDate: Date): boolean {
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const birthdayPassedThisYear =
-    today.getMonth() > birthDate.getMonth() ||
-    (today.getMonth() === birthDate.getMonth() && today.getDate() >= birthDate.getDate());
-  if (!birthdayPassedThisYear) age -= 1;
-  return age < MINOR_AGE_THRESHOLD;
 }
 
 const schema = z
@@ -66,7 +53,7 @@ const schema = z
     path: ["confirmPassword"],
   })
   .superRefine((d, ctx) => {
-    if (!isMinor(d.birthDate)) return;
+    if (!requiresParentalConsent(d.birthDate)) return;
     if (d.acceptParental !== "on") {
       ctx.addIssue({
         code: "custom",
@@ -97,7 +84,7 @@ export async function signUpAction(
   }
 
   const isParent = parsed.data.profileType === "PARENT";
-  const minor = isMinor(parsed.data.birthDate);
+  const minor = requiresParentalConsent(parsed.data.birthDate);
   const requestHeaders = await headers();
 
   let createdUserId: string | null = null;

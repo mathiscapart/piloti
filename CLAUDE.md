@@ -1,39 +1,64 @@
-# CLAUDE.md
+# CLAUDE.md — Piloti
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## 1. Projet
 
-## Commands
+Application de gestion pour un groupe scout SGDF : inventaire matériel, prêts, incidents,
+finances, planning, communication, suivi pédagogique, lieux de camp. Utilisateurs = chefs,
+responsables, parents, jeunes — d'où un modèle de rôles fin et des exigences RGPD réelles
+(mineurs, consentement parental, effacement). Instance unique auto-hébergée.
 
-Package manager: **pnpm** (lockfile `pnpm-lock.yaml`; `pnpm-workspace.yaml` declares the allowed build scripts — Prisma engines, esbuild, sharp).
+## 2. Stack
 
-- `pnpm dev` — Next.js dev server on http://localhost:3000
-- `pnpm build` — production build (uses `output: 'standalone'`)
-- `pnpm start` — serve the production build
-- `pnpm lint` — ESLint (flat-config in `eslint.config.mjs`)
-- `pnpm typecheck` — `tsc --noEmit`
-- `pnpm db:migrate` / `db:seed` / `db:studio` / `db:reset` / `db:generate` — Prisma workflow (DB lives at `DATABASE_URL`, SQLite file)
+Next.js 16 (App Router, `output: 'standalone'`) · React 19 · TypeScript strict ·
+Tailwind v4 (CSS-first) · shadcn/ui · Prisma 7 + SQLite (`better-sqlite3`) · better-auth ·
+Zod · Resend (emails) · web-push (notifications) · Docker + Traefik + cloudflared en prod.
+Gestionnaire de paquets : **pnpm**.
 
-There is no test runner.
+## 3. Structure
 
-## Architecture
+- `src/app/` — routes. Groupes : `(app)` protégé, `(auth)` login/register/setup, `(public)` pages légales, `api/`.
+- `src/modules/<domaine>/` — logique métier : `queries.ts` (lecture), `*-actions.ts` (Server Actions), `types.ts` (Zod).
+  Domaines : `admin`, `audience`, `camp`, `communication`, `family`, `finance`, `inventory`,
+  `notifications`, `pedagogy`, `planning`.
+- `src/lib/` — socle transverse : `auth.ts`, `permissions.ts`, `audit.ts`, `db.ts`, `enums.ts`, `anonymize.ts`.
+- `src/components/ui/` — primitives shadcn (on possède le code, on les édite directement).
+- `src/proxy.ts` — protection des routes. `prisma/` — schéma, migrations, seed. `traefik/` — reverse proxy prod.
 
-Next.js 16 (App Router) + React 19 + TypeScript strict + Tailwind v4 + Prisma (SQLite) + better-auth.
+## 4. Commandes (toutes vérifiées dans `package.json`)
 
-- Routes live under `src/app/`. The path alias `@/*` resolves to `./src/*` (see `tsconfig.json`). There is **no** `pages/` directory.
-- **Next.js 16 renamed `middleware.ts` → `proxy.ts`**. Route protection goes in `src/proxy.ts` (not `src/middleware.ts`).
-- **Tailwind v4 is CSS-first**: design tokens are defined in `src/app/globals.css` inside an `@theme inline` block. There is **no** `tailwind.config.*` file. SGDF palette tokens (`forest`, `sky`, `sun`, `fire`, `brick`, `sand`, `snow`, `earth`, `trail`, `stone`) are exposed as both raw utilities (`bg-forest`, `text-earth`) **and** as shadcn aliases (`--color-primary` → `--color-forest`, etc.) so shadcn components automatically inherit the SGDF palette.
-- The root layout (`src/app/layout.tsx`) loads **Nunito** (variable font, weights 400–900) and **JetBrains Mono** via `next/font/google` and wires `<html lang="fr">`. The `<body>` is `bg-sand font-sans text-earth` and includes a global `<Toaster />` (sonner).
-- UI primitives come from **shadcn/ui** scaffolded under `src/components/ui/`. The Button is customised: `rounded-full` + `font-bold` per the SGDF spec, with an extra `info` variant (`bg-sky`).
-- ESLint extends `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript` and re-declares the default ignores (`.next/**`, `out/**`, `build/**`, `next-env.d.ts`) — the flat-config override clears them otherwise.
+`pnpm dev` (:3000) · `pnpm build` · `pnpm start` · `pnpm lint` · `pnpm typecheck` ·
+`pnpm db:migrate` / `db:seed` / `db:studio` / `db:reset` / `db:generate` · `pnpm icons:generate`.
 
-## Piloti — Contraintes fixes
+**Il n'y a aucun runner de tests dans ce repo.** La vérification passe par `pnpm lint` +
+`pnpm typecheck` + exécution réelle du parcours dans l'app.
 
-- SQLite en dev ET prod (cette version)
-- Code anglais / UI française
-- Design depuis Notion "Design System — Style SGDF"
-- Maquettes depuis Stitch (chercher en premier)
-- Toute modification de données → AuditLog dans la même transaction Prisma
-- Aucun port exposé en prod (tout via cloudflared)
-- Better-auth (PAS NextAuth)
+## 5. Invariants non négociables
 
-Voir `DECISIONS.md` pour le détail des choix techniques autonomes.
+- **Toute mutation de données passe par `withAudit()`** (`src/lib/audit.ts`) : la mutation et
+  l'`AuditLog` sont dans la **même transaction Prisma**. Jamais de mutation sans trace.
+- **Toute Server Action / page sensible commence par `can(user, "…")`** (`src/lib/permissions.ts`,
+  source unique de la matrice de rôles). Pas de contrôle d'accès ad hoc.
+- **better-auth**, jamais NextAuth. **SQLite** en dev ET en prod.
+- Code et identifiants en **anglais**, UI/messages utilisateur/commits/doc en **français**.
+- **Aucun port exposé en prod** : tout entre par cloudflared → Traefik. Ne jamais ajouter de `ports:`
+  dans `docker-compose.yml`.
+- Design : palette et tokens SGDF uniquement (`globals.css`), Design System Notion « Style SGDF ».
+- Aucun secret en clair : `.env` / `.env.production` ne sont pas commités.
+
+## 6. Pièges connus
+
+- **Next 16 : `middleware.ts` n'existe plus → `src/proxy.ts`.** Un `middleware.ts` ne serait jamais exécuté.
+- **Tailwind v4 : pas de `tailwind.config.*`.** Les tokens vivent dans `src/app/globals.css` (`@theme inline`) ;
+  les tokens shadcn (`--color-primary`…) sont des alias des tokens SGDF.
+- **SQLite** : pas de `ON DELETE SET NULL` fiable, pas d'enum natif, `ALTER TABLE` limité. Les enums sont des
+  constantes TS (`src/lib/enums.ts`) et la suppression d'un utilisateur est une **anonymisation** (`anonymize.ts`).
+- Ajouter un domaine externe (carte, CDN, police) impose de mettre à jour la **CSP** de `traefik/config/middlewares.yml`,
+  sinon l'échec n'apparaît qu'en prod.
+- Le premier lancement passe par `/setup` (base vide détectée dans `proxy.ts`), pas par un seed.
+
+## 7. Workflow
+
+Décisions techniques structurantes → une entrée dans `DECISIONS.md` (Contexte / Choix / Conséquences),
+on amende, on n'efface pas. Commits en **conventional commits, en français**, scope = domaine et
+référence de user story quand elle existe (`feat(finances): US-F06 — …`). Travail sur branche
+`feat/<sujet>`, fusion dans `main`. Pas de push/déploiement sans validation humaine explicite.

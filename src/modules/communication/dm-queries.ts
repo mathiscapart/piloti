@@ -19,7 +19,7 @@ type DmParticipantRow = {
 };
 
 export function toDmParticipant(u: DmParticipantRow): DmParticipant {
-  return { role: u.role, roles: u.roles, unit: u.unit, birthDate: u.birthDate };
+  return { roles: u.roles, unit: u.unit, birthDate: u.birthDate };
 }
 
 // SAFE-01 — lien familial entre deux comptes, quel que soit le sens

@@ -13,11 +13,13 @@ import { effectiveRoles } from "@/lib/permissions";
 //   - adultes (18+) entre eux : libre ;
 //   - lien familial (FamilyLink, double sens) : toujours autorisé, quel que
 //     soit l'âge.
-// ADMIN n'a PAS de passe-droit ici : un superutilisateur technique n'est pas
-// « le chef » d'un jeune (à valider par l'humain, cf. rapport d'implémentation).
+// ADMIN a un passe-droit : c'est le superutilisateur de l'instance (cohérent
+// avec `can()` dans permissions.ts, où ADMIN autorise tout). Il peut échanger en
+// privé avec n'importe quel membre, et tout membre peut le joindre.
 
 export interface DmParticipant {
-  role: string;
+  // Rôles fonctionnels (US-32) — source unique de la décision, lue via
+  // `effectiveRoles`. Le champ `role` (miroir d'affichage) n'entre pas ici.
   roles?: string[] | string | null;
   unit?: string | null;
   birthDate?: Date | string | null;
@@ -50,6 +52,11 @@ function isUnitChiefOf(adult: DmParticipant, teen: DmParticipant): boolean {
   return effectiveRoles(adult).includes("CHEF") && adult.unit === teen.unit;
 }
 
+// SAFE-01 — superutilisateur de l'instance : passe-droit de messagerie.
+function isAdmin(p: DmParticipant): boolean {
+  return effectiveRoles(p).includes("ADMIN");
+}
+
 export function evaluateDmPolicy(
   me: DmParticipant,
   other: DmParticipant,
@@ -58,6 +65,11 @@ export function evaluateDmPolicy(
   // Lien familial : toujours autorisé, quel que soit l'âge — court-circuite
   // tout le reste.
   if (familyLinked) return { allowed: true };
+
+  // ADMIN : passe-droit, dans un sens comme dans l'autre. Superutilisateur de
+  // l'instance (cf. `can()`), il peut joindre n'importe quel membre et être
+  // joint par lui — avant même le contrôle d'âge.
+  if (isAdmin(me) || isAdmin(other)) return { allowed: true };
 
   const meCat = categorize(me.birthDate);
   const otherCat = categorize(other.birthDate);

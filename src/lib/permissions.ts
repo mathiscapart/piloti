@@ -177,7 +177,7 @@ const PERMISSIONS: Record<Action, Role[]> = {
  * SEUL ensemble de rôles dans `roles` (JSON), n'importe quelle combinaison
  * (ex. juste ["TRESORIER"]). Le champ `role` n'est plus qu'un miroir d'affichage.
  */
-export function effectiveRoles(user: AuthCtx): string[] {
+export function effectiveRoles(user: Partial<AuthCtx>): string[] {
   if (Array.isArray(user.roles)) return user.roles.map(String);
   if (typeof user.roles === "string" && user.roles.trim() !== "") {
     try {

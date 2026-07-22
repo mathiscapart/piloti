@@ -19,19 +19,23 @@ function d(year: number, month: number, day: number): Date {
 const TODAY = d(2024, 6, 15);
 
 function child(overrides: Partial<DmParticipant> = {}): DmParticipant {
-  return { role: "SCOUT", roles: ["SCOUT"], unit: "LOUVETEAUX", birthDate: d(2015, 6, 15), ...overrides }; // 9 ans
+  return { roles: ["SCOUT"], unit: "LOUVETEAUX", birthDate: d(2015, 6, 15), ...overrides }; // 9 ans
 }
 
 function teen(overrides: Partial<DmParticipant> = {}): DmParticipant {
-  return { role: "SCOUT", roles: ["SCOUT"], unit: "PIONNIERS", birthDate: d(2008, 6, 15), ...overrides }; // 16 ans
+  return { roles: ["SCOUT"], unit: "PIONNIERS", birthDate: d(2008, 6, 15), ...overrides }; // 16 ans
 }
 
 function chief(unit: string, overrides: Partial<DmParticipant> = {}): DmParticipant {
-  return { role: "CHEF", roles: ["CHEF"], unit, birthDate: d(1990, 6, 15), ...overrides }; // 34 ans
+  return { roles: ["CHEF"], unit, birthDate: d(1990, 6, 15), ...overrides }; // 34 ans
 }
 
 function adult(overrides: Partial<DmParticipant> = {}): DmParticipant {
-  return { role: "PARENT", roles: ["PARENT"], unit: "ADULTES", birthDate: d(1990, 6, 15), ...overrides }; // 34 ans
+  return { roles: ["PARENT"], unit: "ADULTES", birthDate: d(1990, 6, 15), ...overrides }; // 34 ans
+}
+
+function admin(overrides: Partial<DmParticipant> = {}): DmParticipant {
+  return { roles: ["ADMIN"], unit: null, birthDate: d(1990, 6, 15), ...overrides }; // 34 ans
 }
 
 beforeEach(() => {
@@ -98,7 +102,7 @@ describe("15-17 ans — uniquement les chefs de son unité", () => {
 
 describe("adultes entre eux — libre", () => {
   it("autorise deux adultes sans lien particulier", () => {
-    expect(evaluateDmPolicy(adult(), adult({ role: "CHEF", roles: ["CHEF"] }), false).allowed).toBe(true);
+    expect(evaluateDmPolicy(adult(), adult({ roles: ["CHEF"] }), false).allowed).toBe(true);
   });
 });
 
@@ -144,9 +148,32 @@ describe("date de naissance absente — profil incomplet, pas « protection des 
   });
 });
 
+describe("ADMIN — passe-droit dans les deux sens", () => {
+  it("autorise un ADMIN à écrire à un enfant de moins de 15 ans", () => {
+    expect(evaluateDmPolicy(admin(), child(), false).allowed).toBe(true);
+    expect(evaluateDmPolicy(child(), admin(), false).allowed).toBe(true);
+  });
+
+  it("autorise un ADMIN avec un jeune de 15-17 ans hors de son unité", () => {
+    const t = teen({ unit: "PIONNIERS" });
+    expect(evaluateDmPolicy(admin(), t, false).allowed).toBe(true);
+    expect(evaluateDmPolicy(t, admin(), false).allowed).toBe(true);
+  });
+
+  it("passe outre un profil incomplet côté ADMIN comme côté membre", () => {
+    expect(evaluateDmPolicy(admin({ birthDate: null }), child(), false).allowed).toBe(true);
+    expect(evaluateDmPolicy(adult(), admin({ birthDate: null }), false).allowed).toBe(true);
+  });
+
+  it("s'applique même sans unité renseignée (le cas qui reste bloqué pour un simple chef)", () => {
+    const t = teen({ unit: null });
+    expect(evaluateDmPolicy(admin({ unit: null }), t, false).allowed).toBe(true);
+  });
+});
+
 describe("symétrie de la décision", () => {
   const cases: Array<[string, DmParticipant, DmParticipant, boolean]> = [
-    ["deux adultes", adult(), adult({ role: "CHEF", roles: ["CHEF"] }), false],
+    ["deux adultes", adult(), adult({ roles: ["CHEF"] }), false],
     ["jeune + chef de son unité", teen({ unit: "SCOUTS" }), chief("SCOUTS"), false],
     ["jeune + chef d'une autre unité", teen({ unit: "SCOUTS" }), chief("FARFADETS"), false],
     ["deux jeunes de 15-17 ans", teen({ unit: "SCOUTS" }), teen({ unit: "PIONNIERS" }), false],

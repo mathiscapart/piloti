@@ -26,11 +26,13 @@ Gestionnaire de paquets : **pnpm**.
 
 ## 4. Commandes (toutes vérifiées dans `package.json`)
 
-`pnpm dev` (:3000) · `pnpm build` · `pnpm start` · `pnpm lint` · `pnpm typecheck` ·
+`pnpm dev` (:3000) · `pnpm build` · `pnpm start` · `pnpm lint` · `pnpm typecheck` · `pnpm test` ·
 `pnpm db:migrate` / `db:seed` / `db:studio` / `db:reset` / `db:generate` · `pnpm icons:generate`.
 
-**Il n'y a aucun runner de tests dans ce repo.** La vérification passe par `pnpm lint` +
-`pnpm typecheck` + exécution réelle du parcours dans l'app.
+**Vitest** (`pnpm test`, `pnpm test:watch`) couvre la logique pure : `src/lib/` (âge, permissions…)
+et les modules de calcul de `src/modules/*` (montants, tarifs…). Les Server Actions, les
+composants React et les accès Prisma **ne sont pas testés** : la vérification de ces couches
+reste `pnpm lint` + `pnpm typecheck` + exécution réelle du parcours dans l'app.
 
 ## 5. Invariants non négociables
 

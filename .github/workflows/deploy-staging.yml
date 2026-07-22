@@ -1,0 +1,74 @@
+name: Déploiement staging
+
+# Déclenchement : uniquement après que le workflow `CI` a terminé sur
+# `develop` avec une conclusion `success`. `workflow_run` (et non `push`)
+# garantit qu'on ne déploie jamais un `develop` cassé — si lint/typecheck/
+# build/tests/sécurité ont échoué, ce workflow ne se déclenche pas du tout.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [develop]
+
+# Un seul déploiement staging à la fois : un `workflow_run` qui se déclenche
+# pendant qu'un déploiement précédent tourne encore ne doit pas se superposer
+# (état du volume/des conteneurs partagé). Le nouveau run attend son tour
+# plutôt que d'annuler l'ancien (cancel-in-progress: false) pour ne jamais
+# interrompre un `up -d` à mi-chemin.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+# Lecture seule : ce workflow ne pousse rien sur le dépôt, il se contente de
+# builder/démarrer des conteneurs sur le runner self-hosted.
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & déploiement (staging)
+    if: github.event.workflow_run.conclusion == 'success'
+    # Runner self-hosted installé sur l'hôte qui porte déjà la prod (cf.
+    # docs/DEPLOYMENT.md). Choix cohérent avec l'architecture « zéro port
+    # entrant » du projet (cf. CLAUDE.md §5) : un runner self-hosted établit
+    # une connexion SORTANTE vers GitHub Actions (comme cloudflared le fait
+    # déjà vers l'edge Cloudflare) — aucun port SSH n'a besoin d'être ouvert
+    # sur l'hôte pour que GitHub puisse déclencher un déploiement. Le label
+    # dédié `piloti-staging` évite qu'un job destiné au staging s'exécute par
+    # erreur sur un autre runner self-hosted du même compte/organisation.
+    runs-on: [self-hosted, piloti-staging]
+    steps:
+      - name: Récupération du code (développement)
+        uses: actions/checkout@v7
+        with:
+          ref: develop
+
+      - name: Build des images (staging)
+        run: docker compose -f docker-compose.staging.yml build
+
+      - name: Démarrage de la stack (staging)
+        env:
+          # COMPOSE_PROJECT_NAME isole entièrement cette stack de la prod
+          # (conteneurs/réseaux/volumes préfixés différemment). Les secrets et
+          # variables STAGING_* sont configurés dans les secrets/variables du
+          # dépôt GitHub (cf. docs/DEPLOYMENT.md) — jamais commités.
+          COMPOSE_PROJECT_NAME: piloti-staging
+          STAGING_DOMAIN: ${{ vars.STAGING_DOMAIN }}
+          STAGING_CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.STAGING_CLOUDFLARE_TUNNEL_TOKEN }}
+          STAGING_BETTER_AUTH_SECRET: ${{ secrets.STAGING_BETTER_AUTH_SECRET }}
+          STAGING_BETTER_AUTH_URL: ${{ vars.STAGING_BETTER_AUTH_URL }}
+          STAGING_RESEND_API_KEY: ${{ secrets.STAGING_RESEND_API_KEY }}
+          STAGING_RESEND_FROM_EMAIL: ${{ vars.STAGING_RESEND_FROM_EMAIL }}
+          STAGING_VAPID_PUBLIC_KEY: ${{ secrets.STAGING_VAPID_PUBLIC_KEY }}
+          STAGING_VAPID_PRIVATE_KEY: ${{ secrets.STAGING_VAPID_PRIVATE_KEY }}
+          STAGING_VAPID_SUBJECT: ${{ vars.STAGING_VAPID_SUBJECT }}
+        run: docker compose -f docker-compose.staging.yml up -d
+
+      # Nettoyage des images intermédiaires/obsolètes laissées par les builds
+      # successifs, pour ne pas saturer le disque de l'hôte (partagé avec la
+      # prod). Ne touche jamais aux images/conteneurs en cours d'utilisation
+      # (prod comprise) : `docker image prune` ne supprime que les images non
+      # référencées par un conteneur (arrêté ou non).
+      - name: Nettoyage des images obsolètes
+        if: always()
+        run: docker image prune -f

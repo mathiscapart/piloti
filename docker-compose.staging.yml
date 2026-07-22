@@ -1,0 +1,208 @@
+# Piloti — stack STAGING.
+#
+# Stack Docker Compose parallèle et totalement isolée de la prod (voir D-017
+# dans DECISIONS.md). Même hôte que la prod, mais aucun conteneur, réseau ou
+# volume partagé.
+#
+# Architecture : Internet → Cloudflare Access (email du propriétaire) →
+#                 cloudflared (tunnel STAGING, distinct de celui de prod)
+#                 → Traefik (staging) → app Next.js (staging)
+#
+# ZERO port exposé sur la machine hôte, comme en prod. Tout trafic entrant
+# transite par le tunnel Cloudflare staging.
+#
+# RGPD : cette base ne doit JAMAIS contenir de données réelles (mineurs,
+# finances). Volume vierge à chaque déploiement, seedé par le service `seed`
+# avec des données factices (`pnpm db:seed`). Voir docs/DEPLOYMENT.md.
+#
+# IMPORTANT — isolation vs la prod :
+#   - Lancer avec un nom de projet dédié pour ne partager AUCUNE ressource
+#     Docker avec `docker-compose.yml` (préfixe des conteneurs/réseaux/volumes) :
+#       COMPOSE_PROJECT_NAME=piloti-staging docker compose -f docker-compose.staging.yml up -d
+#     (ou export COMPOSE_PROJECT_NAME=piloti-staging dans le shell/CI avant l'appel).
+#   - Volumes nommés explicitement `piloti-staging-*` (indépendants du nom de
+#     projet, donc pas d'ambiguïté possible même si la variable ci-dessus est
+#     oubliée).
+#
+# Démarrage (après les étapes manuelles décrites dans docs/DEPLOYMENT.md) :
+#   cp .env.example .env.staging  &&  $EDITOR .env.staging
+#   COMPOSE_PROJECT_NAME=piloti-staging docker compose -f docker-compose.staging.yml --env-file .env.staging build
+#   COMPOSE_PROJECT_NAME=piloti-staging docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
+#
+# Enchaînement au démarrage : migrate → seed → app.
+#   1. `migrate`  : `prisma migrate deploy` sur le volume staging (vierge ou déjà seedé).
+#   2. `seed`     : one-shot, attend la fin de `migrate`, lance `pnpm db:seed`
+#                   (données factices uniquement — jamais un export de prod).
+#                   Idempotent côté script de seed : un redéploiement ne doit
+#                   pas dupliquer les données factices (cf. prisma/seed.ts).
+#   3. `app`      : démarre seulement une fois `seed` terminé avec succès.
+#
+# Logs :       docker compose -f docker-compose.staging.yml logs -f app
+# Nettoyage complet (⚠ détruit les données factices staging, jamais la prod) :
+#   docker compose -f docker-compose.staging.yml down -v
+
+services:
+  # ---------------------------------------------------------------------------
+  # Migrations Prisma — one-shot, exit 0, sur le volume staging exclusivement.
+  # ---------------------------------------------------------------------------
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: piloti:migrate
+    environment:
+      DATABASE_URL: file:/data/piloti.db
+    volumes:
+      - piloti-staging-data:/data
+    networks:
+      - internal
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Seed — one-shot, données factices uniquement (RGPD : jamais de données
+  # réelles en staging). Réutilise l'image `migrate` (mêmes deps : tsx, prisma,
+  # node_modules) pour éviter un stage Dockerfile dédié.
+  # ---------------------------------------------------------------------------
+  seed:
+    build:
+      context: .
+      target: migrate
+    image: piloti:migrate
+    environment:
+      DATABASE_URL: file:/data/piloti.db
+    volumes:
+      - piloti-staging-data:/data
+    networks:
+      - internal
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["sh", "-c", "pnpm db:seed"]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # App Next.js. Pas de `ports:` → uniquement accessible via Traefik staging.
+  # ---------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      target: runner
+    image: piloti:latest
+    environment:
+      # Vraie image déployée (identique à la prod), mais secret et URL propres
+      # au staging — jamais partagés avec la prod.
+      NODE_ENV: production
+      DATABASE_URL: file:/data/piloti.db
+      BETTER_AUTH_SECRET: ${STAGING_BETTER_AUTH_SECRET:?STAGING_BETTER_AUTH_SECRET manquant}
+      BETTER_AUTH_URL: ${STAGING_BETTER_AUTH_URL:?STAGING_BETTER_AUTH_URL manquant}
+      # Emails (Resend) + notifications push (VAPID) — optionnels : vides →
+      # canal désactivé. Ne jamais pointer vers les identifiants de prod pour
+      # éviter d'envoyer de vrais emails/push depuis un environnement de test.
+      RESEND_API_KEY: ${STAGING_RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${STAGING_RESEND_FROM_EMAIL:-}
+      VAPID_PUBLIC_KEY: ${STAGING_VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${STAGING_VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${STAGING_VAPID_SUBJECT:-}
+    volumes:
+      - piloti-staging-data:/data
+      - piloti-staging-uploads:/app/public/uploads
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
+    networks:
+      # `internal` : chemin app↔traefik (isolé d'Internet), propre au staging.
+      - internal
+      # `tunnel` (non-internal) : SORTIE Internet nécessaire aux notifications
+      # push et aux emails. Aucun port publié → l'ENTRÉE reste uniquement via
+      # Traefik→cloudflared staging.
+      - tunnel
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      # Réseau du *projet staging* (COMPOSE_PROJECT_NAME=piloti-staging),
+      # jamais `piloti_internal` (prod) — sinon Traefik chercherait l'app dans
+      # le mauvais réseau Docker.
+      - "traefik.docker.network=piloti-staging_internal"
+      - "traefik.http.routers.piloti-staging.rule=Host(`${STAGING_DOMAIN:?STAGING_DOMAIN manquant}`)"
+      - "traefik.http.routers.piloti-staging.entrypoints=web"
+      - "traefik.http.routers.piloti-staging.middlewares=security-headers@file"
+      - "traefik.http.services.piloti-staging.loadbalancer.server.port=3000"
+
+  # ---------------------------------------------------------------------------
+  # Traefik — reverse proxy interne, instance dédiée au staging. Pas de
+  # dashboard exposé. Réutilise les mêmes middlewares statiques que la prod
+  # (headers de sécurité, CSP) : aucune raison d'en avoir une version dégradée
+  # sur un environnement qui reste accessible depuis Internet (via Access).
+  # ---------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.6
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=piloti-staging_internal"
+      - "--providers.file.directory=/etc/traefik/config"
+      - "--providers.file.watch=true"
+      - "--entrypoints.web.address=:80"
+      - "--ping=true"
+      # Pas de --api.dashboard=true → pas d'exposition admin
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/config:/etc/traefik/config:ro
+    # SELinux (Fedora/RHEL) bloque l'accès au docker.sock depuis le conteneur —
+    # même contrainte qu'en prod (cf. docker-compose.yml).
+    security_opt:
+      - label=disable
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    networks:
+      - internal
+      - tunnel
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Cloudflared — tunnel sortant STAGING, distinct de celui de prod (token
+  # différent, cf. docs/DEPLOYMENT.md). Token-based.
+  # ---------------------------------------------------------------------------
+  cloudflared:
+    image: cloudflare/cloudflared:2025.4.0
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${STAGING_CLOUDFLARE_TUNNEL_TOKEN:?STAGING_CLOUDFLARE_TUNNEL_TOKEN manquant}
+    healthcheck:
+      test: ["CMD", "cloudflared", "--version"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+    networks:
+      - tunnel
+    restart: unless-stopped
+    depends_on:
+      traefik:
+        condition: service_healthy
+
+networks:
+  # Réseau "internal" — TOTALEMENT isolé d'Internet, propre au projet staging
+  # (`internal: true` empêche l'app de faire des appels sortants intempestifs).
+  internal:
+    internal: true
+  # Réseau "tunnel" — non-internal car cloudflared a besoin d'Internet pour
+  # joindre l'edge Cloudflare. traefik est dual-homed sur les 2 réseaux.
+  tunnel:
+
+volumes:
+  # Noms explicites piloti-staging-* : ne collisionnent jamais avec les
+  # volumes `piloti-data` / `piloti-uploads` de la prod, quel que soit
+  # COMPOSE_PROJECT_NAME.
+  piloti-staging-data:
+    name: piloti-staging-data
+  piloti-staging-uploads:
+    name: piloti-staging-uploads

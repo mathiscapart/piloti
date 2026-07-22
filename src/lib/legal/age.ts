@@ -5,6 +5,16 @@
 // messagerie (SAFE-01) impose de distinguer plusieurs seuils : on les centralise
 // ici pour qu'aucun appelant ne redéfinisse sa propre règle.
 
+import { z } from "zod";
+
+// Bornes de validation de la date de naissance, partagées par l'inscription
+// (register/actions.ts) et par la complétion de profil a posteriori
+// (completer-profil/actions.ts) : une seule définition des bornes valides.
+export const birthDateSchema = z.coerce
+  .date("Date de naissance invalide.")
+  .min(new Date("1900-01-01"), "Date de naissance invalide.")
+  .max(new Date(), "La date de naissance ne peut pas être dans le futur.");
+
 // RGPD-02 — en-dessous de ce seuil, l'inscription requiert l'attestation d'un
 // responsable légal en plus du consentement de la personne elle-même.
 export const PARENTAL_CONSENT_AGE = 15;

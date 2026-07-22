@@ -1,6 +1,41 @@
 import { db } from "@/lib/db";
 
 import { canonicalPair } from "./dm";
+import { evaluateDmPolicy, type DmParticipant } from "./dm-policy";
+
+// SAFE-01 — champs nécessaires à `evaluateDmPolicy` pour un compte donné.
+const DM_PARTICIPANT_SELECT = {
+  role: true,
+  roles: true,
+  unit: true,
+  birthDate: true,
+} as const;
+
+type DmParticipantRow = {
+  role: string;
+  roles: string;
+  unit: string | null;
+  birthDate: Date | null;
+};
+
+export function toDmParticipant(u: DmParticipantRow): DmParticipant {
+  return { roles: u.roles, unit: u.unit, birthDate: u.birthDate };
+}
+
+// SAFE-01 — lien familial entre deux comptes, quel que soit le sens
+// (parent → enfant ou enfant → parent). Toujours autorisé pour la messagerie.
+export async function isFamilyLinked(aId: string, bId: string): Promise<boolean> {
+  const link = await db.familyLink.findFirst({
+    where: {
+      OR: [
+        { parentId: aId, childId: bId },
+        { parentId: bId, childId: aId },
+      ],
+    },
+    select: { id: true },
+  });
+  return link !== null;
+}
 
 export interface ConversationSummary {
   otherId: string;
@@ -77,15 +112,25 @@ export interface Thread {
 
 // US-C04 — fil 1-to-1 avec `otherId`. `conversationId` null = pas encore de
 // message échangé (la conversation sera créée au 1er envoi).
+// SAFE-01 — un fil interdit par la protection des mineurs est traité comme
+// inexistant (même `null` qu'un destinataire introuvable) : pas d'énumération
+// d'identités possible via cette Server Action.
 export async function getThread(
   userId: string,
   otherId: string,
 ): Promise<Thread | null> {
-  const other = await db.user.findUnique({
-    where: { id: otherId },
-    select: { id: true, firstName: true, lastName: true, status: true },
-  });
-  if (!other || other.status !== "ACTIVE" || other.id === userId) return null;
+  const [me, other] = await Promise.all([
+    db.user.findUnique({ where: { id: userId }, select: DM_PARTICIPANT_SELECT }),
+    db.user.findUnique({
+      where: { id: otherId },
+      select: { id: true, firstName: true, lastName: true, status: true, ...DM_PARTICIPANT_SELECT },
+    }),
+  ]);
+  if (!me || !other || other.status !== "ACTIVE" || other.id === userId) return null;
+
+  const familyLinked = await isFamilyLinked(userId, otherId);
+  const verdict = evaluateDmPolicy(toDmParticipant(me), toDmParticipant(other), familyLinked);
+  if (!verdict.allowed) return null;
 
   const [a, b] = canonicalPair(userId, otherId);
   const convo = await db.conversation.findUnique({
@@ -113,16 +158,34 @@ export interface ContactOption {
   role: string;
 }
 
-// US-C04 — destinataires possibles d'un nouveau message (membres actifs, hors soi).
+// US-C04 — destinataires possibles d'un nouveau message (membres actifs, hors
+// soi). SAFE-01 — n'expose que les comptes avec lesquels `userId` a le droit
+// d'échanger en privé (annuaire filtré, pas juste une restriction à l'envoi).
 export async function listContacts(userId: string): Promise<ContactOption[]> {
+  const me = await db.user.findUnique({ where: { id: userId }, select: DM_PARTICIPANT_SELECT });
+  if (!me) return [];
+  const meParticipant = toDmParticipant(me);
+
   const users = await db.user.findMany({
     where: { status: "ACTIVE", id: { not: userId } },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-    select: { id: true, firstName: true, lastName: true, role: true },
+    select: { id: true, firstName: true, lastName: true, ...DM_PARTICIPANT_SELECT },
   });
-  return users.map((u) => ({
-    id: u.id,
-    name: `${u.firstName} ${u.lastName}`,
-    role: u.role,
-  }));
+  if (users.length === 0) return [];
+
+  // Un seul aller-retour base pour tous les liens familiaux de `userId`,
+  // qu'il soit parent ou enfant.
+  const links = await db.familyLink.findMany({
+    where: { OR: [{ parentId: userId }, { childId: userId }] },
+    select: { parentId: true, childId: true },
+  });
+  const linkedIds = new Set(links.map((l) => (l.parentId === userId ? l.childId : l.parentId)));
+
+  return users
+    .filter((u) => evaluateDmPolicy(meParticipant, toDmParticipant(u), linkedIds.has(u.id)).allowed)
+    .map((u) => ({
+      id: u.id,
+      name: `${u.firstName} ${u.lastName}`,
+      role: u.role,
+    }));
 }

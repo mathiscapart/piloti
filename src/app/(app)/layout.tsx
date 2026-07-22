@@ -38,8 +38,21 @@ export default async function AppLayout({
   // en en-tête (x-pathname, cf. src/proxy.ts) pour éviter de boucler sur
   // /completer-profil elle-même.
   const pathname = (await headers()).get("x-pathname") ?? "";
-  if (!user.birthDate && pathname !== COMPLETE_PROFILE_PATH) {
+  const isCompleteProfilePath = pathname === COMPLETE_PROFILE_PATH;
+  if (!user.birthDate && !isCompleteProfilePath) {
     redirect(COMPLETE_PROFILE_PATH);
+  }
+
+  // SAFE-01 — écran de complétion épuré : ni sidebar ni bottom-nav tant que le
+  // profil est incomplet, pour ne pas exposer des liens vers des pages encore
+  // bloquées par le verrou ci-dessus. L'authentification reste garantie par
+  // getCurrentUser() plus haut (redirige vers /login sans session).
+  if (isCompleteProfilePath) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        {children}
+      </div>
+    );
   }
 
   const notifications = await getNotificationSnapshot(user.id);

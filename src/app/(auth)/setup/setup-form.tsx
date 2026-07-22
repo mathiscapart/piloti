@@ -74,6 +74,11 @@ export function SetupForm() {
         />
       </div>
 
+      <div className="space-y-1.5">
+        <Label htmlFor="birthDate">Date de naissance</Label>
+        <Input id="birthDate" name="birthDate" type="date" required />
+      </div>
+
       {state.error ? (
         <p
           role="alert"

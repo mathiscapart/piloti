@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { birthDateSchema } from "@/lib/legal/age";
 import { passwordSchema } from "@/lib/password-policy";
 
 export interface SetupActionResult {
@@ -19,6 +20,11 @@ const schema = z
     email: z.string().email("Email invalide."),
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Confirmez le mot de passe."),
+    // SAFE-01 — ACTIVE implique une date de naissance connue (cf.
+    // src/app/(app)/layout.tsx) : autant la demander à la création de l'admin
+    // plutôt que de le rediriger vers /completer-profil juste après. Même
+    // validation que l'inscription (birthDateSchema, source unique).
+    birthDate: birthDateSchema,
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: "Les mots de passe ne correspondent pas.",
@@ -49,6 +55,7 @@ export async function setupAction(
         name: `${parsed.data.firstName} ${parsed.data.lastName}`,
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
+        birthDate: parsed.data.birthDate,
       },
       headers: await headers(),
     });

@@ -1,0 +1,66 @@
+name: Déploiement prod
+
+# Déclenchement : uniquement après que le workflow `CI` a terminé sur `main`
+# avec une conclusion `success`. Comme pour le staging, `workflow_run` (et non
+# `push`) garantit qu'on ne déploie jamais un `main` cassé. Le vrai garde-fou
+# reste néanmoins la protection de branche sur `main` (relecture + merge
+# humain, cf. docs/DEPLOYMENT.md) : ce workflow ne fait que réagir à un état
+# déjà validé par un humain, il n'autorise rien par lui-même.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+# Jamais deux déploiements prod en parallèle : un `workflow_run` déclenché
+# pendant qu'un déploiement précédent tourne encore attend son tour plutôt que
+# d'annuler l'ancien (cancel-in-progress: false), pour ne jamais interrompre
+# un `up -d` à mi-chemin sur l'environnement qui sert les vrais utilisateurs.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+# Lecture seule : ce workflow ne pousse rien sur le dépôt, il se contente de
+# builder/démarrer des conteneurs sur le runner self-hosted.
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Build & déploiement (prod)
+    if: github.event.workflow_run.conclusion == 'success'
+    # Même hôte physique que le staging, même runner self-hosted enregistré
+    # avec les deux labels `piloti-staging` et `piloti-prod` (cf.
+    # docs/DEPLOYMENT.md) — le label `piloti-prod` ici n'isole pas
+    # techniquement ce job d'un autre (un seul runner, une seule machine),
+    # mais il rend explicite dans ce fichier quel environnement est ciblé et
+    # évite qu'une erreur de copier-coller entre les deux workflows fasse
+    # tourner un déploiement sur le mauvais `runs-on` sans qu'on s'en aperçoive
+    # à la lecture. Le vrai garde-fou pour la prod reste la protection de
+    # branche sur `main` (relecture + merge humain), pas ce label.
+    runs-on: [self-hosted, piloti-prod]
+    steps:
+      - name: Récupération du code (main)
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Build des images (prod)
+        run: docker compose -f docker-compose.yml build
+
+      # Aucune variable STAGING_* ici : ce job utilise les secrets/variables
+      # de prod existants (BETTER_AUTH_SECRET, BETTER_AUTH_URL,
+      # CLOUDFLARE_TUNNEL_TOKEN, TRAEFIK_DOMAIN, etc.), déjà présents dans le
+      # `.env` de l'hôte pour ce projet Compose (docker-compose.yml n'a pas
+      # été modifié par ce changement — il continue de lire son `.env` comme
+      # avant toute mise en place du CD).
+      - name: Démarrage de la stack (prod)
+        run: docker compose -f docker-compose.yml up -d
+
+      # Nettoyage des images intermédiaires/obsolètes laissées par les builds
+      # successifs. `docker image prune` ne supprime que les images non
+      # référencées par un conteneur (arrêté ou non) — ne touche jamais aux
+      # images en cours d'utilisation, prod comme staging.
+      - name: Nettoyage des images obsolètes
+        if: always()
+        run: docker image prune -f

@@ -27,6 +27,9 @@ export async function getCurrentUser() {
       unit: true,
       phone: true,
       image: true,
+      // SAFE-01 — nécessaire à `evaluateDmPolicy` (protection des mineurs en
+      // messagerie privée) : cf. src/modules/communication/dm-policy.ts.
+      birthDate: true,
     },
   });
   if (!user) redirect("/login");

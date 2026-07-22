@@ -7,7 +7,7 @@ import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
-import { requiresParentalConsent } from "@/lib/legal/age";
+import { birthDateSchema, requiresParentalConsent } from "@/lib/legal/age";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 
@@ -23,10 +23,7 @@ const schema = z
     email: z.string().email("Email invalide."),
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Veuillez confirmer le mot de passe."),
-    birthDate: z.coerce
-      .date("Date de naissance invalide.")
-      .min(new Date("1900-01-01"), "Date de naissance invalide.")
-      .max(new Date(), "La date de naissance ne peut pas être dans le futur."),
+    birthDate: birthDateSchema,
     // US-26 — profil : parent (sans unité) ou membre d'une unité.
     profileType: z.enum(["UNIT", "PARENT"]).default("UNIT"),
     unit: z

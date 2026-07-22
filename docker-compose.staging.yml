@@ -49,7 +49,9 @@ services:
     build:
       context: .
       target: migrate
-    image: piloti:migrate
+    # Tag DÉDIÉ au staging : ne jamais réutiliser `piloti:migrate` (prod), sinon
+    # un `build` staging écrase l'image de la prod.
+    image: piloti-staging:migrate
     environment:
       DATABASE_URL: file:/data/piloti.db
     volumes:
@@ -67,7 +69,7 @@ services:
     build:
       context: .
       target: migrate
-    image: piloti:migrate
+    image: piloti-staging:migrate
     environment:
       DATABASE_URL: file:/data/piloti.db
     volumes:
@@ -87,7 +89,8 @@ services:
     build:
       context: .
       target: runner
-    image: piloti:latest
+    # Tag DÉDIÉ au staging : jamais `piloti:latest` (prod).
+    image: piloti-staging:latest
     environment:
       # Vraie image déployée (identique à la prod), mais secret et URL propres
       # au staging — jamais partagés avec la prod.

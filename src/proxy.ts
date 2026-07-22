@@ -70,7 +70,13 @@ export async function proxy(request: NextRequest) {
     return noStoreRedirect(new URL("/dashboard", request.url));
   }
 
-  return NextResponse.next();
+  // SAFE-01 — transmet le chemin courant en en-tête (pure plumbing, aucune
+  // requête DB) : le layout serveur de src/app/(app)/ en a besoin pour savoir
+  // s'il doit rediriger un profil incomplet vers /completer-profil sans créer
+  // de boucle. `headers()` ne donne pas le pathname côté Server Component.
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.set("x-pathname", pathname);
+  return NextResponse.next({ request: { headers: forwardedHeaders } });
 }
 
 export const config = {

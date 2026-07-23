@@ -241,3 +241,18 @@ Inspection en lecture seule de `_prisma_migrations` en prod (volume `piloti_pilo
 **Choix** : un modèle `Report` unique, polymorphe par convention (`targetType` ∈ `CHANNEL_MESSAGE | DIRECT_MESSAGE` + `targetId`, sans FK Prisma vers la cible — les deux requêtes de résolution du contenu visé se font manuellement dans `moderation-queries.ts`). La modération **masque** (`hiddenAt`/`hiddenById` sur `Message` et `DirectMessage`) plutôt que de supprimer : le contenu disparaît des lectures normales (filtré `hiddenAt: null` dans `queries.ts`/`dm-queries.ts`/`actions.ts`) mais reste consultable dans la file de modération, cohérent avec l'invariant « pas de mutation sans trace » (`withAudit`) et avec le choix déjà fait pour la suppression de compte (RGPD-04 : anonymisation, pas de `DELETE`).
 
 **Conséquences** : toute nouvelle catégorie de contenu signalable (ex. futur commentaire, sondage) s'ajoute à `REPORT_TARGET_TYPES` (`src/lib/enums.ts`) et à la résolution polymorphe de `moderation-queries.ts`, sans nouveau modèle. Le masquage n'est pas réversible dans cette version (pas d'action « démasquer ») — un arbitrage laissé à l'humain si le besoin apparaît. `moderation.view` (CHEF + RESPONSABLE_GROUPE, lecture) et `moderation.review` (CHEF, traitement) suivent le même principe « lecture RG / mutation CHEF » que le reste de la matrice (US-32).
+
+---
+
+## D-022 — Quotient familial masqué côté UI (code et schéma conservés)
+
+**Contexte** : le groupe ne souhaite pas, pour l'instant, exposer ni collecter le quotient familial (donnée de revenu, sensible) via Piloti. La fonctionnalité existante — tranches (`SocialBracket`, coefficient en pour-mille), `User.socialBracketId`, pondération dans `computeTiers`/`tiers.ts`, `brackets.ts`, `budget.ts` — reste correcte et potentiellement utile si la décision est revue plus tard ; le sujet est une question d'usage/exposition, pas de qualité du code.
+
+**Choix** : masquage **présentation uniquement**, rien touché côté schéma Prisma, migrations, Server Actions (`bracket-actions.ts`) ni logique de calcul (`tiers.ts`, `brackets.ts`, `budget.ts`, `campaigns.ts`, `campaign-scheduler.ts`) :
+- Entrée de nav « Tranches QF » retirée de `nav-items.ts`.
+- `/finances/tranches` (page) redirige désormais inconditionnellement vers `/finances/cotisations` ; `BracketsAdmin.tsx` reste en place mais n'est plus importé nulle part (dead code assumé).
+- Fiche membre (`membres/[id]/page.tsx`) : le sélecteur de tranche (`BracketSelect.tsx`, conservé mais plus importé) et sa récupération (`listBrackets`) retirés du rendu.
+- Budget d'événement : le lien/texte explicatif vers `/finances/tranches` retiré de `BudgetManager.tsx` ; le badge de tranche par inscrit retiré de `EventPaymentRow.tsx` (la prop `bracketName` reste dans l'interface, simplement non rendue).
+- Non touché volontairement : les tarifs différenciés « 2e enfant » / « cas social » des campagnes de cotisation (`CampaignForm.tsx`, `RecordPaymentRow.tsx`) — mécanisme distinct (taille de fratrie / décision ponctuelle du trésorier), qui ne collecte ni n'affiche de donnée de revenu et n'est donc pas concerné par cette décision.
+
+**Conséquences** : toute tranche déjà assignée en base continue d'être appliquée silencieusement par `computeTiers`/`budget.ts` (aucune régression de calcul), mais plus personne ne peut en créer, modifier ou assigner une nouvelle depuis l'UI — `/finances/tranches` reste techniquement accessible par URL directe mais ne fait plus que rediriger. Si la décision est un jour inversée, il suffit de réintroduire les imports/rendus retirés (rien à reconstruire côté schéma ou logique).

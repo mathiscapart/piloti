@@ -142,10 +142,11 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "donation.review": [MAT],
   // Communication — publier une annonce / diffusion urgente : encadrants.
   "announcement.publish": [CHEF, RG],
-  // SAFE-02 — la file de modération se consulte (RG en lecture seule, comme le
-  // reste) mais ne se traite que par les chefs (masquer, résoudre, rejeter).
+  // SAFE-02 — la file de modération se consulte ET se traite par les chefs et le
+  // responsable de groupe (masquer, résoudre, rejeter). Un CHEF est limité à son
+  // unité (cf. canModerateReport) ; RG et ADMIN voient et traitent toutes les unités.
   "moderation.view": [CHEF, RG],
-  "moderation.review": [CHEF],
+  "moderation.review": [CHEF, RG],
   // Planning — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
   "event.view": [],
   "event.manage": [CHEF],

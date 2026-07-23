@@ -1025,6 +1025,11 @@ model Report {
   resolution  String?
   createdAt   DateTime  @default(now())
   resolvedAt  DateTime?
+  // SAFE-02 (routage) — unité (Unit) de l'auteur du message signalé, figée à la
+  // création. Dénormalisée pour router/filtrer la file sans re-résoudre l'auteur
+  // à chaque lecture : un CHEF ne voit/traite que les signalements de son unité,
+  // l'ADMIN voit tout. Null si l'auteur n'a pas d'unité renseignée (ex. ADULTES).
+  concernedUnit String?
 
   reporter  User  @relation("ReportReporter", fields: [reporterId], references: [id])
   moderator User? @relation("ReportModerator", fields: [moderatorId], references: [id])
@@ -1032,6 +1037,7 @@ model Report {
   @@index([status])
   @@index([targetType, targetId])
   @@index([reporterId])
+  @@index([concernedUnit])
 }
 
 // ─────────────────────────────────────────────────────────────────────────

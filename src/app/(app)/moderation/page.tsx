@@ -47,7 +47,7 @@ export default async function ModerationPage({ searchParams }: PageProps) {
       ? params.filter
       : "PENDING";
 
-  const reports = await listReports(filter);
+  const reports = await listReports(filter, user);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 md:px-8 md:py-10">

@@ -17,11 +17,7 @@ import {
 } from "@/lib/enums";
 import { cn } from "@/lib/utils";
 import { formatEuros } from "@/modules/finance/format";
-import {
-  recordPayment,
-  toggleExemption,
-  toggleSocialCase,
-} from "@/modules/finance/campaign-actions";
+import { recordPayment, toggleExemption } from "@/modules/finance/campaign-actions";
 
 const STATUS_TONE: Record<PaymentStatus, string> = {
   PAID: "bg-forest-soft text-forest-ink",
@@ -86,19 +82,6 @@ export function RecordPaymentRow(props: PaymentRowVM) {
     });
   }
 
-  function toggleSocial() {
-    start(async () => {
-      const res = await toggleSocialCase(props.campaignId, props.userId);
-      if (res?.error) toast.error(res.error);
-      else {
-        toast.success(
-          props.tier === "SOCIAL" ? "Cas social retiré." : "Marqué cas social.",
-        );
-        router.refresh();
-      }
-    });
-  }
-
   return (
     <li className="space-y-2 rounded-2xl bg-snow p-3 shadow-card">
       <div className="flex items-center gap-3">
@@ -116,15 +99,9 @@ export function RecordPaymentRow(props: PaymentRowVM) {
             {formatEuros(props.paidCents)} / {formatEuros(props.expectedCents)}
           </p>
         </div>
-        {props.tier === "SECOND" ? (
-          <span className="shrink-0 rounded-full bg-sky-soft px-2 py-0.5 text-xs font-bold text-sky-ink">
-            2e enfant
-          </span>
-        ) : props.tier === "SOCIAL" ? (
-          <span className="shrink-0 rounded-full bg-forest-soft px-2 py-0.5 text-xs font-bold text-forest-ink">
-            Cas social
-          </span>
-        ) : null}
+        {/* Tarifs différenciés (2e enfant / cas social) masqués — décision
+            groupe, cf. DECISIONS.md D-022. La prop `tier` reste dans
+            l'interface, simplement non rendue. */}
         {props.exempt ? (
           <span className="shrink-0 rounded-full bg-stone px-2 py-0.5 text-xs font-bold text-earth">
             Échelonnement
@@ -155,27 +132,17 @@ export function RecordPaymentRow(props: PaymentRowVM) {
         ) : null}
       </div>
 
-      {props.canManage ? (
+      {props.canManage && props.status !== "PAID" ? (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {props.status !== "PAID" ? (
-            <button
-              type="button"
-              onClick={toggleExempt}
-              disabled={pending}
-              className="text-xs font-bold text-trail underline-offset-2 hover:text-earth hover:underline disabled:opacity-50"
-            >
-              {props.exempt
-                ? "Réactiver les relances"
-                : "Échelonnement convenu (suspendre les relances)"}
-            </button>
-          ) : null}
           <button
             type="button"
-            onClick={toggleSocial}
+            onClick={toggleExempt}
             disabled={pending}
             className="text-xs font-bold text-trail underline-offset-2 hover:text-earth hover:underline disabled:opacity-50"
           >
-            {props.tier === "SOCIAL" ? "Retirer cas social" : "Marquer cas social"}
+            {props.exempt
+              ? "Réactiver les relances"
+              : "Échelonnement convenu (suspendre les relances)"}
           </button>
         </div>
       ) : null}

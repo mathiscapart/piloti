@@ -65,5 +65,17 @@ export async function signInAction(
     return { error: "Compte suspendu. Contactez un administrateur." };
   }
 
-  redirect("/dashboard");
+  // SAFE-01 — profil incomplet (pas de date de naissance) : rediriger
+  // directement vers /completer-profil depuis l'action, plutôt que de
+  // laisser le layout (app) le faire. Un redirect() dans une Server Action
+  // est traité spécialement par Next (il est embarqué dans la même réponse
+  // que la navigation). Un SECOND redirect() déclenché pendant le rendu de
+  // la cible (ici le layout redirigeant /dashboard → /completer-profil) n'est
+  // pas suivi par le client : il est sérialisé comme une erreur RSC dans le
+  // flux, ce qui produit une page blanche jusqu'à un rechargement complet
+  // (repro : la réponse contient alors un chunk
+  // `E{"digest":"NEXT_REDIRECT;...;/completer-profil;..."}` à la place du
+  // contenu). En ciblant la bonne destination dès ce premier redirect, on
+  // évite ce redirect imbriqué.
+  redirect(user.birthDate ? "/dashboard" : "/completer-profil");
 }

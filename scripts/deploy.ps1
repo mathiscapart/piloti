@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Déploie Piloti en pull-based, sans runner CI, pour l'environnement staging ou prod.
 

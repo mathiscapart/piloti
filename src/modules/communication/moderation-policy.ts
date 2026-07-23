@@ -55,7 +55,10 @@ interface ReportUnitCtx {
 // traitable que par un ADMIN — fail-closed plutôt que d'ouvrir à tous les CHEF.
 export function canModerateReport(user: ModerationCtx, report: ReportUnitCtx): boolean {
   if (!canModerate(user)) return false;
-  if (effectiveRoles(user).includes("ADMIN")) return true;
+  const roles = effectiveRoles(user);
+  // ADMIN et RESPONSABLE_GROUPE traitent toutes les unités ; un CHEF est limité
+  // à l'unité concernée par le signalement.
+  if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
   return report.concernedUnit !== null && user.unit === report.concernedUnit;
 }
 

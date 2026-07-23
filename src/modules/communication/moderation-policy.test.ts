@@ -1,9 +1,8 @@
 // Tests de src/modules/communication/moderation-policy.ts (SAFE-02) — la
 // décision de visibilité d'un message masqué et l'éligibilité à traiter la
 // file de modération. On verrouille en priorité le fait qu'un message masqué
-// reste invisible même pour un rôle qui peut seulement *consulter* la file
-// (RESPONSABLE_GROUPE) : seul `moderation.review` (CHEF/ADMIN) débloque le
-// traitement.
+// reste invisible pour tous. Le traitement (`moderation.review`) est ouvert aux
+// CHEF, au RESPONSABLE_GROUPE et à l'ADMIN.
 //
 // Raffinement SAFE-02 (routage par unité) — trois fonctions pures
 // supplémentaires : détermination de l'unité concernée (`resolveConcernedUnit`),
@@ -41,14 +40,14 @@ describe("canModerate", () => {
     expect(canModerate({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" })).toBe(true);
   });
 
-  it("refuse le RESPONSABLE_GROUPE — lecture seule (moderation.view), pas le traitement", () => {
+  it("autorise le RESPONSABLE_GROUPE à traiter la file (toutes unités)", () => {
     expect(
       canModerate({
         role: "RESPONSABLE_GROUPE",
         roles: ["RESPONSABLE_GROUPE"],
         status: "ACTIVE",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("refuse un PARENT ou un SCOUT", () => {
@@ -98,9 +97,15 @@ describe("canModerateReport", () => {
     expect(canModerateReport(chef, { concernedUnit: null })).toBe(false);
   });
 
-  it("refuse un RESPONSABLE_GROUPE (lecture seule, pas moderation.review)", () => {
+  it("autorise le RESPONSABLE_GROUPE sur toutes les unités", () => {
     const rg = { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE", unit: "SCOUTS" };
-    expect(canModerateReport(rg, { concernedUnit: "SCOUTS" })).toBe(false);
+    expect(canModerateReport(rg, { concernedUnit: "LOUVETEAUX" })).toBe(true);
+    expect(canModerateReport(rg, { concernedUnit: null })).toBe(true);
+  });
+
+  it("autorise un RESPONSABLE_GROUPE même sur une unité autre que la sienne", () => {
+    const rg = { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE", unit: "SCOUTS" };
+    expect(canModerateReport(rg, { concernedUnit: "PIONNIERS" })).toBe(true);
   });
 });
 

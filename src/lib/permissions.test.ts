@@ -154,7 +154,7 @@ describe("can — SAFE-02 modération de contenu", () => {
     ).toBe(true);
   });
 
-  it("moderation.review : réservé au CHEF (le RG reste lecture seule)", () => {
+  it("moderation.review : CHEF et RESPONSABLE_GROUPE traitent la file", () => {
     expect(can({ role: "CHEF", roles: ["CHEF"], status: "ACTIVE" }, "moderation.review")).toBe(
       true,
     );
@@ -163,7 +163,7 @@ describe("can — SAFE-02 modération de contenu", () => {
         { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE" },
         "moderation.review",
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("un rôle sans aucun lien avec la modération n'a ni vue ni traitement", () => {

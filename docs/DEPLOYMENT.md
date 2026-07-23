@@ -1,4 +1,4 @@
-# Déploiement continu — staging et prod
+# Déploiement — pull-based, sans runner
 
 > **Règle RGPD non négociable (staging)** : le staging ne doit **jamais**
 > contenir de données réelles (mineurs, finances, contacts). La base est
@@ -9,35 +9,76 @@
 
 ## Vue d'ensemble
 
-Deux workflows de déploiement continu, symétriques par construction :
+Pas de runner CI sur ce projet (voir D-018 dans `DECISIONS.md` — ça remplace
+l'approche runner self-hosted initialement envisagée en D-017). Le déploiement
+est **pull-based** : c'est l'hôte qui va chercher le code déjà fusionné,
+jamais GitHub qui pousse une exécution vers l'hôte.
 
-| Branche | CI de référence | Workflow de déploiement | Compose ciblé | Environnement |
+| Branche | Script | Compose ciblé | `COMPOSE_PROJECT_NAME` | Environnement |
 |---|---|---|---|---|
-| `develop` | `CI` vert sur `develop` | `.github/workflows/deploy-staging.yml` | `docker-compose.staging.yml` | staging |
-| `main` | `CI` vert sur `main` | `.github/workflows/deploy-prod.yml` | `docker-compose.yml` | prod |
+| `develop` | `scripts/deploy.ps1 -Environment staging` | `docker-compose.staging.yml` | `piloti-staging` | staging |
+| `main` | `scripts/deploy.ps1 -Environment prod` | `docker-compose.yml` | `piloti` | prod |
 
-Les deux tournent sur le **même hôte physique**, qui héberge déjà la prod, et
-sur le **même runner GitHub Actions self-hosted** (voir §3) — mais dans des
-stacks Docker Compose **totalement isolées** l'une de l'autre : projets
-Compose distincts, réseaux distincts, volumes distincts. Aucun des deux
-workflows ne modifie les fichiers `docker-compose.yml` / `docker-compose.staging.yml`
-au moment du déploiement : ils se contentent de `build` + `up -d` sur le
-fichier correspondant, déjà versionné dans le repo.
+### Pourquoi c'est sûr sur un repo public
 
-Le vrai garde-fou de la prod n'est **pas** ce pipeline mais la **protection de
-branche sur `main`** (relecture obligatoire + merge humain avant que le code
-n'atteigne `main`, donc avant que `CI` ne tourne dessus, donc avant que
-`deploy-prod.yml` ne se déclenche). Le pipeline ne fait que rejouer
-automatiquement, sur l'hôte, un état déjà validé par un humain. Le runner
-self-hosted qui exécute `deploy-prod.yml` a accès à l'hôte de production et
-à ses secrets réels (`.env` de `docker-compose.yml`) — traiter sa compromission
-avec la même rigueur qu'un accès SSH root à la prod.
+Le dépôt est public, et l'hôte de déploiement est le **PC personnel Windows**
+du propriétaire — celui qui héberge déjà la prod (Docker Desktop) **et** des
+données personnelles (gestionnaire de mots de passe, etc.). Un runner GitHub
+Actions self-hosted sur un dépôt public exécuterait, par défaut, le code de
+**n'importe quelle PR**, y compris depuis un fork — inacceptable sur cette
+machine. Le modèle pull-based élimine ce risque à la racine : `scripts/deploy.ps1`
+ne fait jamais qu'un `git fetch` + `git reset --hard origin/develop` (ou
+`origin/main`) dans un répertoire dédié, c'est-à-dire qu'il ne déploie **que**
+du code déjà **fusionné**. Sur un repo public, seul le propriétaire peut
+pousser sur `develop`/`main` — une PR d'un fork ne peut ni les modifier ni
+déclencher quoi que ce soit côté hôte tant qu'elle n'a pas été relue et
+fusionnée par un humain. Aucun event GitHub ne déclenche quoi que ce soit :
+c'est l'hôte, localement (à la main ou via une tâche planifiée), qui décide
+quand aller chercher le code.
 
-Ce document couvre uniquement les étapes **manuelles**, hors dépôt (dashboard
-Cloudflare, installation du runner, secrets GitHub). Le reste (compose,
-workflows) est versionné et se lit directement dans le repo.
+### Important — les anciens secrets/variables GitHub `STAGING_*` ne sont plus utilisés
 
-## 1. Tunnel Cloudflare dédié au staging
+Si des secrets/variables `STAGING_CLOUDFLARE_TUNNEL_TOKEN`,
+`STAGING_BETTER_AUTH_SECRET`, `STAGING_DOMAIN`, etc. ont été créés dans
+**Settings → Secrets and variables → Actions** du dépôt pour une tentative
+précédente basée sur un runner (D-017), **ils ne sont plus lus par rien** —
+il n'y a plus de workflow qui les consomme. Les mêmes valeurs vivent
+désormais dans un fichier **`.env.staging` local sur l'hôte** (§4). Il n'y a
+plus besoin de les maintenir côté GitHub ; les laisser en place ne pose pas
+de risque de sécurité en soi (ce sont des secrets GitHub normalement
+protégés), mais ils sont inertes — à supprimer si vous voulez nettoyer, ou à
+laisser, au choix.
+
+Ce document couvre les étapes **manuelles**, hors dépôt (répertoires de
+déploiement, tunnels Cloudflare, fichiers `.env.*`, tâche planifiée). Le
+reste (`docker-compose.staging.yml`, `docker-compose.yml`, `scripts/deploy.ps1`)
+est versionné et se lit directement dans le repo.
+
+## 1. Répertoires de déploiement dédiés
+
+`scripts/deploy.ps1` ne travaille **jamais** dans le répertoire de dev du
+propriétaire (celui où ce README est lu) : il utilise un répertoire dédié par
+environnement, racine configurable via `$env:PILOTI_DEPLOY_ROOT` (défaut :
+`%USERPROFILE%\piloti-deploy`), avec un sous-dossier par environnement
+(`\staging`, `\prod`).
+
+1. Choisir l'emplacement (le défaut convient dans la plupart des cas) et,
+   si besoin, le fixer durablement pour l'utilisateur/la tâche planifiée :
+   ```powershell
+   setx PILOTI_DEPLOY_ROOT "C:\piloti-deploy"
+   ```
+2. Le premier appel de `scripts/deploy.ps1` clone automatiquement le dépôt
+   dans `<root>\<environment>` s'il n'existe pas encore (`git clone` sur
+   l'URL publique du dépôt). Pas d'étape manuelle de clonage requise, mais
+   rien n'empêche de le faire soi-même à l'avance.
+3. **Important** : le nom de projet Docker Compose de la prod est fixé en dur
+   à `piloti` dans le script (voir commentaire dans `scripts/deploy.ps1`),
+   quel que soit le nom du dossier de déploiement — ça garantit que le premier
+   déploiement pull-based réutilise les **mêmes volumes** (`piloti_piloti-data`,
+   `piloti_piloti-uploads`) que la stack prod déjà en service aujourd'hui,
+   plutôt que d'en créer de nouveaux, vides, à côté.
+
+## 2. Tunnel Cloudflare dédié au staging
 
 Le tunnel de prod (`CLOUDFLARE_TUNNEL_TOKEN`) ne doit **jamais** être réutilisé
 pour le staging — il faut un second tunnel, entièrement indépendant. (La prod
@@ -45,8 +86,8 @@ dispose déjà de son tunnel ; cette étape ne concerne que le staging.)
 
 1. Dashboard Cloudflare → **Zero Trust → Networks → Tunnels → Create a
    tunnel** (type *Cloudflared*). Nommer explicitement, par ex. `piloti-staging`.
-2. Copier le **token** généré → il servira de valeur au secret GitHub
-   `STAGING_CLOUDFLARE_TUNNEL_TOKEN` (voir §4). Ne jamais le committer.
+2. Copier le **token** généré → il servira de valeur à `STAGING_CLOUDFLARE_TUNNEL_TOKEN`
+   dans `.env.staging` (voir §4). Ne jamais le committer.
 3. Dans la configuration du tunnel (« Public Hostname ») :
    - Sous-domaine : le domaine staging choisi (ex. `staging.mon-groupe.fr`).
    - Service : `HTTP://traefik:80` (nom du service Traefik de la stack
@@ -57,7 +98,7 @@ dispose déjà de son tunnel ; cette étape ne concerne que le staging.)
    **DNS → Records** que l'entrée pointe bien vers `<tunnel-id>.cfargotunnel.com`
    et que le proxy Cloudflare (nuage orange) est actif.
 
-## 2. Politique Cloudflare Access (Zero Trust) — staging
+## 3. Politique Cloudflare Access (Zero Trust) — staging
 
 Le sous-domaine staging doit être inaccessible à quiconque n'est pas le
 propriétaire — c'est cette politique qui remplace toute authentification
@@ -65,7 +106,7 @@ applicative supplémentaire côté staging.
 
 1. Dashboard Cloudflare → **Zero Trust → Access → Applications → Add an
    application** (type *Self-hosted*).
-2. Domaine de l'application : le sous-domaine staging (celui du §1).
+2. Domaine de l'application : le sous-domaine staging (celui du §2).
 3. Politique d'accès : règle unique `Include` → `Emails` → l'adresse email du
    propriétaire uniquement.
 4. Durée de session courte (ex. 24h) — le staging n'a pas besoin de sessions
@@ -78,104 +119,123 @@ applicative supplémentaire côté staging.
 La prod n'a volontairement pas de politique Access équivalente : elle doit
 rester accessible aux utilisateurs réels (chefs, parents, jeunes).
 
-## 3. Runner self-hosted GitHub Actions (staging + prod)
+## 4. Fichiers d'environnement locaux
 
-Les deux workflows (`deploy-staging.yml`, `deploy-prod.yml`) ciblent
-`runs-on: [self-hosted, <label>]` : il faut un runner GitHub Actions installé
-**sur l'hôte** qui porte déjà la prod. Ce choix est cohérent avec
-l'architecture « zéro port entrant » du projet : le runner établit une
-connexion **sortante** vers GitHub (comme `cloudflared` le fait déjà vers
-l'edge Cloudflare) — aucun port SSH n'a besoin d'être ouvert pour permettre à
-GitHub de déclencher un déploiement.
+Aucun secret dans `scripts/deploy.ps1` ni dans les fichiers compose : les
+valeurs viennent de fichiers `.env.staging` / `.env.production`, **locaux à
+chaque répertoire de déploiement**, jamais commités (couverts par le motif
+`.env*` du `.gitignore` du dépôt).
 
-Un **seul runner physique** suffit (même hôte, même machine pour staging et
-prod) : il est enregistré avec **les deux labels** `piloti-staging` **et**
-`piloti-prod`, en plus de `self-hosted`. Ce n'est pas une isolation technique
-(un seul runner exécute forcément les deux types de job, l'un après l'autre)
-— l'isolation réelle est assurée par les stacks Compose distinctes (§ Vue
-d'ensemble). Le double label sert à :
-- rendre explicite, à la seule lecture d'un fichier de workflow, quel
-  environnement il cible (`deploy-staging.yml` → `piloti-staging`,
-  `deploy-prod.yml` → `piloti-prod`) ;
-- éviter qu'un copier-coller erroné entre les deux workflows fasse tourner un
-  job sur un `runs-on` qui semble correct alors qu'il vise le mauvais
-  environnement (une faute de frappe sur le label produirait une erreur
-  explicite « aucun runner disponible », plutôt qu'un déploiement silencieux
-  au mauvais endroit).
+### `<root>\staging\.env.staging`
 
-Installation :
+Noms de variables imposés par `docker-compose.staging.yml` (préfixe `STAGING_`) :
 
-1. Dépôt GitHub → **Settings → Actions → Runners → New self-hosted runner**.
-2. Suivre les instructions d'installation fournies par GitHub sur l'hôte
-   (télécharger `actions-runner`, `config.sh`/`config.cmd` avec le token
-   fourni par l'écran d'installation).
-3. À l'étape des labels, ajouter **les deux labels** `piloti-staging` et
-   `piloti-prod` (en plus de `self-hosted`, ajouté automatiquement) :
-   ```
-   ./config.sh --url https://github.com/<org>/<repo> --token <TOKEN> --labels piloti-staging,piloti-prod
-   ```
-4. Installer le runner comme service persistant (`./svc.sh install && ./svc.sh start`
-   sur Linux, ou l'équivalent Windows) pour qu'il survive à un redémarrage de
-   l'hôte.
-5. Vérifier que Docker et `docker compose` (plugin v2+) sont accessibles à
-   l'utilisateur qui exécute le runner, et que cet utilisateur a accès au
-   `.env` de prod déjà en place à côté de `docker-compose.yml` sur l'hôte
-   (le workflow `deploy-prod.yml` ne fournit aucune variable d'environnement :
-   il s'appuie sur ce `.env` existant, exactement comme un `docker compose up -d`
-   lancé manuellement aujourd'hui).
-
-**Sensibilité** : ce runner, une fois installé, a un accès complet à l'hôte de
-prod (Docker socket, `.env` de prod en clair sur le disque). Le protéger comme
-un accès SSH root : pas de job déclenché sur ce runner par une PR externe
-non fusionnée (les deux workflows ne réagissent qu'à un `workflow_run` déclenché
-*après* la CI sur des branches protégées, jamais sur une PR), machine à jour,
-accès physique/SSH à l'hôte restreint au propriétaire.
-
-## 4. Secrets et variables GitHub à créer (staging uniquement)
-
-La prod n'ajoute **aucun** secret/variable GitHub : `deploy-prod.yml` ne fait
-que relancer `docker compose -f docker-compose.yml up -d`, qui lit le `.env`
-déjà présent sur l'hôte (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`CLOUDFLARE_TUNNEL_TOKEN`, `TRAEFIK_DOMAIN`, etc. — inchangés par ce
-changement). Seul le staging introduit de nouveaux secrets/variables, car sa
-stack tourne avec des identifiants dédiés.
-
-Dépôt GitHub → **Settings → Secrets and variables → Actions**. Séparer les
-valeurs sensibles (**Secrets**) des valeurs non sensibles (**Variables**),
-conformément à l'usage dans `deploy-staging.yml`.
-
-### Secrets (`Secrets → Actions`)
-
-| Nom | Contenu |
+| Variable | Contenu |
 |---|---|
-| `STAGING_CLOUDFLARE_TUNNEL_TOKEN` | Token du tunnel Cloudflare staging (§1) |
+| `STAGING_CLOUDFLARE_TUNNEL_TOKEN` | Token du tunnel Cloudflare staging (§2) |
 | `STAGING_BETTER_AUTH_SECRET` | Secret dédié au staging, **différent** de celui de prod. Générer avec `openssl rand -hex 32` |
-| `STAGING_RESEND_API_KEY` | Optionnel. Si vide, le flux « mot de passe oublié » est désactivé en staging (comportement identique à un `.env` local incomplet) |
-| `STAGING_VAPID_PUBLIC_KEY` / `STAGING_VAPID_PRIVATE_KEY` | Optionnels. Générer avec `npx web-push generate-vapid-keys`, des clés dédiées au staging |
-
-### Variables (`Variables → Actions`, non sensibles)
-
-| Nom | Contenu |
-|---|---|
-| `STAGING_DOMAIN` | Sous-domaine staging (ex. `staging.mon-groupe.fr`), utilisé par le label Traefik `Host(...)` |
 | `STAGING_BETTER_AUTH_URL` | URL publique complète du staging (ex. `https://staging.mon-groupe.fr`) |
-| `STAGING_RESEND_FROM_EMAIL` | Adresse d'expédition si Resend est activé en staging |
-| `STAGING_VAPID_SUBJECT` | `mailto:...` si le push est activé en staging |
+| `STAGING_DOMAIN` | Sous-domaine staging, utilisé par le label Traefik `Host(...)` |
+| `STAGING_RESEND_API_KEY` / `STAGING_RESEND_FROM_EMAIL` | Optionnels. Si vides, le flux « mot de passe oublié » est désactivé en staging |
+| `STAGING_VAPID_PUBLIC_KEY` / `STAGING_VAPID_PRIVATE_KEY` / `STAGING_VAPID_SUBJECT` | Optionnels. Générer avec `npx web-push generate-vapid-keys`, des clés dédiées au staging |
 
-**Ne jamais** réutiliser une valeur de production pour l'un de ces
-secrets/variables — l'isolation staging/prod (RGPD, sécurité) en dépend
-directement.
+**Ne jamais** réutiliser une valeur de production pour l'une de ces
+variables — l'isolation staging/prod (RGPD, sécurité) en dépend directement.
 
-## 5. Vérifications après mise en place
+### `<root>\prod\.env.production`
+
+Noms de variables imposés par `docker-compose.yml` (sans préfixe — c'est le
+même fichier que celui déjà utilisé aujourd'hui pour lancer la prod
+manuellement) :
+
+| Variable | Contenu |
+|---|---|
+| `CLOUDFLARE_TUNNEL_TOKEN` | Token du tunnel Cloudflare de prod (existant, inchangé) |
+| `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | Existants, inchangés |
+| `TRAEFIK_DOMAIN` | Domaine public de prod, existant, inchangé |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Optionnels, existants |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Optionnels, existants |
+
+Si la prod tourne déjà avec un fichier `.env` à un autre emplacement, copier
+son contenu vers `<root>\prod\.env.production` lors de la première mise en
+place — c'est ce fichier que `scripts/deploy.ps1 -Environment prod` utilisera
+désormais.
+
+## 5. Utilisation manuelle
+
+Après un merge sur `develop` (staging) ou `main` (prod), depuis n'importe où :
+
+```powershell
+# Staging, après merge sur develop
+powershell -File scripts/deploy.ps1 -Environment staging
+
+# Prod, après merge sur main
+powershell -File scripts/deploy.ps1 -Environment prod
+```
+
+Le script est idempotent : le relancer sans nouveau commit ne casse rien (le
+`git reset --hard` ne change rien, et `docker compose build`/`up -d` ne
+recréent les conteneurs que si l'image a effectivement changé).
+
+## 6. Automatisation — tâche planifiée Windows (poll)
+
+Pour ne pas dépendre d'un lancement manuel après chaque merge, enregistrer une
+tâche planifiée qui relance le script à intervalle régulier. Comme le script
+est idempotent, un poll sans changement de branche ne produit aucun effet
+observable — le déploiement n'a lieu « pour de vrai » que quand `develop`/`main`
+a effectivement avancé depuis le dernier passage.
+
+**Important** : exécuter la tâche dans la session de l'utilisateur propriétaire
+(pas `SYSTEM`) — Docker Desktop sur Windows expose le pipe nommé Docker au
+contexte de l'utilisateur connecté (ou aux membres du groupe `docker-users`),
+pas à `SYSTEM` par défaut.
+
+### Option A — `schtasks` (ligne de commande)
+
+```powershell
+schtasks /Create /TN "Piloti Deploy Staging" ^
+  /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\piloti-deploy\staging\scripts\deploy.ps1\" -Environment staging" ^
+  /SC MINUTE /MO 5 /RU "%USERDOMAIN%\%USERNAME%" /RL LIMITED /F
+
+schtasks /Create /TN "Piloti Deploy Prod" ^
+  /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\piloti-deploy\prod\scripts\deploy.ps1\" -Environment prod" ^
+  /SC MINUTE /MO 15 /RU "%USERDOMAIN%\%USERNAME%" /RL LIMITED /F
+```
+
+(`/RU` invite à saisir le mot de passe de session au moment de la création si
+la tâche doit tourner même hors session ouverte ; sinon ajouter
+`/IT` pour ne l'exécuter que si l'utilisateur est connecté.)
+
+Notez que la cible pointe vers le script **dans le répertoire de déploiement**
+(`C:\piloti-deploy\staging\scripts\deploy.ps1`), pas dans le dépôt de dev : il
+se met à jour tout seul à chaque déploiement (`git reset --hard` le ramène au
+contenu de `develop`/`main`).
+
+### Option B — `Register-ScheduledTask` (PowerShell)
+
+```powershell
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\piloti-deploy\staging\scripts\deploy.ps1" -Environment staging'
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+    -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::MaxValue)
+Register-ScheduledTask -TaskName "Piloti Deploy Staging" -Action $action -Trigger $trigger `
+    -Description "Poll develop et redéploie le staging Piloti si la branche a avancé."
+```
+
+Adapter (`-Environment prod`, chemin `\prod\`, intervalle plus long, ex. 15
+minutes) pour la tâche prod.
+
+## 7. Vérifications après mise en place
 
 ### Staging
 
 - `docker compose -f docker-compose.staging.yml config -q` passe sans erreur
-  (déjà validé côté repo, à revalider sur l'hôte avec les vraies valeurs).
-- Après le premier déploiement automatique : `docker ps` sur l'hôte doit
-  montrer des conteneurs **distincts** de ceux de la prod (préfixe
-  `piloti-staging-*`), et `docker volume ls` doit montrer `piloti-staging-data`
-  / `piloti-staging-uploads` séparément de `piloti_piloti-data` / `piloti_piloti-uploads`.
+  dans `<root>\staging` (avec `.env.staging` rempli).
+- Après le premier déploiement : `docker ps` sur l'hôte doit montrer des
+  conteneurs **distincts** de ceux de la prod (préfixe `piloti-staging-*`),
+  et `docker volume ls` doit montrer `piloti-staging-data` /
+  `piloti-staging-uploads` séparément de `piloti_piloti-data` /
+  `piloti_piloti-uploads`.
 - Naviguer vers le sous-domaine staging doit d'abord présenter l'écran
   Cloudflare Access (email du propriétaire), puis rediriger vers `/setup`
   (base fraîchement seedée — voir D-010 dans `DECISIONS.md`) ou directement
@@ -183,16 +243,18 @@ directement.
 
 ### Prod
 
-- Un merge sur `main` déclenche `CI`, puis (si vert) `deploy-prod.yml` sur le
-  runner self-hosted.
-- Vérifier dans l'onglet **Actions** du dépôt que `deploy-prod.yml` s'est bien
-  exécuté après `CI`, et que `docker compose -f docker-compose.yml ps` sur
-  l'hôte montre les conteneurs prod à jour (nouvelle image, healthcheck `app`
+- `docker volume ls` doit continuer de montrer les **mêmes** volumes
+  (`piloti_piloti-data`, `piloti_piloti-uploads`) qu'avant la mise en place de
+  ce répertoire de déploiement dédié — sinon `COMPOSE_PROJECT_NAME` n'est pas
+  celui attendu (§1).
+- Après un merge sur `main` et un déploiement (manuel ou via la tâche
+  planifiée), `docker compose -f docker-compose.yml ps` dans `<root>\prod`
+  doit montrer les conteneurs prod à jour (nouvelle image, healthcheck `app`
   passant).
 - En cas d'échec du déploiement, la stack précédente reste en place tant que
   `docker compose up -d` n'a pas réussi (Compose ne coupe pas un service sain
   pour le remplacer par un service qui échoue à démarrer) — vérifier malgré
-  tout manuellement après tout échec signalé par Actions.
+  tout manuellement après tout échec.
 
 ## Check-list récapitulative
 
@@ -200,12 +262,16 @@ directement.
 
 - [ ] Second tunnel Cloudflare créé (`piloti-staging`) + Public Hostname + DNS vérifié
 - [ ] Politique Cloudflare Access créée, restreinte à l'email du propriétaire
-- [ ] Secrets GitHub créés : `STAGING_CLOUDFLARE_TUNNEL_TOKEN`, `STAGING_BETTER_AUTH_SECRET`, (optionnel) `STAGING_RESEND_API_KEY`, `STAGING_VAPID_PUBLIC_KEY`, `STAGING_VAPID_PRIVATE_KEY`
-- [ ] Variables GitHub créées : `STAGING_DOMAIN`, `STAGING_BETTER_AUTH_URL`, (optionnel) `STAGING_RESEND_FROM_EMAIL`, `STAGING_VAPID_SUBJECT`
-- [ ] Premier déploiement vérifié : conteneurs/volumes strictement distincts de la prod, accès uniquement via Cloudflare Access
+- [ ] `<root>\staging\.env.staging` créé avec toutes les variables `STAGING_*` requises
+- [ ] Premier déploiement manuel vérifié (`scripts/deploy.ps1 -Environment staging`) : conteneurs/volumes strictement distincts de la prod, accès uniquement via Cloudflare Access
+- [ ] Tâche planifiée « Piloti Deploy Staging » enregistrée (optionnel, si automatisation souhaitée)
 
-### Prod / commun
+### Prod
 
-- [ ] Runner self-hosted installé sur l'hôte, labels `piloti-staging` **et** `piloti-prod` présents, lancé en service persistant
-- [ ] Protection de branche activée sur `main` (relecture + merge humain obligatoires) — c'est le vrai garde-fou avant tout déploiement prod
-- [ ] Premier déploiement prod automatique vérifié (`Actions` → `deploy-prod.yml` vert, conteneurs prod à jour, healthcheck `app` passant)
+- [ ] `<root>\prod\.env.production` créé (repris du `.env` de prod existant)
+- [ ] Premier déploiement manuel vérifié (`scripts/deploy.ps1 -Environment prod`) : mêmes volumes que la prod déjà en service, healthcheck `app` passant
+- [ ] Tâche planifiée « Piloti Deploy Prod » enregistrée (optionnel, si automatisation souhaitée)
+
+### Nettoyage (si applicable)
+
+- [ ] Anciens secrets/variables GitHub `STAGING_*` (créés pour le modèle runner, D-017) supprimés ou laissés inertes, au choix

@@ -49,7 +49,9 @@ services:
     build:
       context: .
       target: migrate
-    image: piloti:migrate
+    # Tag DÉDIÉ au staging : ne jamais réutiliser `piloti:migrate` (prod), sinon
+    # un `build` staging écrase l'image de la prod.
+    image: piloti-staging:migrate
     environment:
       DATABASE_URL: file:/data/piloti.db
     volumes:
@@ -60,16 +62,20 @@ services:
 
   # ---------------------------------------------------------------------------
   # Seed — one-shot, données factices uniquement (RGPD : jamais de données
-  # réelles en staging). Réutilise l'image `migrate` (mêmes deps : tsx, prisma,
-  # node_modules) pour éviter un stage Dockerfile dédié.
+  # réelles en staging). Utilise le stage `dev` (et non `migrate`) : `pnpm
+  # db:seed` exécute `tsx prisma/seed.ts`, qui importe `src/lib/auth` — donc il
+  # faut le code source complet (absent de l'image `migrate`, minimale). Comme
+  # `src/lib/auth` plante à l'import sans BETTER_AUTH_SECRET (fail-fast), le seed
+  # a besoin du même secret que l'app.
   # ---------------------------------------------------------------------------
   seed:
     build:
       context: .
-      target: migrate
-    image: piloti:migrate
+      target: dev
+    image: piloti-staging:seed
     environment:
       DATABASE_URL: file:/data/piloti.db
+      BETTER_AUTH_SECRET: ${STAGING_BETTER_AUTH_SECRET:?STAGING_BETTER_AUTH_SECRET manquant}
     volumes:
       - piloti-staging-data:/data
     networks:
@@ -87,7 +93,8 @@ services:
     build:
       context: .
       target: runner
-    image: piloti:latest
+    # Tag DÉDIÉ au staging : jamais `piloti:latest` (prod).
+    image: piloti-staging:latest
     environment:
       # Vraie image déployée (identique à la prod), mais secret et URL propres
       # au staging — jamais partagés avec la prod.

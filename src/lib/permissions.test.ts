@@ -5,7 +5,7 @@
 // potentiellement vide ou malformé) et le garde-fou anti-élévation de
 // `canAssignRole`.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   assignableRoles,
   can,
@@ -36,6 +36,16 @@ describe("effectiveRoles", () => {
 
   it("renvoie [] pour un JSON malformé, sans lever d'exception", () => {
     expect(effectiveRoles({ role: "CHEF", roles: "{pas du json" })).toEqual([]);
+  });
+
+  it("trace un avertissement (avec l'userId) pour un JSON malformé, sans changer le résultat fail-closed", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(
+      effectiveRoles({ id: "user-42", role: "CHEF", roles: "{pas du json" }),
+    ).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("user-42");
+    warn.mockRestore();
   });
 
   it("renvoie [] pour un JSON valide mais qui n'est pas un tableau", () => {

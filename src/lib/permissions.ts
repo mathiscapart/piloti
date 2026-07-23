@@ -75,6 +75,9 @@ export const ACTIONS = [
 export type Action = (typeof ACTIONS)[number];
 
 interface AuthCtx {
+  // Optionnel : uniquement utilisé pour tracer un `roles` corrompu (cf.
+  // `effectiveRoles`) ; absent → le log se contente d'un contexte partiel.
+  id?: string;
   role: Role | string;
   // Rôles additionnels : tableau, ou chaîne JSON (telle que stockée en base).
   roles?: string[] | string | null;
@@ -183,7 +186,14 @@ export function effectiveRoles(user: Partial<AuthCtx>): string[] {
     try {
       const parsed = JSON.parse(user.roles);
       if (Array.isArray(parsed)) return parsed.map(String);
-    } catch {
+    } catch (err) {
+      // Fail-closed : on retourne bien [] (aucun droit), mais on trace
+      // l'anomalie — un `roles` corrompu prive silencieusement un compte de
+      // ses droits, ce qui doit rester visible pour l'admin/le support.
+      console.warn(
+        `[permissions] effectiveRoles: JSON "roles" invalide pour l'utilisateur ${user.id ?? "?"} — fail-closed, aucun rôle accordé.`,
+        err,
+      );
       return [];
     }
   }

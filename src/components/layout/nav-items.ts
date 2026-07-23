@@ -17,7 +17,6 @@ import {
   Package,
   PieChart,
   PiggyBank,
-  Scale,
   ShieldAlert,
   Tent,
   Truck,
@@ -91,7 +90,9 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/finances/tableau-de-bord", label: "Tableau de bord", icon: PieChart, requires: "campaign.view" },
       { href: "/finances/cotisations", label: "Cotisations", icon: CreditCard, requires: "campaign.view" },
-      { href: "/finances/tranches", label: "Tranches QF", icon: Scale, requires: "campaign.view" },
+      // Tranches QF masquées — décision groupe (pas d'exposition/collecte du
+      // quotient familial en UI pour l'instant), cf. DECISIONS.md. Code et
+      // schéma conservés (`/finances/tranches` redirige désormais).
       { href: "/finances/notes", label: "Notes de frais", icon: Wallet, requires: "expense.view" },
       { href: "/finances/caisses", label: "Caisses", icon: PiggyBank, requires: "campaign.view" },
       { href: "/finances/bilan", label: "Bilan annuel", icon: FileText, requires: "campaign.view" },

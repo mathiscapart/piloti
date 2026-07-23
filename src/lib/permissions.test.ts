@@ -131,6 +131,38 @@ describe("can — loan.create conditionné par la branche (US-32)", () => {
   });
 });
 
+describe("can — SAFE-02 modération de contenu", () => {
+  it("moderation.view : CHEF et RESPONSABLE_GROUPE consultent la file", () => {
+    expect(can({ role: "CHEF", roles: ["CHEF"], status: "ACTIVE" }, "moderation.view")).toBe(
+      true,
+    );
+    expect(
+      can(
+        { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE" },
+        "moderation.view",
+      ),
+    ).toBe(true);
+  });
+
+  it("moderation.review : réservé au CHEF (le RG reste lecture seule)", () => {
+    expect(can({ role: "CHEF", roles: ["CHEF"], status: "ACTIVE" }, "moderation.review")).toBe(
+      true,
+    );
+    expect(
+      can(
+        { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE" },
+        "moderation.review",
+      ),
+    ).toBe(false);
+  });
+
+  it("un rôle sans aucun lien avec la modération n'a ni vue ni traitement", () => {
+    const parent = { role: "PARENT", roles: ["PARENT"], status: "ACTIVE" as const };
+    expect(can(parent, "moderation.view")).toBe(false);
+    expect(can(parent, "moderation.review")).toBe(false);
+  });
+});
+
 describe("hasRole", () => {
   it("détecte un rôle additionnel comme un rôle principal", () => {
     const user = { role: "PARENT", roles: ["PARENT", "TRESORIER"] };

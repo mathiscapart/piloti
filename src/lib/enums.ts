@@ -257,8 +257,24 @@ export const NOTIFICATION_TYPES = [
   "STEP_VALIDATION_REQUEST", // US-S04 — 2e chef sollicité pour confirmer une étape
   "STEP_VALIDATED", // US-S04 — étape confirmée (→ jeune / parent)
   "BADGE_AWARDED", // US-S05 — badge attribué (→ jeune / parent)
+  "REPORT_UPDATE", // SAFE-02 — signalement traité (résolu ou rejeté) → le signalant
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// SAFE-02 — signalement & modération de contenu. `targetType` est polymorphe :
+// Message (salon) et DirectMessage n'ont pas de parent commun (cf. Report,
+// prisma/schema.prisma).
+export const REPORT_TARGET_TYPES = ["CHANNEL_MESSAGE", "DIRECT_MESSAGE"] as const;
+export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
+
+export const REPORT_STATUSES = ["PENDING", "RESOLVED", "DISMISSED"] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
+export const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
+  PENDING: "En attente",
+  RESOLVED: "Résolu",
+  DISMISSED: "Rejeté",
+};
 
 // V7 — statuts du suivi pédagogique.
 export const STEP_VALIDATION_STATUSES = ["PROPOSED", "CONFIRMED"] as const;
@@ -356,5 +372,9 @@ export const AUDIT_ACTIONS = [
   "PEDAGO_GOAL_SET",
   "PEDAGO_GOAL_UPDATED",
   "PEDAGO_NOTE_ADDED",
+  "MESSAGE_REPORTED",
+  "MESSAGE_HIDDEN",
+  "REPORT_RESOLVED",
+  "REPORT_DISMISSED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

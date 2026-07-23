@@ -18,6 +18,7 @@ import {
   PieChart,
   PiggyBank,
   Scale,
+  ShieldAlert,
   Tent,
   Truck,
   UserPlus,
@@ -107,6 +108,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "user.manage" },
       { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "category.manage" },
       { href: "/admin/audit", label: "Journal d'audit", icon: History, requires: "audit.view" },
+      // SAFE-02 — file de signalements : CHEF + RG (lecture ; traitement CHEF).
+      { href: "/moderation", label: "Modération", icon: ShieldAlert, requires: "moderation.view" },
     ],
   },
 ];

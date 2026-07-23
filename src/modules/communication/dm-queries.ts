@@ -57,7 +57,10 @@ export async function listConversations(
     include: {
       userA: { select: { id: true, firstName: true, lastName: true } },
       userB: { select: { id: true, firstName: true, lastName: true } },
+      // SAFE-02 — un message masqué ne doit plus apparaître, ni comme aperçu
+      // ni dans le décompte des non-lus (cf. filtre `hiddenAt: null` ci-dessous).
       messages: {
+        where: { hiddenAt: null },
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { body: true, createdAt: true, senderId: true },
@@ -72,6 +75,7 @@ export async function listConversations(
       conversationId: { in: convos.map((c) => c.id) },
       senderId: { not: userId },
       readAt: null,
+      hiddenAt: null,
     },
     _count: { _all: true },
   });
@@ -135,7 +139,11 @@ export async function getThread(
   const [a, b] = canonicalPair(userId, otherId);
   const convo = await db.conversation.findUnique({
     where: { userAId_userBId: { userAId: a, userBId: b } },
-    include: { messages: { orderBy: { createdAt: "asc" }, take: 200 } },
+    // SAFE-02 — les messages masqués par la modération sont exclus (cf.
+    // listConversations ci-dessus).
+    include: {
+      messages: { where: { hiddenAt: null }, orderBy: { createdAt: "asc" }, take: 200 },
+    },
   });
 
   return {

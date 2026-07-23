@@ -46,6 +46,9 @@ export const ACTIONS = [
   "donation.review",
   // Communication
   "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
+  // SAFE-02 — signalement & modération de contenu (salons + messagerie privée).
+  "moderation.view", // consulter la file de modération (CHEF + RG, lecture)
+  "moderation.review", // traiter la file : masquer un message, résoudre/rejeter
   // Planning & événements (US-P01/P02/P03)
   "event.view", // consulter le calendrier (tout utilisateur actif)
   "event.manage", // créer / modifier / supprimer un événement (encadrants)
@@ -139,6 +142,10 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "donation.review": [MAT],
   // Communication — publier une annonce / diffusion urgente : encadrants.
   "announcement.publish": [CHEF, RG],
+  // SAFE-02 — la file de modération se consulte (RG en lecture seule, comme le
+  // reste) mais ne se traite que par les chefs (masquer, résoudre, rejeter).
+  "moderation.view": [CHEF, RG],
+  "moderation.review": [CHEF],
   // Planning — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
   "event.view": [],
   "event.manage": [CHEF],

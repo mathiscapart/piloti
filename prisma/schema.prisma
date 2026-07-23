@@ -76,6 +76,11 @@ model User {
   conversationsA    Conversation[]    @relation("ConversationUserA")
   conversationsB    Conversation[]    @relation("ConversationUserB")
   sentDirectMessages DirectMessage[]  @relation("DirectMessageSender")
+  // SAFE-02 — signalement & modération de contenu.
+  hiddenMessages       Message[]       @relation("MessageHiddenBy")
+  hiddenDirectMessages DirectMessage[] @relation("DirectMessageHiddenBy")
+  reportsFiled         Report[]        @relation("ReportReporter")
+  reportsModerated     Report[]        @relation("ReportModerator")
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -794,9 +799,15 @@ model Message {
   editedAt    DateTime?
   pinnedAt    DateTime?
   createdAt   DateTime  @default(now())
+  // SAFE-02 — masquage par la modération (soft-hide, jamais de suppression en
+  // dur : garde la trace). Un message masqué disparaît des lectures normales
+  // mais reste visible en file de modération (cf. Report ci-dessous).
+  hiddenAt    DateTime?
+  hiddenById  String?
 
   channel   Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author    User              @relation("MessageAuthor", fields: [authorId], references: [id])
+  hiddenBy  User?             @relation("MessageHiddenBy", fields: [hiddenById], references: [id])
   reactions MessageReaction[]
 
   @@index([channelId])
@@ -984,11 +995,43 @@ model DirectMessage {
   body           String
   readAt         DateTime?
   createdAt      DateTime  @default(now())
+  // SAFE-02 — masquage par la modération, cf. Message.hiddenAt ci-dessus.
+  hiddenAt       DateTime?
+  hiddenById     String?
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation("DirectMessageSender", fields: [senderId], references: [id])
+  hiddenBy     User?        @relation("DirectMessageHiddenBy", fields: [hiddenById], references: [id])
 
   @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SAFE-02 — signalement & modération de contenu. Polymorphe (`targetType` +
+// `targetId`) car Message (salon) et DirectMessage n'ont aucun parent commun.
+// La modération masque le contenu visé (Message.hiddenAt / DirectMessage.hiddenAt)
+// plutôt que de le supprimer, pour garder la trace ; le signalement lui-même
+// trace qui a signalé, qui a traité, et l'issue (résolu / rejeté).
+// ─────────────────────────────────────────────────────────────────────────
+
+model Report {
+  id          String    @id @default(cuid())
+  targetType  String // ReportTargetType: CHANNEL_MESSAGE | DIRECT_MESSAGE
+  targetId    String // Message.id ou DirectMessage.id selon targetType
+  reporterId  String
+  reason      String?
+  status      String    @default("PENDING") // ReportStatus: PENDING | RESOLVED | DISMISSED
+  moderatorId String?
+  resolution  String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+
+  reporter  User  @relation("ReportReporter", fields: [reporterId], references: [id])
+  moderator User? @relation("ReportModerator", fields: [moderatorId], references: [id])
+
+  @@index([status])
+  @@index([targetType, targetId])
+  @@index([reporterId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 // potentiellement vide ou malformé) et le garde-fou anti-élévation de
 // `canAssignRole`.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   assignableRoles,
   can,
@@ -36,6 +36,16 @@ describe("effectiveRoles", () => {
 
   it("renvoie [] pour un JSON malformé, sans lever d'exception", () => {
     expect(effectiveRoles({ role: "CHEF", roles: "{pas du json" })).toEqual([]);
+  });
+
+  it("trace un avertissement (avec l'userId) pour un JSON malformé, sans changer le résultat fail-closed", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(
+      effectiveRoles({ id: "user-42", role: "CHEF", roles: "{pas du json" }),
+    ).toEqual([]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain("user-42");
+    warn.mockRestore();
   });
 
   it("renvoie [] pour un JSON valide mais qui n'est pas un tableau", () => {
@@ -128,6 +138,38 @@ describe("can — loan.create conditionné par la branche (US-32)", () => {
     expect(can({ role: "SCOUT", roles: ["SCOUT"], status: "ACTIVE" }, "loan.create")).toBe(
       false,
     );
+  });
+});
+
+describe("can — SAFE-02 modération de contenu", () => {
+  it("moderation.view : CHEF et RESPONSABLE_GROUPE consultent la file", () => {
+    expect(can({ role: "CHEF", roles: ["CHEF"], status: "ACTIVE" }, "moderation.view")).toBe(
+      true,
+    );
+    expect(
+      can(
+        { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE" },
+        "moderation.view",
+      ),
+    ).toBe(true);
+  });
+
+  it("moderation.review : réservé au CHEF (le RG reste lecture seule)", () => {
+    expect(can({ role: "CHEF", roles: ["CHEF"], status: "ACTIVE" }, "moderation.review")).toBe(
+      true,
+    );
+    expect(
+      can(
+        { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE" },
+        "moderation.review",
+      ),
+    ).toBe(false);
+  });
+
+  it("un rôle sans aucun lien avec la modération n'a ni vue ni traitement", () => {
+    const parent = { role: "PARENT", roles: ["PARENT"], status: "ACTIVE" as const };
+    expect(can(parent, "moderation.view")).toBe(false);
+    expect(can(parent, "moderation.review")).toBe(false);
   });
 });
 

@@ -19,7 +19,10 @@ export async function listChannelTree(user: AccessUser) {
       where: { archived: false },
       orderBy: [{ order: "asc" }, { name: "asc" }],
       include: {
+        // SAFE-02 — un message masqué ne doit pas maintenir un salon indéfiniment
+        // « non lu » (le dernier message visible sert de référence).
         messages: {
+          where: { hiddenAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
           select: { createdAt: true },
@@ -73,10 +76,12 @@ export async function getChannelForUser(user: AccessUser, slug: string) {
   return channel;
 }
 
-// Messages d'un salon (les plus récents), avec auteur + réactions.
+// Messages d'un salon (les plus récents), avec auteur + réactions. SAFE-02 —
+// les messages masqués par la modération sont exclus des lectures normales
+// (ils restent consultables via la file de modération).
 export async function listMessages(channelId: string, take = 50) {
   const messages = await db.message.findMany({
-    where: { channelId },
+    where: { channelId, hiddenAt: null },
     orderBy: { createdAt: "desc" },
     take,
     include: {

@@ -63,19 +63,8 @@ export default async function CampaignDetailPage({ params }: PageProps) {
             ? ` · échéance ${DATE_FMT.format(campaign.deadline)}`
             : ""}
         </p>
-        {campaign.secondChildCents != null || campaign.socialCents != null ? (
-          <p className="text-xs text-trail">
-            {campaign.secondChildCents != null
-              ? `2e enfant ${formatEuros(campaign.secondChildCents)}`
-              : ""}
-            {campaign.secondChildCents != null && campaign.socialCents != null
-              ? " · "
-              : ""}
-            {campaign.socialCents != null
-              ? `cas social ${formatEuros(campaign.socialCents)}`
-              : ""}
-          </p>
-        ) : null}
+        {/* Tarifs différenciés (2e enfant / cas social) masqués — décision
+            groupe, cf. DECISIONS.md D-022. */}
         {campaign.installments > 1 ? (
           <p className="text-xs text-trail">
             Payable en {campaign.installments}× (paiements partiels)

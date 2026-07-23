@@ -74,46 +74,20 @@ export function CampaignForm() {
           />
         </div>
       </div>
-      {/* US-F01 — tarifs différenciés & échelonnement (optionnels) */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="min-w-0 space-y-1.5">
-          <Label htmlFor="secondChild">Tarif 2e enfant (€)</Label>
-          <Input
-            id="secondChild"
-            name="secondChild"
-            inputMode="decimal"
-            placeholder="(optionnel)"
-            className="w-full min-w-0"
-          />
-        </div>
-        <div className="min-w-0 space-y-1.5">
-          <Label htmlFor="social">Tarif cas social (€)</Label>
-          <Input
-            id="social"
-            name="social"
-            inputMode="decimal"
-            placeholder="(optionnel)"
-            className="w-full min-w-0"
-          />
-        </div>
-        <div className="min-w-0 space-y-1.5">
-          <Label htmlFor="installments">Paiement en (fois)</Label>
-          <Input
-            id="installments"
-            name="installments"
-            type="number"
-            min={1}
-            max={12}
-            defaultValue={1}
-            className="w-full min-w-0"
-          />
-        </div>
+      {/* Tarifs différenciés masqués — décision groupe, cf. DECISIONS.md D-022
+          (le mécanisme « 2e enfant » / « cas social » reste actif en coulisse
+          si déjà configuré, mais n'est plus saisissable depuis l'UI). */}
+      <div className="max-w-40 space-y-1.5">
+        <Label htmlFor="installments">Paiement en (fois)</Label>
+        <Input
+          id="installments"
+          name="installments"
+          type="number"
+          min={1}
+          max={12}
+          defaultValue={1}
+        />
       </div>
-      <p className="text-xs text-trail">
-        Le tarif 2e enfant s&apos;applique automatiquement aux frères et sœurs
-        (via les rattachements familiaux). « Cas social » se règle par jeune sur
-        la fiche.
-      </p>
 
       {state.error ? (
         <p className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink">

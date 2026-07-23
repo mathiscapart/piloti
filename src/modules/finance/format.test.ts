@@ -51,6 +51,18 @@ describe("parseAmountToCents", () => {
   it("rejette un point décimal sans chiffre derrière", () => {
     expect(parseAmountToCents("60.")).toBeNull();
   });
+
+  it("accepte le plafond exact (1 000 000 €)", () => {
+    expect(parseAmountToCents("1000000")).toBe(100_000_000);
+  });
+
+  it("rejette un montant au-delà du plafond (faute de frappe probable : un zéro en trop)", () => {
+    expect(parseAmountToCents("10000000")).toBeNull();
+  });
+
+  it("rejette un montant très largement au-delà du plafond", () => {
+    expect(parseAmountToCents("999999999")).toBeNull();
+  });
 });
 
 describe("formatEuros", () => {

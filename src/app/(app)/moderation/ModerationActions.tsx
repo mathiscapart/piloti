@@ -33,7 +33,7 @@ export function ModerationActions({
 
   function handleHide() {
     startTransition(async () => {
-      const result = await hideMessage(targetType, targetId);
+      const result = await hideMessage(reportId, targetType, targetId);
       if (result.error) toast.error(result.error);
       else toast.success("Message masqué.");
     });

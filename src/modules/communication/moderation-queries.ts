@@ -1,9 +1,16 @@
 import { db } from "@/lib/db";
 import type { ReportStatus, ReportTargetType } from "@/lib/enums";
+import { effectiveRoles } from "@/lib/permissions";
 
 import { isVisibleMessage } from "./moderation-policy";
 
 export type ReportStatusFilter = "PENDING" | "RESOLVED" | "DISMISSED" | "all";
+
+interface QueueUser {
+  role: string;
+  roles?: string[] | string | null;
+  unit?: string | null;
+}
 
 export interface ReportQueueEntry {
   id: string;
@@ -29,11 +36,25 @@ export interface ReportQueueEntry {
 
 // SAFE-02 — file de modération : signalements + aperçu du contenu visé
 // (polymorphe, résolu en 2 requêtes groupées plutôt qu'une par signalement).
+// Routage (raffinement SAFE-02) : un CHEF ne voit que les signalements de SON
+// unité (`Report.concernedUnit`, l'unité de l'auteur du message visé) ; un
+// signalement dont `concernedUnit` est null (auteur sans unité) lui reste
+// invisible — fail-closed. L'ADMIN voit tout. Le RESPONSABLE_GROUPE (lecture
+// seule, `moderation.view`) garde une vue globale, alignée sur le reste de
+// l'appli où RG = lecture seule sur tout (arbitrage à confirmer, cf. la tâche).
 export async function listReports(
   status: ReportStatusFilter = "PENDING",
+  user: QueueUser,
 ): Promise<ReportQueueEntry[]> {
+  const roles = effectiveRoles(user);
+  const scopedToUnit = !roles.includes("ADMIN") && roles.includes("CHEF");
+  if (scopedToUnit && !user.unit) return [];
+
   const reports = await db.report.findMany({
-    where: status === "all" ? {} : { status },
+    where: {
+      ...(status === "all" ? {} : { status }),
+      ...(scopedToUnit ? { concernedUnit: user.unit } : {}),
+    },
     orderBy: { createdAt: "desc" },
     include: {
       reporter: { select: { firstName: true, lastName: true } },

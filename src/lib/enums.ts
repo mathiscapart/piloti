@@ -257,6 +257,7 @@ export const NOTIFICATION_TYPES = [
   "STEP_VALIDATION_REQUEST", // US-S04 — 2e chef sollicité pour confirmer une étape
   "STEP_VALIDATED", // US-S04 — étape confirmée (→ jeune / parent)
   "BADGE_AWARDED", // US-S05 — badge attribué (→ jeune / parent)
+  "REPORT_CREATED", // SAFE-02 — signalement créé (→ les modérateurs concernés : ADMIN + CHEF de l'unité)
   "REPORT_UPDATE", // SAFE-02 — signalement traité (résolu ou rejeté) → le signalant
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];

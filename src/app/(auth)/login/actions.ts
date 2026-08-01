@@ -64,6 +64,14 @@ export async function signInAction(
     await auth.api.signOut({ headers: hdrs });
     return { error: "Compte suspendu. Contactez un administrateur." };
   }
+  // US-CM-01 — compte enfant géré par un parent, sans connexion propre.
+  if (user.canLogin === false) {
+    await auth.api.signOut({ headers: hdrs });
+    return {
+      error:
+        "Ce compte est un compte enfant, géré par un parent. Un parent doit se connecter avec son propre compte pour agir en son nom.",
+    };
+  }
 
   // SAFE-01 — profil incomplet (pas de date de naissance) : rediriger
   // directement vers /completer-profil depuis l'action, plutôt que de

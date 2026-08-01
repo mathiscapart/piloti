@@ -10,6 +10,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
+import { getImageRightsStatus } from "@/modules/consent/queries";
 import {
   getFamilyForMember,
   listLinkableChildren,
@@ -22,6 +23,7 @@ import {
 } from "@/modules/planning/stats";
 
 import { FamilySection } from "./FamilySection";
+import { ImageRightsSection } from "./ImageRightsSection";
 import { MemberProfileForm } from "./MemberProfileForm";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
@@ -66,6 +68,10 @@ export default async function MemberDetailPage({ params }: PageProps) {
   const canManageProfile = can(currentUser, "member.directory");
   const isParent = effectiveRoles(user).includes("PARENT");
   const isJeune = effectiveRoles(user).includes("SCOUT");
+  // US-CM-01 — compte enfant géré par un parent, sans connexion propre :
+  // l'email est un placeholder interne (@piloti.invalid), pas une vraie
+  // adresse de contact.
+  const noLoginAccount = isJeune && user.canLogin === false;
   const hasProfile =
     !!user.profession || !!user.skills || !!user.availability || !!user.helpNotes;
 
@@ -82,6 +88,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
   const attendanceStats = isJeune
     ? await getMemberAttendanceStats(user.id)
     : null;
+
+  // US-C08 — droit à l'image (jeunes uniquement) : lecture via member.view
+  // (déjà vérifié plus haut) ; édition réservée à member.image_rights.manage.
+  const canManageImageRights = can(currentUser, "member.image_rights.manage");
+  const imageRightsStatus = isJeune ? await getImageRightsStatus(user.id) : null;
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -132,6 +143,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
                   Suspendu
                 </span>
               ) : null}
+              {noLoginAccount ? (
+                <span className="inline-flex items-center rounded-full bg-sand px-2.5 py-0.5 text-xs font-bold text-earth">
+                  Compte sans connexion (parent)
+                </span>
+              ) : null}
             </div>
             {user.unit ? (
               <p className="text-sm text-trail">{user.unit}</p>
@@ -148,12 +164,19 @@ export default async function MemberDetailPage({ params }: PageProps) {
               </a>
             </Button>
           ) : null}
-          <Button asChild variant="outline" size="sm">
-            <a href={`mailto:${user.email}`}>
+          {noLoginAccount ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sand px-3 py-1.5 text-sm text-trail">
               <Mail className="size-4" />
-              {user.email}
-            </a>
-          </Button>
+              Pas d&apos;email propre — voir les parents ci-dessous
+            </span>
+          ) : (
+            <Button asChild variant="outline" size="sm">
+              <a href={`mailto:${user.email}`}>
+                <Mail className="size-4" />
+                {user.email}
+              </a>
+            </Button>
+          )}
         </div>
       </section>
 
@@ -208,6 +231,15 @@ export default async function MemberDetailPage({ params }: PageProps) {
         linkableParents={linkableParents}
         canManage={canManageFamily}
       />
+
+      {/* US-C08 — droit à l'image (jeunes uniquement). */}
+      {isJeune ? (
+        <ImageRightsSection
+          userId={user.id}
+          status={imageRightsStatus}
+          canManage={canManageImageRights}
+        />
+      ) : null}
 
       {/* QF masqué — décision groupe (pas d'exposition/collecte du quotient
           familial en UI pour l'instant), cf. DECISIONS.md. `BracketSelect`,

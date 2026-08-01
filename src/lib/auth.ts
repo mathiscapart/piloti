@@ -80,6 +80,15 @@ export const auth = betterAuth({
       // besoin de consentement parental). Le consentement lui-même n'est PAS
       // un additionalField : il vit dans la table Consent (append-only).
       birthDate: { type: "date", required: false, input: true },
+      // US-CM-01 — compte enfant sans connexion (parent agit à sa place).
+      // Jamais settable depuis un formulaire public : uniquement positionné
+      // par `createChildAccount` (src/modules/admin/actions.ts).
+      canLogin: {
+        type: "boolean",
+        required: false,
+        defaultValue: true,
+        input: false,
+      },
     },
   },
 

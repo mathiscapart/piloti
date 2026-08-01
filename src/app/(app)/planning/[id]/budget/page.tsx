@@ -9,6 +9,7 @@ import { formatEuros } from "@/modules/finance/format";
 
 import { BudgetManager } from "./BudgetManager";
 import { EventPaymentRow } from "./EventPaymentRow";
+import { TicketsSection } from "./TicketsSection";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -55,6 +56,13 @@ export default async function EventBudgetPage({ params }: PageProps) {
         marginCents={data.marginCents}
         expectedRevenueCents={data.expectedRevenueCents}
         canManage={canManage}
+      />
+
+      <TicketsSection
+        eventId={data.event.id}
+        tickets={data.tickets}
+        totalCents={data.ticketsTotalCents}
+        canAdd={can(user, "expense.create")}
       />
 
       {/* Encaissement des inscriptions (si l'événement est payant) */}

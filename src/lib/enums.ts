@@ -43,11 +43,24 @@ export const EXTRA_ROLES = [
   "MEMBRE_LOCAL",
 ] as const;
 
-// RGPD-02 — type de consentement à l'inscription (Consent.type). SELF = donné
-// par la personne elle-même (≥ 15 ans). PARENTAL = attestation du responsable
-// légal pour un mineur de moins de 15 ans (cf. src/lib/legal/versions.ts).
-export const CONSENT_TYPES = ["SELF", "PARENTAL"] as const;
+// RGPD-02 / US-C08 — type de consentement (Consent.type). SELF = donné par la
+// personne elle-même (≥ 15 ans). PARENTAL = attestation du responsable légal
+// pour un mineur de moins de 15 ans (cf. src/lib/legal/versions.ts). IMAGE_RIGHTS
+// = droit à l'image (cf. src/modules/consent), append-only comme le reste de
+// `Consent` : porte sa valeur dans `Consent.value` (cf. IMAGE_RIGHTS_STATUSES).
+export const CONSENT_TYPES = ["SELF", "PARENTAL", "IMAGE_RIGHTS"] as const;
 export type ConsentType = (typeof CONSENT_TYPES)[number];
+
+// US-C08 — droit à l'image. RESTREINT_INTERNE = usage réservé à la
+// communication interne du groupe (pas de diffusion publique/réseaux sociaux).
+export const IMAGE_RIGHTS_STATUSES = ["OUI", "NON", "RESTREINT_INTERNE"] as const;
+export type ImageRightsStatus = (typeof IMAGE_RIGHTS_STATUSES)[number];
+
+export const IMAGE_RIGHTS_LABEL: Record<ImageRightsStatus, string> = {
+  OUI: "Autorisé",
+  NON: "Refusé",
+  RESTREINT_INTERNE: "Usage interne uniquement",
+};
 
 export const ACCOUNT_STATUSES = [
   "PENDING",
@@ -76,6 +89,16 @@ export const UNIT_LABEL: Record<Unit, string> = {
   COMPAGNONS: "Compagnons (17-21 ans)",
   ADULTES: "Adultes (responsables, local)",
 };
+
+// US-CM-01 — branches trop jeunes pour un compte autonome : le compte existe
+// (pour être rattaché à un matériel, une progression…) mais ne se connecte
+// jamais lui-même — un parent agit pour lui via son propre compte (FamilyLink).
+export const NO_LOGIN_UNITS = ["FARFADETS", "LOUVETEAUX"] as const;
+
+export function unitAllowsLogin(unit: Unit | string | null | undefined): boolean {
+  if (!unit) return true;
+  return !(NO_LOGIN_UNITS as readonly string[]).includes(unit);
+}
 
 export const EQUIPMENT_CONDITIONS = [
   "NEUF",
@@ -377,5 +400,12 @@ export const AUDIT_ACTIONS = [
   "MESSAGE_HIDDEN",
   "REPORT_RESOLVED",
   "REPORT_DISMISSED",
+  // US-CM-01 — compte enfant sans connexion, créé par la SECRÉTAIRE/ADMIN.
+  "USER_CHILD_ACCOUNT_CREATED",
+  // US-CM-01 — modification d'un compte par un admin/secrétaire (peut faire
+  // basculer canLogin: false → true si l'email placeholder est remplacé).
+  "USER_ACCOUNT_UPDATED",
+  // US-C08 — droit à l'image.
+  "IMAGE_RIGHTS_STATUS_SET",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

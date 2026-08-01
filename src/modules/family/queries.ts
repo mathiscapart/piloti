@@ -85,6 +85,21 @@ export async function listLinkableParents(childId: string) {
 
 export type LinkableUser = Awaited<ReturnType<typeof listLinkableChildren>>[number];
 
+// US-CM-01 — tous les comptes PARENT actifs, pour le sélecteur de responsable
+// légal à la création d'un compte enfant (pas d'exclusion par rattachement
+// existant : contrairement à listLinkableParents, il n'y a pas encore de
+// jeune au moment de l'appel).
+export async function listActiveParents() {
+  const candidates = await db.user.findMany({
+    where: { status: "ACTIVE", roles: { contains: "PARENT" } },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    select: { id: true, firstName: true, lastName: true, roles: true },
+  });
+  return candidates
+    .filter((u) => hasRole(u.roles, "PARENT"))
+    .map((u) => ({ id: u.id, firstName: u.firstName, lastName: u.lastName }));
+}
+
 // Les enfants rattachés à un parent (pour l'inscription aux événements, US-P04).
 export async function getChildrenOf(parentId: string) {
   const links = await db.familyLink.findMany({

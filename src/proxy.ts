@@ -54,9 +54,13 @@ export async function proxy(request: NextRequest) {
 
   const session = await auth.api.getSession({ headers: request.headers });
   const status = (session?.user as { status?: string } | undefined)?.status;
+  // US-CM-01 — un compte enfant sans connexion propre ne doit jamais garder de
+  // session valide (même si un cookie a été forgé/rejoué) : même traitement
+  // qu'un statut non-ACTIVE.
+  const canLogin = (session?.user as { canLogin?: boolean } | undefined)?.canLogin;
 
-  if (!session?.user || status !== "ACTIVE") {
-    // Cookie stale ou compte non-ACTIVE → clear + reroute
+  if (!session?.user || status !== "ACTIVE" || canLogin === false) {
+    // Cookie stale, compte non-ACTIVE ou compte enfant sans connexion → clear + reroute
     const isPublic = PUBLIC_PATHS.has(pathname);
     const target = isPublic
       ? NextResponse.next()

@@ -40,6 +40,7 @@ export const ACTIONS = [
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "member.view",
   "member.directory", // US-26 — annuaire des compétences parents (RG)
+  "member.image_rights.manage", // US-C08 — définir le statut de droit à l'image (RG + SEC)
   // Dons
   "donation.create",
   "donation.view", // consulter les dons (RESPONSABLE_MATERIEL + RG lecture seule)
@@ -136,6 +137,13 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "member.view": [CHEF, RG, SEC, TRES],
   // Annuaire des compétences : RG + SECRÉTAIRE (US-32) ; ADMIN superuser.
   "member.directory": [RG, SEC],
+  // US-C08 — déroge volontairement à la convention « RG = lecture seule »
+  // documentée en tête de fichier : comme `moderation.review` (protection des
+  // mineurs), le droit à l'image est un motif de conformité/protection, pas
+  // une gestion opérationnelle courante — le RG a besoin d'y écrire, pas
+  // seulement d'en consulter la valeur. SEC gère aussi (dossiers admin des
+  // membres) ; ADMIN superuser.
+  "member.image_rights.manage": [RG, SEC],
   // Dons — MAT accepte/refuse ; RG = lecture seule sur tout (consulte les dons) ; ADMIN.
   "donation.create": [], // géré par ANY_ACTIVE
   "donation.view": [MAT, RG],

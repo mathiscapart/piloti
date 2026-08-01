@@ -40,6 +40,8 @@ export async function listManageableUsers() {
       unit: true,
       phone: true,
       createdAt: true,
+      // US-CM-01 — compte enfant sans connexion propre.
+      canLogin: true,
     },
   });
 }

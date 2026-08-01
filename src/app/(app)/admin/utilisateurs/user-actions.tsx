@@ -305,9 +305,14 @@ export function ReactivateButton({
 export function DeleteUserButton({
   userId,
   fullName,
+  redirectTo,
 }: {
   userId: string;
   fullName: string;
+  // Page dédiée à ce compte (ex. /admin/utilisateurs/[id]/modifier) : une fois
+  // le compte supprimé, cette page n'a plus de cible, on redirige plutôt que
+  // de laisser un simple router.refresh() sur une route désormais invalide.
+  redirectTo?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -326,7 +331,8 @@ export function DeleteUserButton({
       if (res.error) toast.error(res.error);
       else {
         toast.success(`Compte de ${fullName} supprimé.`);
-        router.refresh();
+        if (redirectTo) router.push(redirectTo);
+        else router.refresh();
       }
     });
   }

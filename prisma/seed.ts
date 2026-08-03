@@ -32,7 +32,6 @@ async function seedUser(input: SeedUserInput) {
       name: `${input.firstName} ${input.lastName}`,
       firstName: input.firstName,
       lastName: input.lastName,
-      unit: input.unit,
       phone: input.phone,
     },
   });
@@ -44,6 +43,8 @@ async function seedUser(input: SeedUserInput) {
       roles: JSON.stringify([input.role]),
       status: input.status,
       emailVerified: input.status === "ACTIVE",
+      // SEC-08 (Vuln 2) — `unit` est `input: false` côté better-auth.
+      unit: input.unit,
     },
   });
 }

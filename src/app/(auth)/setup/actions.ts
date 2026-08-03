@@ -55,7 +55,6 @@ export async function setupAction(
         name: `${parsed.data.firstName} ${parsed.data.lastName}`,
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
-        birthDate: parsed.data.birthDate,
       },
       headers: await headers(),
     });
@@ -67,10 +66,17 @@ export async function setupAction(
     return { error: "Erreur lors de la création du compte. Réessayez." };
   }
 
-  // 2. Passer le compte en ACTIVE + ADMIN (better-auth crée PENDING + CHEF par défaut)
+  // 2. Passer le compte en ACTIVE + ADMIN (better-auth crée PENDING + CHEF par
+  // défaut). SEC-08 (Vuln 2) — `birthDate` est `input: false` : positionné ici
+  // plutôt que via signUpEmail.
   await db.user.update({
     where: { email: parsed.data.email },
-    data: { status: "ACTIVE", role: "ADMIN", emailVerified: true },
+    data: {
+      status: "ACTIVE",
+      role: "ADMIN",
+      emailVerified: true,
+      birthDate: parsed.data.birthDate,
+    },
   });
 
   // 3. Connecter l'administrateur directement

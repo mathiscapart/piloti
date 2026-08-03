@@ -89,7 +89,16 @@ export const config = {
   // statiques (chemins en UUID aléatoire, non devinables). NE PAS rajouter
   // "/uploads/:path*" ici : ça forçait le middleware sur ces requêtes → 307 vers
   // /login → images jamais affichées.
+  //
+  // SEC-08 (Vuln 3) — l'exclusion « fichier à extension » était
+  // `.*\.[\w]+` : comme `.` matche aussi `/`, ce motif reconnaissait n'importe
+  // quel segment dynamique contenant un point PLUS LOIN dans le chemin (ex.
+  // `/communication/x.1`, `/messages/abc.1`) comme un fichier statique, et le
+  // proxy ne s'exécutait jamais dessus — alors que ces chemins routent bien
+  // vers de vraies pages / Server Actions. Ancré sur `[^/]+\.[\w]+$` : ne
+  // matche plus qu'un NOM DE FICHIER final (pas de `/` dedans, ancré en fin de
+  // chemin), donc seulement les vrais chemins de type `/robots.txt`.
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|uploads|.*\\.[\\w]+).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|uploads|[^/]+\\.[\\w]+$).*)",
   ],
 };

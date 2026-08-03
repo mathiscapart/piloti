@@ -181,6 +181,19 @@ export async function approveUser(
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
+  // SEC-08 (Vuln 1) — approveUser réécrit status + roles sans jamais vérifier
+  // QUI est la cible : sans ces deux gardes, un SECRÉTAIRE peut passer l'id
+  // d'un compte ADMIN/RG déjà actif et le rétrograder en SCOUT.
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { status: true },
+  });
+  if (target?.status !== "PENDING") {
+    return { error: "Cette inscription n'est plus en attente de validation." };
+  }
+
   const roles = [...new Set(parsed.data.roles)];
   const escalation = assertAssignable(actor, roles);
   if (escalation) return escalation;
@@ -228,6 +241,19 @@ export async function rejectUser(
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
+  // SEC-08 (Vuln 1) — même garde qu'approveUser : rejectUser passe le compte
+  // cible en REJECTED (déconnexion immédiate, cf. proxy.ts) sans vérifier qui
+  // est la cible ni qu'elle est bien une inscription en attente.
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { status: true },
+  });
+  if (target?.status !== "PENDING") {
+    return { error: "Cette inscription n'est plus en attente de validation." };
+  }
+
   await withAudit(
     (tx) =>
       tx.user.update({
@@ -246,6 +272,10 @@ export async function rejectUser(
       },
     },
   );
+
+  // SEC-08 (Vuln 4) — même geste que suspendUser : révoque toute session
+  // active immédiatement plutôt que d'attendre son expiration naturelle.
+  await db.session.deleteMany({ where: { userId: parsed.data.userId } });
 
   revalidatePath("/admin/inscriptions");
   return { error: null };

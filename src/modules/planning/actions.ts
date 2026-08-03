@@ -337,10 +337,14 @@ export async function rsvpEvent(
   );
 
   // Confirmation par email à la personne qui agit (best-effort, après réponse).
+  // SEC-08 (Vuln 5) — plus de <strong> ici : notificationEmailHtml() échappe
+  // désormais systématiquement `body`, et targetName est un nom de profil
+  // (texte libre, potentiellement attaqué) qu'on ne veut pas faire passer
+  // pour du HTML de confiance.
   const label = RSVP_LABEL[response as RsvpResponse];
   const body = targetName
-    ? `Inscription enregistrée pour <strong>${targetName}</strong> : <strong>${label}</strong>.`
-    : `Votre réponse a bien été enregistrée : <strong>${label}</strong>.`;
+    ? `Inscription enregistrée pour ${targetName} : ${label}.`
+    : `Votre réponse a bien été enregistrée : ${label}.`;
   after(() =>
     sendEmail({
       to: user.email,

@@ -94,23 +94,26 @@ export async function signUpAction(
         name: `${parsed.data.firstName} ${parsed.data.lastName}`,
         firstName: parsed.data.firstName,
         lastName: parsed.data.lastName,
-        birthDate: parsed.data.birthDate,
-        // Un parent n'est pas rattaché à une unité (branche).
-        unit: isParent ? undefined : parsed.data.unit,
         phone: parsed.data.phone,
       },
       headers: requestHeaders,
     });
     createdUserId = result.user.id;
 
+    // SEC-08 (Vuln 2) — `unit` et `birthDate` sont `input: false` côté
+    // better-auth (déterminent l'accès aux salons par branche et SAFE-01) :
+    // positionnés ici, une seule fois, juste après la création du compte —
+    // jamais réassignables ensuite via POST /api/auth/update-user.
     // US-26 — mémorise le profil demandé pour guider l'admin à la validation
     // (rôle non attribué ici : l'admin reste seul à valider, cf. US-32).
-    if (isParent) {
-      await db.user.update({
-        where: { id: createdUserId },
-        data: { requestedRole: "PARENT" },
-      });
-    }
+    await db.user.update({
+      where: { id: createdUserId },
+      data: {
+        birthDate: parsed.data.birthDate,
+        // Un parent n'est pas rattaché à une unité (branche).
+        ...(isParent ? { requestedRole: "PARENT" } : { unit: parsed.data.unit }),
+      },
+    });
 
     // RGPD-02 — trace du consentement, append-only, dans la même transaction
     // que l'entrée d'audit (cf. CLAUDE.md : toute mutation → AuditLog).

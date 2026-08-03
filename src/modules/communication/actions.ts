@@ -32,7 +32,11 @@ async function notifyChannelMessage(
   const [users, mutes] = await Promise.all([
     db.user.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, role: true, roles: true, unit: true },
+      // SEC-08 (Vuln 3) — `canAccessChannel` vérifie désormais `status` : sans
+      // le sélectionner ici, il serait `undefined` malgré le `where` ACTIVE
+      // ci-dessus, et le filtre `.filter(canAccessChannel)` viderait toujours
+      // la liste des destinataires.
+      select: { id: true, role: true, roles: true, unit: true, status: true },
     }),
     db.channelMute.findMany({
       where: { channelId: channel.id },

@@ -1,9 +1,15 @@
-import { betterAuth } from "better-auth";
+import { APIError, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { nextCookies } from "better-auth/next-js";
 import { Resend } from "resend";
 
 import { db } from "@/lib/db";
+
+// SEC-08 (Vuln 4) — code d'erreur porté par l'APIError du hook
+// `session.create.before` ci-dessous, repris tel quel par
+// src/app/(auth)/login/actions.ts pour distinguer un refus « compte non
+// actif » (message précis) d'un échec de credentials (message générique).
+export const ACCOUNT_NOT_ACTIVE_CODE = "ACCOUNT_NOT_ACTIVE";
 
 // Fail-fast : sans secret, better-auth en génère un aléatoire au boot →
 // toutes les sessions invalidées au prochain restart, casse l'auth en
@@ -73,13 +79,23 @@ export const auth = betterAuth({
         defaultValue: "PENDING",
         input: false,
       },
-      unit: { type: "string", required: false, input: true },
+      // SEC-08 (Vuln 2) — `unit` conditionne l'accès aux salons/DM par
+      // branche (cf. src/modules/communication/access.ts et dm-policy.ts) :
+      // ce n'est PAS une simple donnée de profil. `input: true` laissait
+      // n'importe quel compte connecté se le réattribuer via
+      // POST /api/auth/update-user, sans passer par `user.manage`. Positionné
+      // uniquement côté serveur, après signUpEmail (register/actions.ts) ou
+      // par setUserUnit (admin/actions.ts, gardé par can()).
+      unit: { type: "string", required: false, input: false },
       phone: { type: "string", required: false, input: true },
       rejectedReason: { type: "string", required: false, input: false },
       // RGPD-02 — date de naissance, saisie à l'inscription (détermine le
       // besoin de consentement parental). Le consentement lui-même n'est PAS
       // un additionalField : il vit dans la table Consent (append-only).
-      birthDate: { type: "date", required: false, input: true },
+      // SEC-08 (Vuln 2) — même raisonnement que `unit` : détermine SAFE-01
+      // (accès DM aux mineurs), donc jamais réassignable après coup par le
+      // titulaire du compte lui-même. Positionné une seule fois, à l'inscription.
+      birthDate: { type: "date", required: false, input: false },
       // US-CM-01 — compte enfant sans connexion (parent agit à sa place).
       // Jamais settable depuis un formulaire public : uniquement positionné
       // par `createChildAccount` (src/modules/admin/actions.ts).
@@ -94,6 +110,45 @@ export const auth = betterAuth({
 
   advanced: {
     cookiePrefix: "piloti",
+  },
+
+  // SEC-08 (Vuln 4) — `/api` est exclu du proxy (src/proxy.ts) et
+  // `emailAndPassword` ne connaît pas notre notion de statut de compte.
+  // signInAction (login/actions.ts) posait le cookie via signInEmail PUIS
+  // vérifiait le statut pour signOut si besoin : entre les deux, un appel
+  // direct à POST /api/auth/sign-in/email récupérait un cookie de session
+  // valide pour un compte PENDING/REJECTED/SUSPENDED ou canLogin:false. Ce
+  // hook ferme la fenêtre à la source, pour TOUT chemin de création de
+  // session (Server Action ou appel API direct) : aucune session n'est créée
+  // pour un compte non-ACTIVE, un point c'est tout.
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const user = await db.user.findUnique({
+            where: { id: session.userId },
+            select: { status: true, canLogin: true, rejectedReason: true },
+          });
+          if (!user || user.status !== "ACTIVE") {
+            const message =
+              user?.status === "REJECTED"
+                ? `Inscription refusée${user.rejectedReason ? ` : ${user.rejectedReason}` : "."}`
+                : user?.status === "SUSPENDED"
+                  ? "Compte suspendu. Contactez un administrateur."
+                  : "Compte en attente de validation par un administrateur.";
+            throw new APIError("FORBIDDEN", { code: ACCOUNT_NOT_ACTIVE_CODE, message });
+          }
+          // US-CM-01 — compte enfant sans connexion propre (parent agit à sa place).
+          if (user.canLogin === false) {
+            throw new APIError("FORBIDDEN", {
+              code: ACCOUNT_NOT_ACTIVE_CODE,
+              message:
+                "Ce compte est un compte enfant, géré par un parent. Un parent doit se connecter avec son propre compte pour agir en son nom.",
+            });
+          }
+        },
+      },
+    },
   },
 
   // Rate limit anti-bruteforce + anti-flood

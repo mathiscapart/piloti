@@ -37,8 +37,11 @@ import {
   getEventWithRegistrations,
 } from "@/modules/planning/queries";
 
+import { AddRegistrationControl } from "../AddRegistrationControl";
 import { DeleteEventButton } from "../DeleteEventButton";
+import { PrintButton } from "../presences/PrintButton";
 import { RsvpControl } from "../RsvpControl";
+import { WithdrawRegistrationButton } from "../WithdrawRegistrationButton";
 
 const DEADLINE_FMT = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -65,7 +68,17 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   const data = await getEventWithRegistrations(id, user.id);
   if (!data) notFound();
-  const { event, registrations, reminders, myResponse } = data;
+  const {
+    event,
+    registrations,
+    reminders,
+    myResponse,
+    myStatus,
+    myWithdrawalReason,
+    expectedCount,
+    awaiting,
+    addable,
+  } = data;
   const canManage = can(user, "event.manage");
 
   const deadlinePassed =
@@ -76,11 +89,16 @@ export default async function EventDetailPage({ params }: PageProps) {
   const myChildren = event.registrationOpen
     ? await getChildrenOf(user.id)
     : [];
-  const childRsvps = myChildren.map((child) => ({
-    child,
-    response:
-      registrations.find((r) => r.user.id === child.id)?.response ?? null,
-  }));
+  const childRsvps = myChildren.map((child) => {
+    const reg = registrations.find((r) => r.user.id === child.id);
+    return {
+      child,
+      response: reg?.response ?? null,
+      comment: reg?.comment ?? null,
+      withdrawn: reg?.status === "WITHDRAWN",
+      withdrawalReason: reg?.withdrawalReason ?? null,
+    };
+  });
 
   // US-P07 — résumé de présence (pour les chefs).
   const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
@@ -106,9 +124,16 @@ export default async function EventDetailPage({ params }: PageProps) {
   const isLoanIncoherent = (l: (typeof eventLoans)[number]) =>
     l.expectedReturn < event.startDate || l.startDate > event.endDate;
 
-  // Regroupement des réponses par type (pour la vue chef).
+  // Regroupement des réponses par type (pour la vue chef). Les désistements
+  // sont montrés à part (US-P05), donc exclus des groupes par réponse.
+  const activeRegistrations = registrations.filter(
+    (reg) => reg.status !== "WITHDRAWN",
+  );
+  const withdrawnRegistrations = registrations.filter(
+    (reg) => reg.status === "WITHDRAWN",
+  );
   const byResponse = (r: RsvpResponse) =>
-    registrations.filter((reg) => reg.response === r);
+    activeRegistrations.filter((reg) => reg.response === r);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -238,14 +263,19 @@ export default async function EventDetailPage({ params }: PageProps) {
           ) : (
             <>
               <p className="text-sm text-trail">Indiquez votre présence :</p>
-              <RsvpControl eventId={event.id} current={myResponse} />
+              <RsvpControl
+                eventId={event.id}
+                current={myResponse}
+                withdrawn={myStatus === "WITHDRAWN"}
+                withdrawalReason={myWithdrawalReason}
+              />
 
               {childRsvps.length > 0 ? (
                 <div className="space-y-3 border-t border-stone/50 pt-3">
                   <p className="text-sm font-medium text-earth">
                     Inscrire mes enfants :
                   </p>
-                  {childRsvps.map(({ child, response }) => (
+                  {childRsvps.map(({ child, response, comment, withdrawn, withdrawalReason }) => (
                     <div key={child.id} className="space-y-1.5">
                       <p className="text-sm font-bold text-earth">
                         {child.firstName} {child.lastName}
@@ -253,7 +283,10 @@ export default async function EventDetailPage({ params }: PageProps) {
                       <RsvpControl
                         eventId={event.id}
                         current={response}
+                        currentComment={comment}
                         forUserId={child.id}
+                        withdrawn={withdrawn}
+                        withdrawalReason={withdrawalReason}
                       />
                     </div>
                   ))}
@@ -264,17 +297,29 @@ export default async function EventDetailPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {/* Vue chef : liste des réponses. */}
+      {/* US-P05 — vue chef : gestion des inscriptions. */}
       {canManage && event.registrationOpen ? (
         <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
-          <div className="flex items-center gap-2">
-            <Users className="size-4 text-trail" />
-            <h2 className="font-bold text-earth">
-              Réponses ({registrations.length})
-            </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="size-4 text-trail" />
+              <h2 className="font-bold text-earth">
+                {activeRegistrations.length} inscrit
+                {activeRegistrations.length > 1 ? "s" : ""} / {expectedCount}{" "}
+                attendu{expectedCount > 1 ? "s" : ""}
+              </h2>
+            </div>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href={`/planning/${event.id}/registrations/export`}>
+                  Exporter en CSV
+                </a>
+              </Button>
+              <PrintButton />
+            </div>
           </div>
 
-          {registrations.length === 0 ? (
+          {activeRegistrations.length === 0 ? (
             <p className="text-sm text-trail">Aucune réponse pour le moment.</p>
           ) : (
             <div className="space-y-4">
@@ -291,11 +336,11 @@ export default async function EventDetailPage({ params }: PageProps) {
                     >
                       {RSVP_LABEL[r as RsvpResponse]} ({list.length})
                     </h3>
-                    <ul className="flex flex-wrap gap-2">
+                    <ul className="space-y-2">
                       {list.map((reg) => (
                         <li
                           key={reg.user.id}
-                          className="flex items-center gap-2 rounded-full bg-sand px-2 py-1"
+                          className="flex flex-wrap items-center gap-2 rounded-xl bg-sand px-3 py-2"
                         >
                           <UserAvatar
                             image={reg.user.image}
@@ -306,6 +351,20 @@ export default async function EventDetailPage({ params }: PageProps) {
                           <span className="text-sm font-medium text-earth">
                             {reg.user.firstName} {reg.user.lastName}
                           </span>
+                          {reg.user.unit ? (
+                            <span className="text-xs text-trail">
+                              {UNIT_LABEL[reg.user.unit as Unit] ?? reg.user.unit}
+                            </span>
+                          ) : null}
+                          {reg.comment ? (
+                            <span className="w-full text-xs italic text-trail md:w-auto md:flex-1">
+                              « {reg.comment} »
+                            </span>
+                          ) : null}
+                          <WithdrawRegistrationButton
+                            eventId={event.id}
+                            userId={reg.user.id}
+                          />
                         </li>
                       ))}
                     </ul>
@@ -314,6 +373,35 @@ export default async function EventDetailPage({ params }: PageProps) {
               })}
             </div>
           )}
+
+          {awaiting.length > 0 ? (
+            <div className="space-y-1 border-t border-stone/50 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
+                En attente de réponse ({awaiting.length})
+              </h3>
+              <p className="text-sm text-trail">
+                {awaiting
+                  .map((u) => `${u.firstName} ${u.lastName}`)
+                  .join(", ")}
+              </p>
+            </div>
+          ) : null}
+
+          {withdrawnRegistrations.length > 0 ? (
+            <div className="space-y-2 border-t border-stone/50 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
+                Désistés ({withdrawnRegistrations.length})
+              </h3>
+              <ul className="space-y-1">
+                {withdrawnRegistrations.map((reg) => (
+                  <li key={reg.user.id} className="text-sm text-trail">
+                    {reg.user.firstName} {reg.user.lastName}
+                    {reg.withdrawalReason ? ` — ${reg.withdrawalReason}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {reminders.length > 0 ? (
             <div className="space-y-1 border-t border-stone/50 pt-3">
@@ -325,6 +413,15 @@ export default async function EventDetailPage({ params }: PageProps) {
                   .map((r) => `${r.user.firstName} ${r.user.lastName}`)
                   .join(", ")}
               </p>
+            </div>
+          ) : null}
+
+          {addable.length > 0 ? (
+            <div className="space-y-2 border-t border-stone/50 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
+                Inscrire un jeune
+              </h3>
+              <AddRegistrationControl eventId={event.id} candidates={addable} />
             </div>
           ) : null}
         </section>

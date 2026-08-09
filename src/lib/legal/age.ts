@@ -15,10 +15,10 @@ import { z } from "zod";
 export const MIN_PLAUSIBLE_AGE = 5;
 export const MAX_PLAUSIBLE_AGE = 110;
 
-// Bornes de validation de la date de naissance, partagées par l'inscription
-// (register/actions.ts), la complétion de profil a posteriori
-// (completer-profil/actions.ts) et la correction admin (setUserBirthDate) :
-// une seule définition des bornes valides.
+// Bornes de validation de la date de naissance, partagées par les quatre
+// chemins de création (register, setup, createChildAccount, seed) et par la
+// correction admin (setUserBirthDate) : une seule définition des bornes
+// valides, donc aucun chemin ne peut poser une date que les autres refusent.
 // Les deux contrôles sont des `refine`, donc évalués à la validation. Le
 // `.max(new Date())` précédent figeait « maintenant » au chargement du module
 // et dérivait sur un serveur qui tourne des semaines.

@@ -50,9 +50,9 @@ const unitSchema = z.object({
     .transform((v) => (v === "" ? null : v)),
 });
 
-// SAFE-01 — correction d'une date de naissance déjà posée. C'est le seul
-// chemin qui reste : l'intéressé ne peut que la renseigner une fois
-// (`completeBirthDate`), jamais la réécrire.
+// SAFE-01 — correction d'une date de naissance. C'est le SEUL chemin de
+// modification qui existe : la date est posée à la création du compte, et
+// l'intéressé ne peut jamais la réécrire lui-même.
 const birthDateAdminSchema = z.object({
   userId: z.string().min(1),
   birthDate: birthDateSchema,

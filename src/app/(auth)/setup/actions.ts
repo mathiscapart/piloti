@@ -20,10 +20,10 @@ const schema = z
     email: z.string().email("Email invalide."),
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Confirmez le mot de passe."),
-    // SAFE-01 — ACTIVE implique une date de naissance connue (cf.
-    // src/app/(app)/layout.tsx) : autant la demander à la création de l'admin
-    // plutôt que de le rediriger vers /completer-profil juste après. Même
-    // validation que l'inscription (birthDateSchema, source unique).
+    // SAFE-01 — un compte ACTIVE a toujours une date de naissance connue : le
+    // proxy refuse la session sinon (cf. src/proxy.ts). C'est l'un des quatre
+    // chemins de création qui garantissent cet invariant. Même validation que
+    // l'inscription (birthDateSchema, source unique).
     birthDate: birthDateSchema,
   })
   .refine((d) => d.password === d.confirmPassword, {

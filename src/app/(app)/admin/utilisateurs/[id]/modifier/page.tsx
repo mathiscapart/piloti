@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { can, canAssignRole } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import {
+  BirthDateEditor,
   ChangePasswordDialog,
   DeleteUserButton,
   ReactivateButton,
@@ -18,6 +19,13 @@ import { UserAccountForm } from "./UserAccountForm";
 
 interface PageProps {
   params: Promise<{ id: string }>;
+}
+
+// SAFE-01 — l'`<input type="date">` de l'éditeur attend « YYYY-MM-DD ». Les
+// dates sont stockées à minuit UTC (cf. birthDateSchema), on découpe donc l'ISO
+// plutôt que de passer par le fuseau local, qui décalerait d'un jour.
+function toDateInput(d: Date | null): string | null {
+  return d ? d.toISOString().slice(0, 10) : null;
 }
 
 function parseRoles(raw: unknown): string[] {
@@ -49,6 +57,8 @@ export default async function EditUserAccountPage({ params }: PageProps) {
       roles: true,
       canLogin: true,
       status: true,
+      // SAFE-01 — alimente BirthDateEditor (seul chemin de correction).
+      birthDate: true,
     },
   });
   if (!target) notFound();
@@ -107,6 +117,10 @@ export default async function EditUserAccountPage({ params }: PageProps) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <UnitEditor userId={target.id} currentUnit={target.unit} />
+          <BirthDateEditor
+            userId={target.id}
+            currentBirthDate={toDateInput(target.birthDate)}
+          />
           <RolesEditor
             userId={target.id}
             currentRoles={roles}

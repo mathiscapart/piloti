@@ -57,17 +57,20 @@ export async function signInAction(
 
   if (!user) return { error: "Erreur de connexion." };
 
-  // SAFE-01 — profil incomplet (pas de date de naissance) : rediriger
-  // directement vers /completer-profil depuis l'action, plutôt que de
-  // laisser le layout (app) le faire. Un redirect() dans une Server Action
-  // est traité spécialement par Next (il est embarqué dans la même réponse
-  // que la navigation). Un SECOND redirect() déclenché pendant le rendu de
-  // la cible (ici le layout redirigeant /dashboard → /completer-profil) n'est
-  // pas suivi par le client : il est sérialisé comme une erreur RSC dans le
-  // flux, ce qui produit une page blanche jusqu'à un rechargement complet
-  // (repro : la réponse contient alors un chunk
-  // `E{"digest":"NEXT_REDIRECT;...;/completer-profil;..."}` à la place du
-  // contenu). En ciblant la bonne destination dès ce premier redirect, on
-  // évite ce redirect imbriqué.
-  redirect(user.birthDate ? "/dashboard" : "/completer-profil");
+  // SAFE-01 — profil incomplet (pas de date de naissance). Les quatre chemins
+  // de création l'imposent (register, setup, createChildAccount, seed) : un
+  // compte ACTIVE sans date est une anomalie de données, pas une étape
+  // utilisateur. On refuse ici plutôt que de proposer un écran de complétion :
+  // cette date gouverne la protection des mineurs, elle ne se déclare pas en
+  // libre-service. Le message part avant tout redirect, donc l'utilisateur sait
+  // quoi faire ; le cookie de session posé par signInEmail sera balayé par le
+  // proxy à la première navigation (même branche que les comptes non-ACTIVE).
+  if (!user.birthDate) {
+    return {
+      error:
+        "Ce compte est incomplet (date de naissance manquante). Contacte un responsable pour la renseigner.",
+    };
+  }
+
+  redirect("/dashboard");
 }

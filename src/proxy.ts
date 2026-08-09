@@ -58,9 +58,17 @@ export async function proxy(request: NextRequest) {
   // session valide (même si un cookie a été forgé/rejoué) : même traitement
   // qu'un statut non-ACTIVE.
   const canLogin = (session?.user as { canLogin?: boolean } | undefined)?.canLogin;
+  // SAFE-01 — date de naissance manquante. Les quatre chemins de création
+  // l'imposent (register, setup, createChildAccount, seed) : un compte ACTIVE
+  // sans date est donc une anomalie de données, pas une étape utilisateur. On
+  // refuse la session au lieu de proposer de la compléter soi-même — la date
+  // gouverne la protection des mineurs, elle ne se déclare pas en libre-service
+  // (correction par un administrateur, cf. setUserBirthDate).
+  const birthDate = (session?.user as { birthDate?: unknown } | undefined)?.birthDate;
 
-  if (!session?.user || status !== "ACTIVE" || canLogin === false) {
-    // Cookie stale, compte non-ACTIVE ou compte enfant sans connexion → clear + reroute
+  if (!session?.user || status !== "ACTIVE" || canLogin === false || !birthDate) {
+    // Cookie stale, compte non-ACTIVE, compte enfant sans connexion ou profil
+    // incomplet → clear + reroute
     const isPublic = PUBLIC_PATHS.has(pathname);
     const target = isPublic
       ? NextResponse.next()
@@ -74,13 +82,7 @@ export async function proxy(request: NextRequest) {
     return noStoreRedirect(new URL("/dashboard", request.url));
   }
 
-  // SAFE-01 — transmet le chemin courant en en-tête (pure plumbing, aucune
-  // requête DB) : le layout serveur de src/app/(app)/ en a besoin pour savoir
-  // s'il doit rediriger un profil incomplet vers /completer-profil sans créer
-  // de boucle. `headers()` ne donne pas le pathname côté Server Component.
-  const forwardedHeaders = new Headers(request.headers);
-  forwardedHeaders.set("x-pathname", pathname);
-  return NextResponse.next({ request: { headers: forwardedHeaders } });
+  return NextResponse.next();
 }
 
 export const config = {

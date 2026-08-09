@@ -16,6 +16,10 @@ interface SeedUserInput {
   lastName: string;
   role: Role;
   status: AccountStatus;
+  // SAFE-01 — obligatoire : sans date de naissance, le verrou de profil
+  // incomplet (src/proxy.ts) renvoie le compte sur /completer-profil dès la
+  // connexion, et aucun écran de l'app n'est atteignable en développement.
+  birthDate: Date;
   unit?: Unit;
   phone?: string;
 }
@@ -45,6 +49,9 @@ async function seedUser(input: SeedUserInput) {
       emailVerified: input.status === "ACTIVE",
       // SEC-08 (Vuln 2) — `unit` est `input: false` côté better-auth.
       unit: input.unit,
+      // SAFE-01 — `birthDate` est `input: false` également (elle ne doit jamais
+      // être settable par le titulaire) : elle s'écrit ici, après le signup.
+      birthDate: input.birthDate,
     },
   });
 }
@@ -69,6 +76,7 @@ async function main() {
     password: "PilotiAdmin2024!",
     firstName: "Admin",
     lastName: "Piloti",
+    birthDate: new Date("1985-02-14"),
     role: "ADMIN",
     status: "ACTIVE",
   });
@@ -78,6 +86,7 @@ async function main() {
     password: "PilotiChef2024!",
     firstName: "Thomas",
     lastName: "Martin",
+    birthDate: new Date("1990-03-12"),
     role: "CHEF",
     status: "ACTIVE",
     unit: "PIONNIERS",
@@ -89,6 +98,7 @@ async function main() {
     password: "PilotiChef2024!",
     firstName: "Julie",
     lastName: "Bernard",
+    birthDate: new Date("1992-07-30"),
     role: "CHEF",
     status: "ACTIVE",
     unit: "SCOUTS",
@@ -100,6 +110,7 @@ async function main() {
     password: "PilotiScout2024!",
     firstName: "Paul",
     lastName: "Durand",
+    birthDate: new Date("2004-11-05"),
     role: "CHEF",
     status: "PENDING",
     unit: "COMPAGNONS",

@@ -7,6 +7,10 @@ interface AccessUser {
   role: string;
   roles?: string[] | string | null;
   unit?: string | null;
+  // SEC-08 — `canAccessChannel` est fail-closed sur le statut : un appelant qui
+  // omettrait `status` verrait TOUS les salons disparaître silencieusement. On
+  // l'exige donc ici plutôt que de le laisser arriver par structural typing.
+  status: string;
 }
 
 // US-C09 — arbre des salons accessibles à l'utilisateur, groupés par catégorie,

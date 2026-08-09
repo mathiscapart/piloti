@@ -4,6 +4,10 @@ import { nextCookies } from "better-auth/next-js";
 import { Resend } from "resend";
 
 import { db } from "@/lib/db";
+// SEC-08 (Vuln 5) — `user.name` est un texte libre modifiable par le
+// titulaire du compte : ce gabarit-ci vit hors de `notificationEmailHtml()`,
+// il doit donc échapper lui-même.
+import { escapeHtml } from "@/lib/email";
 
 // SEC-08 (Vuln 4) — code d'erreur porté par l'APIError du hook
 // `session.create.before` ci-dessous, repris tel quel par
@@ -52,7 +56,7 @@ export const auth = betterAuth({
         to: user.email,
         subject: "Réinitialisation de votre mot de passe Piloti",
         html: `
-          <p>Bonjour ${user.name},</p>
+          <p>Bonjour ${escapeHtml(user.name)},</p>
           <p>Vous avez demandé la réinitialisation de votre mot de passe Piloti.</p>
           <p>Cliquez sur ce lien pour choisir un nouveau mot de passe (valable 1 heure) :</p>
           <p><a href="${url}" style="color:#1a7a4a;font-weight:bold;">${url}</a></p>

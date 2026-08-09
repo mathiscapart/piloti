@@ -40,7 +40,7 @@ export async function sendEmail({
 // de l'email. `url` est toujours construite côté serveur (absoluteUrl()),
 // jamais échappée : cf. src/app/(app)/lieux/carte/PlacesMap.tsx pour le même
 // pattern côté carte.
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

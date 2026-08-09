@@ -86,21 +86,32 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Le 1er motif exclut déjà `uploads` ET tout fichier à extension : les images
+  // Le 1er motif exclut déjà `uploads` ET les fichiers statiques : les images
   // uploadées (annonces, photos d'incidents) sont servies comme des fichiers
   // statiques (chemins en UUID aléatoire, non devinables). NE PAS rajouter
   // "/uploads/:path*" ici : ça forçait le middleware sur ces requêtes → 307 vers
   // /login → images jamais affichées.
   //
-  // SEC-08 (Vuln 3) — l'exclusion « fichier à extension » était
-  // `.*\.[\w]+` : comme `.` matche aussi `/`, ce motif reconnaissait n'importe
-  // quel segment dynamique contenant un point PLUS LOIN dans le chemin (ex.
-  // `/communication/x.1`, `/messages/abc.1`) comme un fichier statique, et le
-  // proxy ne s'exécutait jamais dessus — alors que ces chemins routent bien
-  // vers de vraies pages / Server Actions. Ancré sur `[^/]+\.[\w]+$` : ne
-  // matche plus qu'un NOM DE FICHIER final (pas de `/` dedans, ancré en fin de
-  // chemin), donc seulement les vrais chemins de type `/robots.txt`.
+  // SEC-08 — ce motif décide quelles requêtes passent par le contrôle
+  // d'authentification : deux formulations successives s'y sont fait piéger.
+  //   `.*\.[\w]+`     : `.` matche aussi `/`, donc un segment dynamique
+  //                     contenant un point (`/communication/x.1`,
+  //                     `/messages/abc.1`) passait pour un fichier statique et
+  //                     sautait le proxy — contournement du contrôle de statut
+  //                     de compte sur les Server Actions.
+  //   `[^/]+\.[\w]+$` : corrigeait ça, mais `[^/]+` ne peut pas traverser un
+  //                     `/` et l'ancrage part juste après le `/` initial —
+  //                     donc plus AUCUN fichier en sous-dossier n'était exclu
+  //                     (`/icons/icon-192.png`, `/logo/*.svg`,
+  //                     `/leaflet-images/*.png`) → 307 vers /login, icônes PWA
+  //                     et logos cassés pour un visiteur non connecté.
+  // → On énumère donc les extensions statiques réelles, ancrées en fin de
+  //   chemin : un vrai fichier est exclu quel que soit son dossier, alors qu'un
+  //   segment dynamique comme `/communication/x.1` (extension « 1 » inconnue)
+  //   reste protégé.
+  // Toute modification ici doit être revalidée par `src/proxy.test.ts`, qui
+  // compile le motif avec la mécanique de Next au lieu de le lire à l'œil.
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|uploads|[^/]+\\.[\\w]+$).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|uploads|.*[.](?:png|jpg|jpeg|gif|webp|avif|svg|ico|css|js|mjs|json|webmanifest|woff|woff2|ttf|map|txt|xml)$).*)",
   ],
 };

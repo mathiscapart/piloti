@@ -15,6 +15,15 @@ import { db } from "@/lib/db";
  * rendu de page. Un compte PENDING/REJECTED/SUSPENDED ou `canLogin: false`
  * (compte enfant, cf. US-CM-01) ne doit jamais pouvoir exécuter d'action,
  * même avec un cookie de session valide/rejoué.
+ *
+ * SAFE-01 (D-023) — même raisonnement pour `birthDate` : le verrou de profil
+ * incomplet vit dans le proxy, qui ne voit pas les Server Actions. Sans ce
+ * garde, une session obtenue pour un compte sans date de naissance (le hook
+ * `session.create.before` ne la bloque pas) reste refusée sur les pages mais
+ * exécute les actions. `dm-policy.ts` est fail-safe de son côté, donc rien
+ * n'est exploitable aujourd'hui — mais l'invariant « pas de date, pas de
+ * session utilisable » doit tenir aux deux endroits, pas seulement à celui
+ * qu'on a testé.
  */
 export async function getCurrentUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -39,7 +48,12 @@ export async function getCurrentUser() {
       canLogin: true,
     },
   });
-  if (!user || user.status !== "ACTIVE" || user.canLogin === false) {
+  if (
+    !user ||
+    user.status !== "ACTIVE" ||
+    user.canLogin === false ||
+    !user.birthDate
+  ) {
     redirect("/login");
   }
 

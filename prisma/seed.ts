@@ -16,9 +16,11 @@ interface SeedUserInput {
   lastName: string;
   role: Role;
   status: AccountStatus;
-  // SAFE-01 — obligatoire : sans date de naissance, le verrou de profil
-  // incomplet (src/proxy.ts) renvoie le compte sur /completer-profil dès la
-  // connexion, et aucun écran de l'app n'est atteignable en développement.
+  // SAFE-01 (D-023) — obligatoire : un compte ACTIVE sans date de naissance
+  // est traité comme une anomalie de données, pas comme un profil à compléter.
+  // Le proxy refuse la session et renvoie sur /login (il n'existe plus d'écran
+  // de complétion) : sans date ici, aucun compte seedé n'est utilisable en
+  // développement.
   birthDate: Date;
   unit?: Unit;
   phone?: string;

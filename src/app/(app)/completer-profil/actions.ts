@@ -23,6 +23,18 @@ export async function completeBirthDate(
   // Le compte vient toujours de la session, jamais du FormData.
   const user = await getCurrentUser();
 
+  // SAFE-01 — « compléter » n'est pas « réécrire ». Sans ce garde, l'action
+  // était un écrasement inconditionnel : n'importe quel compte pouvait rejouer
+  // le formulaire pour se redéclarer majeur et débloquer la messagerie privée.
+  // La correction d'une date déjà posée passe désormais par un administrateur
+  // (`setUserBirthDate`, modules/admin/actions.ts).
+  if (user.birthDate) {
+    return {
+      error:
+        "Votre date de naissance est déjà renseignée. Contactez un responsable pour la corriger.",
+    };
+  }
+
   const parsed = schema.safeParse({ birthDate: formData.get("birthDate") });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };

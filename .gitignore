@@ -48,10 +48,14 @@ yarn-error.log*
 next-env.d.ts
 
 # prisma / sqlite (la DB vit à la racine en dev — cf. prisma.config.ts)
-/dev.db
-/dev.db-journal
-/dev.db-wal
-/dev.db-shm
+# Filet large : seul `/dev.db` était couvert, or une base committée exposerait
+# les hashs de mots de passe. Toute base SQLite locale est ignorée, quel que
+# soit son nom (bases de test, worktrees) et qu'elle soit à la racine ou dans
+# prisma/ (un DATABASE_URL qui pointe là est vite écrit).
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
 
 # uploads (Phase 7)
 /public/uploads/

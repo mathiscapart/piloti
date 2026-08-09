@@ -50,6 +50,14 @@ const unitSchema = z.object({
     .transform((v) => (v === "" ? null : v)),
 });
 
+// SAFE-01 — correction d'une date de naissance déjà posée. C'est le seul
+// chemin qui reste : l'intéressé ne peut que la renseigner une fois
+// (`completeBirthDate`), jamais la réécrire.
+const birthDateAdminSchema = z.object({
+  userId: z.string().min(1),
+  birthDate: birthDateSchema,
+});
+
 // US-26 — profil parent enrichi (annuaire des compétences).
 const optionalText = z
   .string()
@@ -394,6 +402,56 @@ export async function setUserUnit(
   );
 
   revalidatePath("/admin/utilisateurs");
+  return { error: null };
+}
+
+// SAFE-01 — corrige la date de naissance d'un compte. La date pilote la
+// protection des mineurs (`dm-policy.ts`) : elle n'est plus modifiable par son
+// titulaire, donc une faute de frappe à l'inscription exige une intervention
+// d'administrateur. Les métadonnées conservent l'ancienne ET la nouvelle
+// valeur, sans quoi la trace ne dirait pas ce qui a changé.
+export async function setUserBirthDate(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
+
+  const parsed = birthDateAdminSchema.safeParse({
+    userId: formData.get("userId"),
+    birthDate: formData.get("birthDate"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { birthDate: true },
+  });
+  if (!target) return { error: "Compte introuvable." };
+
+  await withAudit(
+    (tx) =>
+      tx.user.update({
+        where: { id: parsed.data.userId },
+        data: { birthDate: parsed.data.birthDate },
+      }),
+    {
+      action: "USER_BIRTHDATE_CHANGED",
+      userId: actor.id,
+      metadata: {
+        targetUserId: parsed.data.userId,
+        from: target.birthDate?.toISOString() ?? null,
+        to: parsed.data.birthDate.toISOString(),
+      },
+    },
+  );
+
+  revalidatePath("/admin/utilisateurs");
+  revalidatePath(`/membres/${parsed.data.userId}`);
   return { error: null };
 }
 

@@ -1,11 +1,22 @@
 import { CalendarClock } from "lucide-react";
+import { redirect } from "next/navigation";
+
+import { getCurrentUser } from "@/lib/get-current-user";
 
 import { CompleteProfileForm } from "./complete-profile-form";
 
 // SAFE-01 — écran de complétion obligatoire : tout compte ACTIVE sans date de
-// naissance est redirigé ici par le verrou du layout (app), tant qu'il n'a pas
-// renseigné le champ (cf. src/app/(app)/layout.tsx).
-export default function CompleteProfilePage() {
+// naissance est redirigé ici par le verrou de src/proxy.ts, tant qu'il n'a pas
+// renseigné le champ.
+export default async function CompleteProfilePage() {
+  // Symétrique du verrou : profil complet → l'écran n'a plus lieu d'être. Sans
+  // ça il restait atteignable et affichait « Votre date de naissance n'a pas
+  // été renseignée » (faux) avec son formulaire de réécriture. Les deux
+  // conditions sont complémentaires : aucune boucle possible.
+  const user = await getCurrentUser();
+  if (user.birthDate) redirect("/dashboard");
+
+
   return (
     <div className="mx-auto max-w-md space-y-6 px-4 py-6 md:px-8 md:py-10">
       <header>

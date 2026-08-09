@@ -8,6 +8,8 @@ const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset
 // (même avant le premier lancement / setup).
 const LEGAL_PATHS = new Set(["/confidentialite", "/mentions-legales", "/cgu"]);
 const SETUP_PATH = "/setup";
+// SAFE-01 — écran de complétion du profil (date de naissance manquante).
+const COMPLETE_PROFILE_PATH = "/completer-profil";
 const COOKIE_NAME = "piloti.session_token";
 
 function noStoreRedirect(url: URL): NextResponse {
@@ -74,10 +76,23 @@ export async function proxy(request: NextRequest) {
     return noStoreRedirect(new URL("/dashboard", request.url));
   }
 
+  // SAFE-01 — verrou de profil incomplet. Il vit ICI et pas seulement dans le
+  // layout de (app) : en navigation client entre deux routes partageant ce
+  // layout, Next ne le réexécute pas (rendu partiel), donc son `redirect()` ne
+  // part jamais. Constaté en local — un compte sans date de naissance
+  // atteignait /stock en 200 via une requête RSC, là où le chargement direct
+  // renvoyait bien 307. Le proxy, lui, voit chaque requête, fetchs RSC compris.
+  // La valeur vient de la session better-auth (aucun cookieCache configuré,
+  // donc lecture fraîche) : pas de requête DB supplémentaire.
+  const birthDate = (session.user as { birthDate?: unknown }).birthDate;
+  if (!birthDate && pathname !== COMPLETE_PROFILE_PATH) {
+    return noStoreRedirect(new URL(COMPLETE_PROFILE_PATH, request.url));
+  }
+
   // SAFE-01 — transmet le chemin courant en en-tête (pure plumbing, aucune
   // requête DB) : le layout serveur de src/app/(app)/ en a besoin pour savoir
-  // s'il doit rediriger un profil incomplet vers /completer-profil sans créer
-  // de boucle. `headers()` ne donne pas le pathname côté Server Component.
+  // s'il doit épurer le chrome sur l'écran de complétion, et porte le même
+  // verrou en défense en profondeur.
   const forwardedHeaders = new Headers(request.headers);
   forwardedHeaders.set("x-pathname", pathname);
   return NextResponse.next({ request: { headers: forwardedHeaders } });

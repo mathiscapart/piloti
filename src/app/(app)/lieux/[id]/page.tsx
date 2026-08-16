@@ -14,7 +14,6 @@ import { notFound, redirect } from "next/navigation";
 
 import { Stars } from "@/components/camp/Stars";
 import { Button } from "@/components/ui/button";
-import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   CAMP_EQUIPMENT_LABEL,
   type CampEquipment,
@@ -25,6 +24,7 @@ import { getPlaceDetail } from "@/modules/camp/places";
 
 import { ArchivePlaceButton } from "./ArchivePlaceButton";
 import { ReviewForm } from "./ReviewForm";
+import { ReviewList } from "./ReviewList";
 
 const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -61,6 +61,15 @@ export default async function PlaceDetailPage({ params }: PageProps) {
   const canManage =
     can(user, "place.manage") && (isAdmin || place.createdById === user.id);
   const canReview = can(user, "place.review");
+
+  // US-L07 — camps tenus ici, proposés au dépôt d'un avis pour que celui-ci
+  // porte une branche et une année (sans quoi il n'y aurait rien à filtrer).
+  const camps = data.history.map((e) => ({
+    id: e.id,
+    name: e.name,
+    unit: e.unit,
+    year: e.startDate.getUTCFullYear(),
+  }));
 
   const hasCoords = place.latitude != null && place.longitude != null;
   const osmLink = hasCoords
@@ -252,42 +261,13 @@ export default async function PlaceDetailPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {/* Avis */}
+      {/* Avis — US-L07 : filtrables par branche et par année du camp. */}
       <section className="space-y-3">
         <h2 className="text-lg font-bold text-earth">
           Avis ({data.reviewCount})
         </h2>
-        {canReview ? <ReviewForm placeId={place.id} /> : null}
-        {data.reviews.length === 0 ? (
-          <p className="text-sm text-trail">
-            Aucun avis pour le moment. Dépose le premier après ton camp.
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {data.reviews.map((r) => (
-              <li key={r.id} className="space-y-1.5 rounded-2xl bg-snow p-4 shadow-card">
-                <div className="flex items-center gap-2">
-                  {r.author ? (
-                    <UserAvatar
-                      image={r.author.image}
-                      firstName={r.author.firstName}
-                      lastName={r.author.lastName}
-                      className="size-7"
-                    />
-                  ) : null}
-                  <span className="text-sm font-bold text-earth">
-                    {r.author ? `${r.author.firstName} ${r.author.lastName}` : "Chef"}
-                  </span>
-                  <Stars value={r.rating} size="size-3.5" className="ml-auto" />
-                </div>
-                {r.comment ? (
-                  <p className="whitespace-pre-wrap text-sm text-earth">{r.comment}</p>
-                ) : null}
-                <p className="text-xs text-trail">{DATE_FMT.format(r.createdAt)}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+        {canReview ? <ReviewForm placeId={place.id} camps={camps} /> : null}
+        <ReviewList reviews={data.reviews} />
       </section>
 
       {/* US-L05 — historique des modifications (audit) */}

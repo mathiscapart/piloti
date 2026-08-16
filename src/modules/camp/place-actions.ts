@@ -216,6 +216,19 @@ export async function addReview(
   });
   if (!place) return { error: "Lieu introuvable." };
 
+  // US-L07 — l'avis peut être rattaché à un camp, ce qui lui donne sa branche
+  // et son année. Le camp vient du client : on vérifie qu'il existe et qu'il
+  // s'est bien tenu ici, sinon le filtre afficherait des rattachements faux.
+  if (eventId) {
+    const event = await db.event.findUnique({
+      where: { id: eventId },
+      select: { campPlaceId: true },
+    });
+    if (!event || event.campPlaceId !== placeId) {
+      return { error: "Camp invalide pour ce lieu." };
+    }
+  }
+
   const trimmed = comment.trim();
 
   await withAudit(

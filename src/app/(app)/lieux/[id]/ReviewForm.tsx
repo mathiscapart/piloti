@@ -7,14 +7,30 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { UNIT_LABEL, type Unit } from "@/lib/enums";
 import { cn } from "@/lib/utils";
 import { addReview } from "@/modules/camp/place-actions";
 
-export function ReviewForm({ placeId }: { placeId: string }) {
+// US-L07 — camps déjà tenus sur ce lieu, pour rattacher l'avis à l'un d'eux.
+export interface ReviewCampOption {
+  id: string;
+  name: string;
+  unit: string | null;
+  year: number;
+}
+
+export function ReviewForm({
+  placeId,
+  camps,
+}: {
+  placeId: string;
+  camps: ReviewCampOption[];
+}) {
   const router = useRouter();
   const [rating, setRating] = useState(0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState("");
+  const [eventId, setEventId] = useState("");
   const [pending, start] = useTransition();
 
   function submit() {
@@ -23,12 +39,18 @@ export function ReviewForm({ placeId }: { placeId: string }) {
       return;
     }
     start(async () => {
-      const res = await addReview(placeId, String(rating), comment);
+      const res = await addReview(
+        placeId,
+        String(rating),
+        comment,
+        eventId || undefined,
+      );
       if (res.error) toast.error(res.error);
       else {
         toast.success("Avis publié.");
         setRating(0);
         setComment("");
+        setEventId("");
         router.refresh();
       }
     });
@@ -58,6 +80,22 @@ export function ReviewForm({ placeId }: { placeId: string }) {
           </button>
         ))}
       </div>
+      {camps.length > 0 ? (
+        <select
+          value={eventId}
+          onChange={(e) => setEventId(e.target.value)}
+          aria-label="Camp concerné"
+          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-earth"
+        >
+          <option value="">Camp non précisé</option>
+          {camps.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} · {c.year}
+              {c.unit ? ` · ${UNIT_LABEL[c.unit as Unit] ?? c.unit}` : ""}
+            </option>
+          ))}
+        </select>
+      ) : null}
       <Textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}

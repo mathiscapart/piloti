@@ -34,6 +34,21 @@ export async function sendEmail({
   }
 }
 
+// SEC-08 (Vuln 5) — `title`/`body` viennent en bout de chaîne de champs texte
+// libres (nom de profil, message de salon/DM, annonce…) : jamais de confiance
+// à l'appelant, on échappe systématiquement avant interpolation dans le HTML
+// de l'email. `url` est toujours construite côté serveur (absoluteUrl()),
+// jamais échappée : cf. src/app/(app)/lieux/carte/PlacesMap.tsx pour le même
+// pattern côté carte.
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Gabarit HTML minimal aux couleurs SGDF, partagé par les emails de notification.
 export function notificationEmailHtml(opts: {
   title: string;
@@ -44,10 +59,10 @@ export function notificationEmailHtml(opts: {
   const { title, body, url, cta = "Ouvrir Piloti" } = opts;
   return `
     <div style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;">
-      <h2 style="color:#1a4d2e;">${title}</h2>
-      <p style="color:#3a3a3a;font-size:15px;line-height:1.5;">${body}</p>
+      <h2 style="color:#1a4d2e;">${escapeHtml(title)}</h2>
+      <p style="color:#3a3a3a;font-size:15px;line-height:1.5;">${escapeHtml(body)}</p>
       <p style="margin:24px 0;">
-        <a href="${url}" style="background:#1a7a4a;color:#fff;padding:10px 20px;border-radius:9999px;text-decoration:none;font-weight:bold;">${cta}</a>
+        <a href="${url}" style="background:#1a7a4a;color:#fff;padding:10px 20px;border-radius:9999px;text-decoration:none;font-weight:bold;">${escapeHtml(cta)}</a>
       </p>
       <p style="color:#999;font-size:12px;">
         Vous recevez cet email car les notifications par email sont activées sur votre compte Piloti.

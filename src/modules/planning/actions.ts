@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import type { ZodError } from "zod";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
@@ -45,19 +46,36 @@ function parseDates(
   return { start, end };
 }
 
+// `FormData.get()` renvoie `null` (pas `""`) quand le champ est absent du DOM
+// — ex. le <select> campPlaceId n'est pas rendu s'il n'y a aucun lieu de camp.
+// Le schéma Zod n'accepte que `string | undefined` : on normalise ici pour
+// éviter de laisser fuir un message Zod brut ("expected string, received null").
 function readForm(formData: FormData) {
+  const str = (key: string) => formData.get(key)?.toString() ?? "";
   return {
-    name: formData.get("name"),
-    type: formData.get("type"),
-    startDate: formData.get("startDate"),
-    endDate: formData.get("endDate"),
-    unit: formData.get("unit"),
-    location: formData.get("location"),
-    description: formData.get("description"),
-    campPlaceId: formData.get("campPlaceId"),
+    name: str("name"),
+    type: str("type"),
+    startDate: str("startDate"),
+    endDate: str("endDate"),
+    unit: str("unit"),
+    location: str("location"),
+    description: str("description"),
+    campPlaceId: str("campPlaceId"),
     registrationOpen: formData.get("registrationOpen"),
-    registrationDeadline: formData.get("registrationDeadline"),
+    registrationDeadline: str("registrationDeadline"),
   };
+}
+
+// Nos schémas portent un message français pour chaque cas attendu ; si un
+// message Zod technique fuit malgré tout (ex. "Invalid input: expected
+// string, received null"), on retombe sur un message compréhensible plutôt
+// que d'exposer le jargon interne de la validation.
+function formErrorMessage(error: ZodError): string {
+  const message = error.issues[0]?.message;
+  if (!message || /expected .+, received/i.test(message)) {
+    return "Certains champs du formulaire sont invalides. Vérifie les informations saisies.";
+  }
+  return message;
 }
 
 // La date limite d'inscription (datetime-local, optionnelle) suit la même règle
@@ -83,7 +101,7 @@ export async function createEvent(
 
   const parsed = eventSchema.safeParse(readForm(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+    return { error: formErrorMessage(parsed.error) };
   }
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
@@ -140,7 +158,7 @@ export async function updateEvent(
 
   const parsed = eventSchema.safeParse(readForm(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+    return { error: formErrorMessage(parsed.error) };
   }
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
@@ -319,10 +337,14 @@ export async function rsvpEvent(
   );
 
   // Confirmation par email à la personne qui agit (best-effort, après réponse).
+  // SEC-08 (Vuln 5) — plus de <strong> ici : notificationEmailHtml() échappe
+  // désormais systématiquement `body`, et targetName est un nom de profil
+  // (texte libre, potentiellement attaqué) qu'on ne veut pas faire passer
+  // pour du HTML de confiance.
   const label = RSVP_LABEL[response as RsvpResponse];
   const body = targetName
-    ? `Inscription enregistrée pour <strong>${targetName}</strong> : <strong>${label}</strong>.`
-    : `Votre réponse a bien été enregistrée : <strong>${label}</strong>.`;
+    ? `Inscription enregistrée pour ${targetName} : ${label}.`
+    : `Votre réponse a bien été enregistrée : ${label}.`;
   after(() =>
     sendEmail({
       to: user.email,

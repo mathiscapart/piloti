@@ -57,6 +57,12 @@ model User {
   helpNotes      String? // informations complémentaires
   skillsConsent  Boolean @default(false)
 
+  // US-CM-01 — compte géré par un parent, sans connexion propre (utilisé pour
+  // les jeunes Farfadets/Louveteaux : trop jeunes pour un compte autonome).
+  // `true` par défaut pour tous les comptes existants (adultes, jeunes plus
+  // âgés) ; mis à `false` uniquement à la création via `createChildAccount`.
+  canLogin       Boolean @default(true)
+
   // Better-auth relations
   sessions Session[]
   accounts Account[]
@@ -76,6 +82,11 @@ model User {
   conversationsA    Conversation[]    @relation("ConversationUserA")
   conversationsB    Conversation[]    @relation("ConversationUserB")
   sentDirectMessages DirectMessage[]  @relation("DirectMessageSender")
+  // SAFE-02 — signalement & modération de contenu.
+  hiddenMessages       Message[]       @relation("MessageHiddenBy")
+  hiddenDirectMessages DirectMessage[] @relation("DirectMessageHiddenBy")
+  reportsFiled         Report[]        @relation("ReportReporter")
+  reportsModerated     Report[]        @relation("ReportModerator")
   borrowedLoans     Loan[]     @relation("LoanBorrower")
   validatedReturns  Loan[]     @relation("LoanReturnedBy")
   dryingLoans       Loan[]     @relation("LoanDryingContact")
@@ -345,20 +356,26 @@ model AuditLog {
 }
 
 // ----------------------------------------------------------------------------
-// RGPD-02 — Consentement à l'inscription. Append-only : jamais mis à jour ni
-// supprimé (preuve juridique). `type` = SELF (majeur) ou PARENTAL (mineur,
-// attestation du responsable légal). `privacyVersion`/`termsVersion` figent la
-// version des textes acceptés (cf. src/lib/legal/versions.ts).
+// RGPD-02 / US-C08 — Consentement (inscription + droit à l'image). Append-only :
+// jamais mis à jour ni supprimé (preuve juridique / traçabilité) ; le plus
+// récent (`acceptedAt` desc) fait foi comme état courant. `type` = SELF
+// (majeur), PARENTAL (mineur, attestation du responsable légal) ou
+// IMAGE_RIGHTS (droit à l'image, US-C08). `privacyVersion`/`termsVersion`
+// figent la version des textes acceptés (cf. src/lib/legal/versions.ts).
 // ----------------------------------------------------------------------------
 
 model Consent {
   id             String   @id @default(cuid())
   userId         String
-  type           String // ConsentType: SELF | PARENTAL
+  type           String // ConsentType: SELF | PARENTAL | IMAGE_RIGHTS
   privacyVersion String
   termsVersion   String?
   // Attestation parentale (US mineur < 15 ans) : nom du responsable légal.
   guardianName   String?
+  // US-C08 — porte la valeur pour les types non-binaires (ex. IMAGE_RIGHTS :
+  // "OUI" | "NON" | "RESTREINT_INTERNE"). Null pour SELF/PARENTAL, où
+  // l'existence même de la ligne suffit à prouver le consentement.
+  value          String?
   ipAddress      String?
   userAgent      String?
   acceptedAt     DateTime @default(now())
@@ -794,9 +811,15 @@ model Message {
   editedAt    DateTime?
   pinnedAt    DateTime?
   createdAt   DateTime  @default(now())
+  // SAFE-02 — masquage par la modération (soft-hide, jamais de suppression en
+  // dur : garde la trace). Un message masqué disparaît des lectures normales
+  // mais reste visible en file de modération (cf. Report ci-dessous).
+  hiddenAt    DateTime?
+  hiddenById  String?
 
   channel   Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author    User              @relation("MessageAuthor", fields: [authorId], references: [id])
+  hiddenBy  User?             @relation("MessageHiddenBy", fields: [hiddenById], references: [id])
   reactions MessageReaction[]
 
   @@index([channelId])
@@ -984,11 +1007,49 @@ model DirectMessage {
   body           String
   readAt         DateTime?
   createdAt      DateTime  @default(now())
+  // SAFE-02 — masquage par la modération, cf. Message.hiddenAt ci-dessus.
+  hiddenAt       DateTime?
+  hiddenById     String?
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation("DirectMessageSender", fields: [senderId], references: [id])
+  hiddenBy     User?        @relation("DirectMessageHiddenBy", fields: [hiddenById], references: [id])
 
   @@index([conversationId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SAFE-02 — signalement & modération de contenu. Polymorphe (`targetType` +
+// `targetId`) car Message (salon) et DirectMessage n'ont aucun parent commun.
+// La modération masque le contenu visé (Message.hiddenAt / DirectMessage.hiddenAt)
+// plutôt que de le supprimer, pour garder la trace ; le signalement lui-même
+// trace qui a signalé, qui a traité, et l'issue (résolu / rejeté).
+// ─────────────────────────────────────────────────────────────────────────
+
+model Report {
+  id          String    @id @default(cuid())
+  targetType  String // ReportTargetType: CHANNEL_MESSAGE | DIRECT_MESSAGE
+  targetId    String // Message.id ou DirectMessage.id selon targetType
+  reporterId  String
+  reason      String?
+  status      String    @default("PENDING") // ReportStatus: PENDING | RESOLVED | DISMISSED
+  moderatorId String?
+  resolution  String?
+  createdAt   DateTime  @default(now())
+  resolvedAt  DateTime?
+  // SAFE-02 (routage) — unité (Unit) de l'auteur du message signalé, figée à la
+  // création. Dénormalisée pour router/filtrer la file sans re-résoudre l'auteur
+  // à chaque lecture : un CHEF ne voit/traite que les signalements de son unité,
+  // l'ADMIN voit tout. Null si l'auteur n'a pas d'unité renseignée (ex. ADULTES).
+  concernedUnit String?
+
+  reporter  User  @relation("ReportReporter", fields: [reporterId], references: [id])
+  moderator User? @relation("ReportModerator", fields: [moderatorId], references: [id])
+
+  @@index([status])
+  @@index([targetType, targetId])
+  @@index([reporterId])
+  @@index([concernedUnit])
 }
 
 // ─────────────────────────────────────────────────────────────────────────

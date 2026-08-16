@@ -64,11 +64,8 @@ export function EventPaymentRow(props: PaymentRowVM) {
             {formatEuros(props.paidCents)} / {formatEuros(props.priceCents)}
           </p>
         </div>
-        {props.bracketName ? (
-          <span className="shrink-0 rounded-full bg-forest-soft px-2 py-0.5 text-xs font-bold text-forest-ink">
-            {props.bracketName}
-          </span>
-        ) : null}
+        {/* QF masqué — décision groupe, cf. DECISIONS.md : badge de tranche
+            de quotient familial retiré du rendu (prop conservée). */}
         {props.provisional ? (
           <span className="shrink-0 rounded-full bg-stone px-2 py-0.5 text-xs font-bold text-earth">
             Provisoire

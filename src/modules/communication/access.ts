@@ -33,6 +33,13 @@ export function canAccessChannel(
   user: AccessUser,
   channel: ChannelAccess,
 ): boolean {
+  // SEC-08 (Vuln 3) — défense en profondeur : `getCurrentUser()` bloque déjà
+  // les comptes non-ACTIVE, mais ce module est la seule ligne de défense pour
+  // tout appelant qui construirait `user` autrement (ex. liste de membres
+  // d'un salon, cf. plus bas). `status` était déclaré dans `AccessUser` sans
+  // jamais être lu — fail-closed si absent (jamais implicitement autorisé).
+  if (user.status !== "ACTIVE") return false;
+
   const roles = effectiveRoles(user);
   if (roles.includes("ADMIN")) return true;
 
@@ -53,6 +60,9 @@ export function canWriteChannel(
   user: AccessUser,
   channel: ChannelAccess,
 ): boolean {
+  // SEC-08 (Vuln 3) — le court-circuit ADMIN ci-dessous appelle
+  // `canAccessChannel` : sans ce garde, un ADMIN suspendu garderait l'écriture.
+  if (user.status !== "ACTIVE") return false;
   if (effectiveRoles(user).includes("ADMIN")) return true;
   return canAccessChannel(user, channel) && !channel.archived;
 }

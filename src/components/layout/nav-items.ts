@@ -17,7 +17,7 @@ import {
   Package,
   PieChart,
   PiggyBank,
-  Scale,
+  ShieldAlert,
   Tent,
   Truck,
   UserPlus,
@@ -90,7 +90,9 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { href: "/finances/tableau-de-bord", label: "Tableau de bord", icon: PieChart, requires: "campaign.view" },
       { href: "/finances/cotisations", label: "Cotisations", icon: CreditCard, requires: "campaign.view" },
-      { href: "/finances/tranches", label: "Tranches QF", icon: Scale, requires: "campaign.view" },
+      // Tranches QF masquées — décision groupe (pas d'exposition/collecte du
+      // quotient familial en UI pour l'instant), cf. DECISIONS.md. Code et
+      // schéma conservés (`/finances/tranches` redirige désormais).
       { href: "/finances/notes", label: "Notes de frais", icon: Wallet, requires: "expense.view" },
       { href: "/finances/caisses", label: "Caisses", icon: PiggyBank, requires: "campaign.view" },
       { href: "/finances/bilan", label: "Bilan annuel", icon: FileText, requires: "campaign.view" },
@@ -107,6 +109,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "user.manage" },
       { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "category.manage" },
       { href: "/admin/audit", label: "Journal d'audit", icon: History, requires: "audit.view" },
+      // SAFE-02 — file de signalements : CHEF + RG (lecture ; traitement CHEF).
+      { href: "/moderation", label: "Modération", icon: ShieldAlert, requires: "moderation.view" },
     ],
   },
 ];

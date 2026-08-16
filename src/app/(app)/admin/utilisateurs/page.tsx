@@ -1,20 +1,13 @@
-import { Lock, Users } from "lucide-react";
+import { Lock, Pencil, UserPlus, Users } from "lucide-react";
+import Link from "next/link";
 
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ROLE_LABEL, type Role } from "@/lib/enums";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import { listManageableUsers } from "@/modules/admin/queries";
-
-import {
-  ChangePasswordDialog,
-  DeleteUserButton,
-  ReactivateButton,
-  RolesEditor,
-  SuspendButton,
-  UnitEditor,
-} from "./user-actions";
 
 // US-29 — parse le JSON des rôles additionnels de façon défensive.
 function parseRoles(raw: unknown): string[] {
@@ -45,16 +38,26 @@ export default async function AdminUtilisateursPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8 md:py-10">
-      <header>
-        <p className="text-xs font-bold uppercase tracking-wider text-trail">
-          Administration
-        </p>
-        <h1 className="text-3xl font-black text-earth md:text-4xl">
-          Utilisateurs
-        </h1>
-        <p className="text-trail">
-          {users.length} compte{users.length > 1 ? "s" : ""} actif ou suspendu
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-trail">
+            Administration
+          </p>
+          <h1 className="text-3xl font-black text-earth md:text-4xl">
+            Utilisateurs
+          </h1>
+          <p className="text-trail">
+            {users.length} compte{users.length > 1 ? "s" : ""} actif ou suspendu
+          </p>
+        </div>
+        {can(currentUser, "user.approve") ? (
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/utilisateurs/nouveau-jeune">
+              <UserPlus className="size-4" />
+              Nouveau compte enfant
+            </Link>
+          </Button>
+        ) : null}
       </header>
 
       {users.length === 0 ? (
@@ -92,7 +95,13 @@ export default async function AdminUtilisateursPage() {
                           </span>
                         ) : null}
                       </p>
-                      <p className="text-xs text-trail">{u.email}</p>
+                      {u.canLogin === false ? (
+                        <span className="inline-flex items-center rounded-full bg-sand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-trail">
+                          Compte sans connexion (parent)
+                        </span>
+                      ) : (
+                        <p className="text-xs text-trail">{u.email}</p>
+                      )}
                       {u.unit ? <p className="text-xs text-trail">{u.unit}</p> : null}
                     </div>
                     <span
@@ -104,37 +113,22 @@ export default async function AdminUtilisateursPage() {
                       {suspended ? "Suspendu" : "Actif"}
                     </span>
                   </div>
-                  {canManage ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <RolesEditor
-                        userId={u.id}
-                        currentRoles={roles}
-                        allowPrivileged={isAdmin}
-                      />
-                      <UnitEditor userId={u.id} currentUnit={u.unit} />
-                      {!isSelf && (
-                        suspended ? (
-                          <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                        ) : (
-                          <SuspendButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                        )
-                      )}
-                      {!isSelf && (
-                        <ChangePasswordDialog userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                      )}
-                      {!isSelf && (
-                        <DeleteUserButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <p className="text-xs text-trail">{roleLabels(roles)}</p>
+                  <div className="space-y-1">
+                    <p className="text-xs text-trail">{roleLabels(roles)}</p>
+                    {canManage ? (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/admin/utilisateurs/${u.id}/modifier`}>
+                          <Pencil className="size-4" />
+                          Modifier
+                        </Link>
+                      </Button>
+                    ) : (
                       <p className="inline-flex items-center gap-1 rounded-full bg-sand px-2 py-0.5 text-[11px] font-bold text-trail">
                         <Lock className="size-3" />
                         Compte protégé — réservé à l&apos;administrateur
                       </p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -173,25 +167,19 @@ export default async function AdminUtilisateursPage() {
                             </span>
                           ) : null}
                         </p>
-                        <p className="text-xs text-trail">{u.email}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        {canManage ? (
-                          <UnitEditor userId={u.id} currentUnit={u.unit} />
+                        {u.canLogin === false ? (
+                          <span className="inline-flex items-center rounded-full bg-sand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-trail">
+                            Compte sans connexion (parent)
+                          </span>
                         ) : (
-                          <span className="text-trail">{u.unit ?? "—"}</span>
+                          <p className="text-xs text-trail">{u.email}</p>
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {canManage ? (
-                          <RolesEditor
-                            userId={u.id}
-                            currentRoles={roles}
-                            allowPrivileged={isAdmin}
-                          />
-                        ) : (
-                          <span className="text-trail">{roleLabels(roles)}</span>
-                        )}
+                        <span className="text-trail">{u.unit ?? "—"}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-trail">{roleLabels(roles)}</span>
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -210,18 +198,13 @@ export default async function AdminUtilisateursPage() {
                               <Lock className="size-3" />
                               Protégé
                             </span>
-                          ) : !isSelf ? (
-                            <>
-                              {suspended ? (
-                                <ReactivateButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                              ) : (
-                                <SuspendButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                              )}
-                              <ChangePasswordDialog userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                              <DeleteUserButton userId={u.id} fullName={`${u.firstName} ${u.lastName}`} />
-                            </>
                           ) : (
-                            <span className="text-xs text-trail">—</span>
+                            <Button asChild variant="outline" size="sm">
+                              <Link href={`/admin/utilisateurs/${u.id}/modifier`}>
+                                <Pencil className="size-4" />
+                                Modifier
+                              </Link>
+                            </Button>
                           )}
                         </div>
                       </td>

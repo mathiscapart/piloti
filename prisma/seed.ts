@@ -16,6 +16,12 @@ interface SeedUserInput {
   lastName: string;
   role: Role;
   status: AccountStatus;
+  // SAFE-01 (D-023) — obligatoire : un compte ACTIVE sans date de naissance
+  // est traité comme une anomalie de données, pas comme un profil à compléter.
+  // Le proxy refuse la session et renvoie sur /login (il n'existe plus d'écran
+  // de complétion) : sans date ici, aucun compte seedé n'est utilisable en
+  // développement.
+  birthDate: Date;
   unit?: Unit;
   phone?: string;
 }
@@ -32,7 +38,6 @@ async function seedUser(input: SeedUserInput) {
       name: `${input.firstName} ${input.lastName}`,
       firstName: input.firstName,
       lastName: input.lastName,
-      unit: input.unit,
       phone: input.phone,
     },
   });
@@ -44,6 +49,11 @@ async function seedUser(input: SeedUserInput) {
       roles: JSON.stringify([input.role]),
       status: input.status,
       emailVerified: input.status === "ACTIVE",
+      // SEC-08 (Vuln 2) — `unit` est `input: false` côté better-auth.
+      unit: input.unit,
+      // SAFE-01 — `birthDate` est `input: false` également (elle ne doit jamais
+      // être settable par le titulaire) : elle s'écrit ici, après le signup.
+      birthDate: input.birthDate,
     },
   });
 }
@@ -68,6 +78,7 @@ async function main() {
     password: "PilotiAdmin2024!",
     firstName: "Admin",
     lastName: "Piloti",
+    birthDate: new Date("1985-02-14"),
     role: "ADMIN",
     status: "ACTIVE",
   });
@@ -77,6 +88,7 @@ async function main() {
     password: "PilotiChef2024!",
     firstName: "Thomas",
     lastName: "Martin",
+    birthDate: new Date("1990-03-12"),
     role: "CHEF",
     status: "ACTIVE",
     unit: "PIONNIERS",
@@ -88,6 +100,7 @@ async function main() {
     password: "PilotiChef2024!",
     firstName: "Julie",
     lastName: "Bernard",
+    birthDate: new Date("1992-07-30"),
     role: "CHEF",
     status: "ACTIVE",
     unit: "SCOUTS",
@@ -99,6 +112,7 @@ async function main() {
     password: "PilotiScout2024!",
     firstName: "Paul",
     lastName: "Durand",
+    birthDate: new Date("2004-11-05"),
     role: "CHEF",
     status: "PENDING",
     unit: "COMPAGNONS",

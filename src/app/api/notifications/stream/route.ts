@@ -12,6 +12,12 @@ export async function GET(req: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
 
+  // SEC-08 (Vuln 4) — cohérence avec /api/upload et
+  // /api/channels/[id]/stream, qui vérifient tous deux le statut du compte
+  // en plus de la session.
+  const status = (session.user as { status?: string }).status;
+  if (status !== "ACTIVE") return new Response("Forbidden", { status: 403 });
+
   const userId = session.user.id;
   const encoder = new TextEncoder();
   let unsubscribe = () => {};

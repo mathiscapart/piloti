@@ -3,6 +3,7 @@
 import { unlink } from "fs/promises";
 import { join } from "path";
 
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -11,9 +12,11 @@ import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { birthDateSchema } from "@/lib/legal/age";
+import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { can, canAssignRole, type Action } from "@/lib/permissions";
-import { ROLES, UNITS } from "@/lib/enums";
+import { NO_LOGIN_UNITS, ROLES, UNITS } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -47,6 +50,14 @@ const unitSchema = z.object({
     .transform((v) => (v === "" ? null : v)),
 });
 
+// SAFE-01 — correction d'une date de naissance. C'est le SEUL chemin de
+// modification qui existe : la date est posée à la création du compte, et
+// l'intéressé ne peut jamais la réécrire lui-même.
+const birthDateAdminSchema = z.object({
+  userId: z.string().min(1),
+  birthDate: birthDateSchema,
+});
+
 // US-26 — profil parent enrichi (annuaire des compétences).
 const optionalText = z
   .string()
@@ -68,6 +79,29 @@ const memberProfileSchema = z.object({
 const userIdSchema = z.object({
   userId: z.string().min(1),
 });
+
+// US-CM-01 — création d'un compte enfant (Farfadets/Louveteaux) sans
+// connexion propre, avec attestation de consentement parental reçue hors
+// ligne (formulaire papier existant, non tracé jusqu'ici pour ce flux).
+const childAccountSchema = z.object({
+  firstName: z.string().trim().min(1, "Prénom requis."),
+  lastName: z.string().trim().min(1, "Nom requis."),
+  unit: z.enum(NO_LOGIN_UNITS, "Branche invalide : Farfadets ou Louveteaux uniquement."),
+  birthDate: birthDateSchema,
+  // US-CM-01 (correctif PO) — sélectionné parmi les comptes PARENT existants,
+  // jamais saisi en texte libre : élimine les fautes de frappe sur un
+  // enregistrement légal. Vérifié en base dans la transaction ci-dessous.
+  guardianUserId: z.string().trim().min(1, "Le responsable légal est requis."),
+  attestationDate: z.coerce
+    .date("Date de l'attestation invalide.")
+    .min(new Date("1900-01-01"), "Date de l'attestation invalide.")
+    .max(new Date(), "La date de l'attestation ne peut pas être dans le futur."),
+});
+
+// US-CM-01 — sentinelle pour faire échouer/rollback la transaction de
+// createChildAccount sans écrire d'AuditLog quand le parent sélectionné
+// n'est plus valide (cf. plus bas).
+class InvalidGuardianError extends Error {}
 
 // better-auth v1.6 doesn't expose a public password-hashing API.
 // We access the internal $context to reuse the same scrypt hasher used at sign-up,
@@ -155,6 +189,19 @@ export async function approveUser(
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
+  // SEC-08 (Vuln 1) — approveUser réécrit status + roles sans jamais vérifier
+  // QUI est la cible : sans ces deux gardes, un SECRÉTAIRE peut passer l'id
+  // d'un compte ADMIN/RG déjà actif et le rétrograder en SCOUT.
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { status: true },
+  });
+  if (target?.status !== "PENDING") {
+    return { error: "Cette inscription n'est plus en attente de validation." };
+  }
+
   const roles = [...new Set(parsed.data.roles)];
   const escalation = assertAssignable(actor, roles);
   if (escalation) return escalation;
@@ -202,6 +249,19 @@ export async function rejectUser(
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
 
+  // SEC-08 (Vuln 1) — même garde qu'approveUser : rejectUser passe le compte
+  // cible en REJECTED (déconnexion immédiate, cf. proxy.ts) sans vérifier qui
+  // est la cible ni qu'elle est bien une inscription en attente.
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { status: true },
+  });
+  if (target?.status !== "PENDING") {
+    return { error: "Cette inscription n'est plus en attente de validation." };
+  }
+
   await withAudit(
     (tx) =>
       tx.user.update({
@@ -220,6 +280,10 @@ export async function rejectUser(
       },
     },
   );
+
+  // SEC-08 (Vuln 4) — même geste que suspendUser : révoque toute session
+  // active immédiatement plutôt que d'attendre son expiration naturelle.
+  await db.session.deleteMany({ where: { userId: parsed.data.userId } });
 
   revalidatePath("/admin/inscriptions");
   return { error: null };
@@ -338,6 +402,56 @@ export async function setUserUnit(
   );
 
   revalidatePath("/admin/utilisateurs");
+  return { error: null };
+}
+
+// SAFE-01 — corrige la date de naissance d'un compte. La date pilote la
+// protection des mineurs (`dm-policy.ts`) : elle n'est plus modifiable par son
+// titulaire, donc une faute de frappe à l'inscription exige une intervention
+// d'administrateur. Les métadonnées conservent l'ancienne ET la nouvelle
+// valeur, sans quoi la trace ne dirait pas ce qui a changé.
+export async function setUserBirthDate(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
+
+  const parsed = birthDateAdminSchema.safeParse({
+    userId: formData.get("userId"),
+    birthDate: formData.get("birthDate"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { birthDate: true },
+  });
+  if (!target) return { error: "Compte introuvable." };
+
+  await withAudit(
+    (tx) =>
+      tx.user.update({
+        where: { id: parsed.data.userId },
+        data: { birthDate: parsed.data.birthDate },
+      }),
+    {
+      action: "USER_BIRTHDATE_CHANGED",
+      userId: actor.id,
+      metadata: {
+        targetUserId: parsed.data.userId,
+        from: target.birthDate?.toISOString() ?? null,
+        to: parsed.data.birthDate.toISOString(),
+      },
+    },
+  );
+
+  revalidatePath("/admin/utilisateurs");
+  revalidatePath(`/membres/${parsed.data.userId}`);
   return { error: null };
 }
 
@@ -537,6 +651,19 @@ export async function changeUserPassword(
   const guard = await assertCanManageTarget(actor, parsed.data.userId);
   if (guard) return guard;
 
+  // US-CM-01 — un compte enfant (canLogin: false) n'a jamais de mot de passe
+  // fonctionnel : refuse d'ouvrir par erreur une vraie capacité de connexion.
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { canLogin: true },
+  });
+  if (target?.canLogin === false) {
+    return {
+      error:
+        "Ce compte est un compte enfant sans connexion : impossible de lui définir un mot de passe.",
+    };
+  }
+
   const hashed = await hashWithBetterAuth(parsed.data.password);
 
   await withAudit(
@@ -552,5 +679,212 @@ export async function changeUserPassword(
     },
   );
 
+  return { error: null };
+}
+
+const PLACEHOLDER_EMAIL_SUFFIX = "@piloti.invalid";
+
+// US-CM-01 (évolution) — édition complète d'un compte par l'admin/secrétaire.
+// Cas d'usage clé : un compte enfant (canLogin: false) grandit et passe en
+// branche Scouts-Guides ou au-dessus → on lui renseigne une vraie adresse
+// email ici, ce qui bascule AUTOMATIQUEMENT canLogin à true (pas de case à
+// cocher séparée : c'est le renseignement d'une vraie adresse qui décide).
+const updateAccountSchema = z.object({
+  userId: z.string().min(1),
+  firstName: z.string().trim().min(1, "Prénom requis."),
+  lastName: z.string().trim().min(1, "Nom requis."),
+  email: z.string().trim().email("Email invalide."),
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null)),
+});
+
+export async function updateUserAccount(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
+
+  const parsed = updateAccountSchema.safeParse({
+    userId: formData.get("userId"),
+    firstName: formData.get("firstName"),
+    lastName: formData.get("lastName"),
+    email: formData.get("email"),
+    phone: formData.get("phone"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+
+  const { userId, firstName, lastName, email, phone } = parsed.data;
+
+  try {
+    await withAudit(
+      async (tx) => {
+        const target = await tx.user.findUnique({
+          where: { id: userId },
+          select: { canLogin: true, email: true },
+        });
+        if (!target) throw new Error("Utilisateur introuvable.");
+
+        const emailChanged = target.email !== email;
+        // US-CM-01 — un compte enfant devient connectable dès qu'on lui
+        // renseigne une vraie adresse (qui ne correspond plus au pattern
+        // placeholder), sans case à cocher séparée.
+        const canLoginEnabled =
+          target.canLogin === false && !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX);
+
+        return {
+          user: await tx.user.update({
+            where: { id: userId },
+            data: {
+              firstName,
+              lastName,
+              name: `${firstName} ${lastName}`,
+              email,
+              phone,
+              ...(emailChanged ? { emailVerified: false } : {}),
+              ...(canLoginEnabled ? { canLogin: true } : {}),
+            },
+          }),
+          canLoginEnabled,
+        };
+      },
+      ({ canLoginEnabled }) => ({
+        action: "USER_ACCOUNT_UPDATED",
+        userId: actor.id,
+        metadata: {
+          targetUserId: userId,
+          fields: ["firstName", "lastName", "email", "phone"],
+          canLoginEnabled,
+        },
+      }),
+    );
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      return { error: "Cette adresse email est déjà utilisée." };
+    }
+    throw e;
+  }
+
+  revalidatePath("/admin/utilisateurs");
+  revalidatePath("/membres");
+  revalidatePath(`/membres/${userId}`);
+  return { error: null };
+}
+
+// ----------------------------------------------------------------------------
+// /admin/utilisateurs/nouveau-jeune (US-CM-01)
+// ----------------------------------------------------------------------------
+
+// US-CM-01 — crée un compte « enfant » (Farfadets/Louveteaux) sans connexion
+// propre, rattaché dans la foulée au compte PARENT sélectionné (FamilyLink) :
+// d'autres parents restent rattachables ensuite depuis la fiche membre.
+// Réplique le pattern de register/actions.ts (User + Consent + FamilyLink
+// dans la même transaction withAudit), mais sans passer par
+// auth.api.signUpEmail (aucun mot de passe : le compte ne se connecte jamais).
+export async function createChildAccount(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await ensureCan("user.approve");
+  if ("error" in actor) return actor;
+
+  const parsed = childAccountSchema.safeParse({
+    firstName: formData.get("firstName"),
+    lastName: formData.get("lastName"),
+    unit: formData.get("unit"),
+    birthDate: formData.get("birthDate"),
+    guardianUserId: formData.get("guardianUserId"),
+    attestationDate: formData.get("attestationDate"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+
+  const { firstName, lastName, unit, birthDate, guardianUserId, attestationDate } =
+    parsed.data;
+  // Email placeholder, jamais utilisé pour l'authentification (le compte n'a
+  // pas de credential : canLogin: false + aucun Account créé).
+  const placeholderEmail = `enfant-${crypto.randomUUID()}${PLACEHOLDER_EMAIL_SUFFIX}`;
+
+  try {
+    await withAudit(
+      async (tx) => {
+        // Ne jamais faire confiance à guardianUserId : vérifie dans la
+        // transaction que c'est bien un compte PARENT actif existant, et
+        // dérive le nom stocké dans Consent depuis la base (jamais de saisie
+        // libre). Rejette en levant une erreur : la transaction (et donc
+        // l'AuditLog) est annulée intégralement, rien n'est écrit.
+        const guardian = await tx.user.findUnique({
+          where: { id: guardianUserId },
+          select: { id: true, firstName: true, lastName: true, roles: true, status: true },
+        });
+        if (
+          !guardian ||
+          guardian.status !== "ACTIVE" ||
+          !parseRoles(guardian.roles).includes("PARENT")
+        ) {
+          throw new InvalidGuardianError();
+        }
+
+        const user = await tx.user.create({
+          data: {
+            email: placeholderEmail,
+            emailVerified: false,
+            name: `${firstName} ${lastName}`,
+            firstName,
+            lastName,
+            birthDate,
+            role: "SCOUT",
+            roles: JSON.stringify(["SCOUT"]),
+            status: "ACTIVE",
+            unit,
+            canLogin: false,
+          },
+        });
+        const consent = await tx.consent.create({
+          data: {
+            userId: user.id,
+            type: "PARENTAL",
+            privacyVersion: PRIVACY_VERSION,
+            guardianName: `${guardian.firstName} ${guardian.lastName}`,
+            acceptedAt: attestationDate,
+          },
+        });
+        const familyLink = await tx.familyLink.create({
+          data: { parentId: guardian.id, childId: user.id },
+        });
+        return { user, consent, familyLink, guardian };
+      },
+      ({ user, consent, familyLink, guardian }) => ({
+        action: "USER_CHILD_ACCOUNT_CREATED",
+        userId: actor.id,
+        metadata: {
+          targetUserId: user.id,
+          unit,
+          consentId: consent.id,
+          familyLinkId: familyLink.id,
+          guardianName: `${guardian.firstName} ${guardian.lastName}`,
+        },
+      }),
+    );
+  } catch (e) {
+    if (e instanceof InvalidGuardianError) {
+      return {
+        error:
+          "Le responsable légal sélectionné est introuvable ou n'est plus un parent actif.",
+      };
+    }
+    throw e;
+  }
+
+  revalidatePath("/admin/utilisateurs");
+  revalidatePath("/membres");
   return { error: null };
 }

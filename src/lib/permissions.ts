@@ -40,12 +40,16 @@ export const ACTIONS = [
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "member.view",
   "member.directory", // US-26 — annuaire des compétences parents (RG)
+  "member.image_rights.manage", // US-C08 — définir le statut de droit à l'image (RG + SEC)
   // Dons
   "donation.create",
   "donation.view", // consulter les dons (RESPONSABLE_MATERIEL + RG lecture seule)
   "donation.review",
   // Communication
   "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
+  // SAFE-02 — signalement & modération de contenu (salons + messagerie privée).
+  "moderation.view", // consulter la file de modération (CHEF + RG, lecture)
+  "moderation.review", // traiter la file : masquer un message, résoudre/rejeter
   // Planning & événements (US-P01/P02/P03)
   "event.view", // consulter le calendrier (tout utilisateur actif)
   "event.manage", // créer / modifier / supprimer un événement (encadrants)
@@ -75,6 +79,9 @@ export const ACTIONS = [
 export type Action = (typeof ACTIONS)[number];
 
 interface AuthCtx {
+  // Optionnel : uniquement utilisé pour tracer un `roles` corrompu (cf.
+  // `effectiveRoles`) ; absent → le log se contente d'un contexte partiel.
+  id?: string;
   role: Role | string;
   // Rôles additionnels : tableau, ou chaîne JSON (telle que stockée en base).
   roles?: string[] | string | null;
@@ -130,12 +137,24 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "member.view": [CHEF, RG, SEC, TRES],
   // Annuaire des compétences : RG + SECRÉTAIRE (US-32) ; ADMIN superuser.
   "member.directory": [RG, SEC],
+  // US-C08 — déroge volontairement à la convention « RG = lecture seule »
+  // documentée en tête de fichier : comme `moderation.review` (protection des
+  // mineurs), le droit à l'image est un motif de conformité/protection, pas
+  // une gestion opérationnelle courante — le RG a besoin d'y écrire, pas
+  // seulement d'en consulter la valeur. SEC gère aussi (dossiers admin des
+  // membres) ; ADMIN superuser.
+  "member.image_rights.manage": [RG, SEC],
   // Dons — MAT accepte/refuse ; RG = lecture seule sur tout (consulte les dons) ; ADMIN.
   "donation.create": [], // géré par ANY_ACTIVE
   "donation.view": [MAT, RG],
   "donation.review": [MAT],
   // Communication — publier une annonce / diffusion urgente : encadrants.
   "announcement.publish": [CHEF, RG],
+  // SAFE-02 — la file de modération se consulte ET se traite par les chefs et le
+  // responsable de groupe (masquer, résoudre, rejeter). Un CHEF est limité à son
+  // unité (cf. canModerateReport) ; RG et ADMIN voient et traitent toutes les unités.
+  "moderation.view": [CHEF, RG],
+  "moderation.review": [CHEF, RG],
   // Planning — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
   "event.view": [],
   "event.manage": [CHEF],
@@ -183,7 +202,14 @@ export function effectiveRoles(user: Partial<AuthCtx>): string[] {
     try {
       const parsed = JSON.parse(user.roles);
       if (Array.isArray(parsed)) return parsed.map(String);
-    } catch {
+    } catch (err) {
+      // Fail-closed : on retourne bien [] (aucun droit), mais on trace
+      // l'anomalie — un `roles` corrompu prive silencieusement un compte de
+      // ses droits, ce qui doit rester visible pour l'admin/le support.
+      console.warn(
+        `[permissions] effectiveRoles: JSON "roles" invalide pour l'utilisateur ${user.id ?? "?"} — fail-closed, aucun rôle accordé.`,
+        err,
+      );
       return [];
     }
   }

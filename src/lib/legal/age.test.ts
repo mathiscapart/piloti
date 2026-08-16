@@ -7,7 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DIRECT_MESSAGE_MIN_AGE,
   MAJORITY_AGE,
+  MAX_PLAUSIBLE_AGE,
+  MIN_PLAUSIBLE_AGE,
   PARENTAL_CONSENT_AGE,
+  birthDateSchema,
   canUseDirectMessages,
   computeAge,
   isAdult,
@@ -165,6 +168,67 @@ describe("canUseDirectMessages (SAFE-01, seuil 15 ans)", () => {
     expect(canUseDirectMessages(undefined)).toBe(false);
     expect(canUseDirectMessages("")).toBe(false);
     expect(canUseDirectMessages("pas-une-date")).toBe(false);
+  });
+});
+
+// SAFE-01 — la date est déclarative, mais elle doit rester crédible : « 1900 »
+// suffisait à un jeune pour se déclarer majeur et débloquer la messagerie
+// privée, et une date à quelques mois passait sans broncher.
+describe("birthDateSchema — bornes de plausibilité", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  it("expose les bornes attendues", () => {
+    expect(MIN_PLAUSIBLE_AGE).toBe(5);
+    expect(MAX_PLAUSIBLE_AGE).toBe(110);
+  });
+
+  it("accepte un âge plausible (jeune comme adulte)", () => {
+    setToday(2026, 8, 8);
+    expect(birthDateSchema.safeParse(iso(2013, 6, 1)).success).toBe(true);
+    expect(birthDateSchema.safeParse(iso(1985, 4, 12)).success).toBe(true);
+  });
+
+  it("accepte exactement les bornes", () => {
+    setToday(2026, 8, 8);
+    expect(birthDateSchema.safeParse(iso(2021, 8, 8)).success).toBe(true); // 5 ans pile
+    expect(birthDateSchema.safeParse(iso(1916, 8, 8)).success).toBe(true); // 110 ans pile
+  });
+
+  it("rejette un âge sous la borne basse (saisie à quelques mois)", () => {
+    setToday(2026, 8, 8);
+    expect(birthDateSchema.safeParse(iso(2026, 4, 6)).success).toBe(false);
+    expect(birthDateSchema.safeParse(iso(2021, 8, 9)).success).toBe(false); // 4 ans
+  });
+
+  it("rejette un âge au-dessus de la borne haute — le sens dangereux", () => {
+    setToday(2026, 8, 8);
+    // Sans cette borne, un mineur se déclarait majeur et débloquait les DM.
+    expect(birthDateSchema.safeParse(iso(1900, 1, 1)).success).toBe(false);
+    expect(birthDateSchema.safeParse(iso(1915, 8, 8)).success).toBe(false); // 111 ans
+  });
+
+  it("rejette une date dans le futur", () => {
+    setToday(2026, 8, 8);
+    expect(birthDateSchema.safeParse(iso(2030, 1, 1)).success).toBe(false);
+  });
+
+  it("rejette une date invalide", () => {
+    expect(birthDateSchema.safeParse("pas-une-date").success).toBe(false);
+    expect(birthDateSchema.safeParse("").success).toBe(false);
+  });
+
+  // Le contrôle « pas dans le futur » est un `refine`, donc évalué à chaque
+  // validation : un `.max(new Date())` aurait figé « maintenant » au
+  // chargement du module et dérivé sur un serveur qui tourne longtemps.
+  it("évalue « aujourd'hui » à la validation, pas au chargement du module", () => {
+    setToday(2026, 8, 8);
+    expect(birthDateSchema.safeParse(iso(2021, 8, 8)).success).toBe(true);
+    // Dix ans plus tard, la même date de naissance reste valide (15 ans)…
+    setToday(2036, 8, 8);
+    expect(birthDateSchema.safeParse(iso(2021, 8, 8)).success).toBe(true);
+    // …et une date née entre-temps devient acceptable, ce qu'une borne figée
+    // au chargement du module aurait continué de refuser comme « future ».
+    expect(birthDateSchema.safeParse(iso(2030, 1, 1)).success).toBe(true);
   });
 });
 

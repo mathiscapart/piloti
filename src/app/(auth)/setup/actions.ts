@@ -73,7 +73,11 @@ export async function setupAction(
     where: { email: parsed.data.email },
     data: {
       status: "ACTIVE",
-      role: "ADMIN",
+      // US-32 — `roles` est la source de vérité des permissions (`effectiveRoles`).
+      // L'oublier ici donnait un premier admin sans aucun droit, et sans recours :
+      // seul un compte ayant "admin.access" peut attribuer des rôles.
+      roles: JSON.stringify(["ADMIN"]),
+      role: "ADMIN", // miroir d'affichage (déprécié)
       emailVerified: true,
       birthDate: parsed.data.birthDate,
     },

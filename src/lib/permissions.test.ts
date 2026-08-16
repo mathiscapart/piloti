@@ -84,6 +84,20 @@ describe("can — ADMIN superutilisateur", () => {
       can({ role: "PARENT", roles: ["ADMIN"], status: "ACTIVE" }, "admin.access"),
     ).toBe(true);
   });
+
+  it("n'accorde AUCUN droit à un `role` miroir ADMIN dont `roles` est vide", () => {
+    // Cas réel du premier déploiement en prod : `/setup` écrivait le miroir
+    // `role: "ADMIN"` sans alimenter `roles`, laissant un administrateur
+    // affiché comme tel mais sans le moindre droit — et sans recours, puisque
+    // seul "admin.access" permet d'attribuer des rôles. Le miroir ne doit
+    // jamais servir de repli : la lecture reste fail-closed.
+    const mirrorOnly = { role: "ADMIN", roles: "[]", status: "ACTIVE" as const };
+    expect(effectiveRoles(mirrorOnly)).toEqual([]);
+    expect(can(mirrorOnly, "admin.access")).toBe(false);
+    expect(can(mirrorOnly, "user.manage")).toBe(false);
+    // ...tout en gardant les actions ouvertes à tout compte actif.
+    expect(can(mirrorOnly, "event.view")).toBe(true);
+  });
 });
 
 describe("can — ANY_ACTIVE (ouvert à tout utilisateur actif)", () => {

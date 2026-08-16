@@ -173,17 +173,37 @@ powershell -File scripts/deploy.ps1 -Environment staging
 powershell -File scripts/deploy.ps1 -Environment prod
 ```
 
-Le script est idempotent : le relancer sans nouveau commit ne casse rien (le
-`git reset --hard` ne change rien, et `docker compose build`/`up -d` ne
+Le script est idempotent **côté code** : le relancer sans nouveau commit ne casse
+rien (le `git reset --hard` ne change rien, et `docker compose build`/`up -d` ne
 recréent les conteneurs que si l'image a effectivement changé).
+
+Il ne l'est **pas côté données en staging** : chaque déploiement staging exécute
+un `docker compose down -v` entre le `build` et le `up -d`, donc la base et les
+uploads de test sont détruits puis recréés (migrate + seed rejouent sur un volume
+vierge — `prisma/seed.ts` crée sans `upsert` et ne supporte pas une base déjà
+peuplée). C'est voulu : le staging ne doit contenir que des données factices.
+Pour redéployer le staging **sans** perdre son contenu :
+
+```powershell
+powershell -File scripts/deploy.ps1 -Environment staging -KeepData
+```
+
+La prod, elle, ne supprime jamais ses volumes : `-KeepData` y est sans objet et un
+garde-fou dans le script fait échouer toute suppression de volumes demandée pour
+un autre environnement que `staging`.
 
 ## 6. Automatisation — tâche planifiée Windows (poll)
 
 Pour ne pas dépendre d'un lancement manuel après chaque merge, enregistrer une
 tâche planifiée qui relance le script à intervalle régulier. Comme le script
-est idempotent, un poll sans changement de branche ne produit aucun effet
-observable — le déploiement n'a lieu « pour de vrai » que quand `develop`/`main`
-a effectivement avancé depuis le dernier passage.
+est idempotent côté code, un poll sans changement de branche ne produit aucun
+effet observable — le déploiement n'a lieu « pour de vrai » que quand
+`develop`/`main` a effectivement avancé depuis le dernier passage.
+
+**Sauf pour les données du staging** : le `down -v` est inconditionnel, donc un
+poll toutes les 5 minutes réinitialiserait la base staging toutes les 5 minutes.
+La tâche planifiée staging doit donc passer `-KeepData` (voir §5) ; on garde le
+`down -v` pour les déploiements lancés à la main, quand on veut repartir propre.
 
 **Important** : exécuter la tâche dans la session de l'utilisateur propriétaire
 (pas `SYSTEM`) — Docker Desktop sur Windows expose le pipe nommé Docker au
@@ -194,7 +214,7 @@ pas à `SYSTEM` par défaut.
 
 ```powershell
 schtasks /Create /TN "Piloti Deploy Staging" ^
-  /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\piloti-deploy\staging\scripts\deploy.ps1\" -Environment staging" ^
+  /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"C:\piloti-deploy\staging\scripts\deploy.ps1\" -Environment staging -KeepData" ^
   /SC MINUTE /MO 5 /RU "%USERDOMAIN%\%USERNAME%" /RL LIMITED /F
 
 schtasks /Create /TN "Piloti Deploy Prod" ^
@@ -215,7 +235,7 @@ contenu de `develop`/`main`).
 
 ```powershell
 $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\piloti-deploy\staging\scripts\deploy.ps1" -Environment staging'
+    -Argument '-NoProfile -ExecutionPolicy Bypass -File "C:\piloti-deploy\staging\scripts\deploy.ps1" -Environment staging -KeepData'
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
     -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration ([TimeSpan]::MaxValue)
 Register-ScheduledTask -TaskName "Piloti Deploy Staging" -Action $action -Trigger $trigger `

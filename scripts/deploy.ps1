@@ -15,11 +15,23 @@
     le script travaille exclusivement dans "<root>\<environment>" et n'exécute jamais de
     `git checkout`/`reset` ailleurs.
 
+    Données : le staging repart d'une base VIERGE à chaque déploiement (`down -v` avant
+    `up -d`), conformément à la règle « jamais de données réelles en staging » — migrate
+    et seed rejouent alors sur un volume neuf, ce que le seed exige (il crée sans
+    `upsert`). La prod ne supprime JAMAIS ses volumes : ses données sont réelles.
+
 .PARAMETER Environment
     "staging" (branche develop) ou "prod" (branche main).
 
+.PARAMETER KeepData
+    Staging uniquement : conserve la base et les uploads existants (pas de `down -v`).
+    Sans effet en prod, dont les volumes ne sont de toute façon jamais supprimés.
+
 .EXAMPLE
     .\scripts\deploy.ps1 -Environment staging
+
+.EXAMPLE
+    .\scripts\deploy.ps1 -Environment staging -KeepData
 
 .EXAMPLE
     $env:PILOTI_DEPLOY_ROOT = "D:\piloti-deploy"
@@ -30,7 +42,9 @@
 param(
     [Parameter(Mandatory = $true)]
     [ValidateSet("staging", "prod")]
-    [string]$Environment
+    [string]$Environment,
+
+    [switch]$KeepData
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,6 +65,10 @@ switch ($Environment) {
         # docker-compose.staging.yml référencent en dur le réseau
         # "piloti-staging_internal" (= <project>_internal).
         $projectName = "piloti-staging"
+        # Base jetable : on la recrée à chaque déploiement pour que migrate + seed
+        # repartent d'un volume vierge (le seed crée sans `upsert`, il échoue ou
+        # duplique sur une base déjà peuplée).
+        $resetVolumes = -not $KeepData
     }
     "prod" {
         $branch = "main"
@@ -62,6 +80,9 @@ switch ($Environment) {
         # projet créerait une stack et des volumes distincts — la prod actuelle
         # ne serait plus mise à jour et une base vide serait créée à côté.
         $projectName = "piloti"
+        # JAMAIS de suppression de volumes en prod : ce sont les données réelles
+        # (adhérents mineurs, finances). -KeepData est donc sans objet ici.
+        $resetVolumes = $false
     }
 }
 
@@ -74,6 +95,11 @@ function Write-Step {
 Write-Step "Déploiement Piloti — environnement : $Environment (branche $branch)"
 Write-Host "Répertoire de déploiement : $deployDir"
 Write-Host "Nom de projet Docker Compose : $projectName"
+if ($resetVolumes) {
+    Write-Host "Données : base et uploads RECRÉÉS (down -v)" -ForegroundColor Yellow
+} else {
+    Write-Host "Données : volumes conservés"
+}
 
 # ---------------------------------------------------------------------------
 # 1. Répertoire de déploiement dédié — clone initial si absent. Ne touche
@@ -115,7 +141,7 @@ try {
     }
 
     # -------------------------------------------------------------------------
-    # 4. Build + up -d, avec le fichier compose et le nom de projet de l'environnement.
+    # 4. Build, avec le fichier compose et le nom de projet de l'environnement.
     # -------------------------------------------------------------------------
     $env:COMPOSE_PROJECT_NAME = $projectName
 
@@ -123,12 +149,36 @@ try {
     docker compose -f $composeFile --env-file $envFile build
     if ($LASTEXITCODE -ne 0) { throw "Échec de 'docker compose build' pour l'environnement '$Environment'." }
 
+    # -------------------------------------------------------------------------
+    # 5. Staging uniquement : recréation de la base. APRÈS le build (la partie
+    #    longue) pour réduire l'indisponibilité, et AVANT le `up` pour que
+    #    migrate + seed repartent d'un volume vierge.
+    # -------------------------------------------------------------------------
+    if ($resetVolumes) {
+        # Garde-fou : cette étape détruit des volumes. Elle ne doit jamais pouvoir
+        # s'exécuter ailleurs qu'en staging, même en cas d'erreur de configuration
+        # plus haut dans le script.
+        if ($Environment -ne "staging") {
+            throw "Refus de supprimer les volumes de l'environnement '$Environment' : réservé au staging."
+        }
+
+        Write-Step "docker compose down -v ($composeFile) — base staging recréée"
+        # -p explicite : c'est la seule commande destructrice du script, elle ne
+        # doit pas dépendre d'une variable d'environnement ambiante pour cibler la
+        # stack (un mauvais nom de projet viserait les volumes d'une autre stack).
+        docker compose -p $projectName -f $composeFile --env-file $envFile down -v
+        if ($LASTEXITCODE -ne 0) { throw "Échec de 'docker compose down -v' pour l'environnement '$Environment'." }
+    }
+
+    # -------------------------------------------------------------------------
+    # 6. Démarrage de la stack : migrate → seed → app.
+    # -------------------------------------------------------------------------
     Write-Step "docker compose up -d ($composeFile)"
     docker compose -f $composeFile --env-file $envFile up -d
     if ($LASTEXITCODE -ne 0) { throw "Échec de 'docker compose up -d' pour l'environnement '$Environment'." }
 
     # -------------------------------------------------------------------------
-    # 5. Nettoyage des images orphelines — évite l'accumulation à chaque déploiement.
+    # 7. Nettoyage des images orphelines — évite l'accumulation à chaque déploiement.
     # -------------------------------------------------------------------------
     Write-Step "docker image prune -f"
     docker image prune -f

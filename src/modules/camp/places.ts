@@ -173,6 +173,20 @@ export async function getPlaceDetail(id: string) {
     : [];
   const authorById = new Map(authors.map((a) => [a.id, a]));
 
+  // US-L07 — camp d'origine de chaque avis (branche + année), pour le filtre.
+  // `eventId` est une colonne libre, sans relation Prisma (SQLite) : on résout
+  // les événements en une requête, comme les auteurs juste au-dessus.
+  const reviewEventIds = [
+    ...new Set(place.reviews.map((r) => r.eventId).filter((x): x is string => !!x)),
+  ];
+  const reviewEvents = reviewEventIds.length
+    ? await db.event.findMany({
+        where: { id: { in: reviewEventIds } },
+        select: { id: true, name: true, startDate: true, unit: true },
+      })
+    : [];
+  const eventById = new Map(reviewEvents.map((e) => [e.id, e]));
+
   // US-L05 — historique des modifications via le journal d'audit.
   const auditRows = await db.auditLog.findMany({
     where: {
@@ -198,13 +212,25 @@ export async function getPlaceDetail(id: string) {
     photos: parseJsonArray(place.photosJson),
     avgRating,
     reviewCount: ratings.length,
-    reviews: place.reviews.map((r) => ({
-      id: r.id,
-      rating: r.rating,
-      comment: r.comment,
-      createdAt: r.createdAt,
-      author: r.authorId ? (authorById.get(r.authorId) ?? null) : null,
-    })),
+    reviews: place.reviews.map((r) => {
+      const event = r.eventId ? (eventById.get(r.eventId) ?? null) : null;
+      return {
+        id: r.id,
+        rating: r.rating,
+        comment: r.comment,
+        createdAt: r.createdAt,
+        author: r.authorId ? (authorById.get(r.authorId) ?? null) : null,
+        // Année lue en UTC, comme l'affichage des dates de camp.
+        event: event
+          ? {
+              id: event.id,
+              name: event.name,
+              unit: event.unit,
+              year: event.startDate.getUTCFullYear(),
+            }
+          : null,
+      };
+    }),
     history: place.events,
     modifications: auditRows.map((a) => ({
       id: a.id,

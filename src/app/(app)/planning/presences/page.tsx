@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { UNITS, UNIT_LABEL, type Unit } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, scopedUnits } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getUnitAttendanceDashboard } from "@/modules/planning/stats";
 
@@ -19,14 +19,17 @@ export default async function AttendanceDashboardPage({ searchParams }: PageProp
   const user = await getCurrentUser();
   if (!can(user, "member.view")) redirect("/dashboard");
 
+  // Périmètre d'unité : l'unité vient de l'URL (`?unit=`), il faut donc la
+  // valider — sinon un chef lit le bilan d'une autre branche en éditant le lien.
+  // Le repli sur `UNITS[0]` était la même faille pour un chef sans périmètre.
+  const visibles = scopedUnits(user, UNITS) as Unit[];
+  if (visibles.length === 0) redirect("/planning");
+
   const { unit } = await searchParams;
-  const fromQuery =
-    unit && (UNITS as readonly string[]).includes(unit) ? (unit as Unit) : null;
+  const fromQuery = unit && visibles.includes(unit as Unit) ? (unit as Unit) : null;
   const fromUser =
-    user.unit && (UNITS as readonly string[]).includes(user.unit)
-      ? (user.unit as Unit)
-      : null;
-  const selectedUnit: Unit = fromQuery ?? fromUser ?? UNITS[0];
+    user.unit && visibles.includes(user.unit as Unit) ? (user.unit as Unit) : null;
+  const selectedUnit: Unit = fromQuery ?? fromUser ?? visibles[0];
 
   const dashboard = await getUnitAttendanceDashboard(selectedUnit);
 
@@ -61,9 +64,9 @@ export default async function AttendanceDashboardPage({ searchParams }: PageProp
           className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm text-earth sm:w-72"
           // Soumission auto au changement via le bouton ci-dessous pour le no-JS.
         >
-          {UNITS.map((u) => (
+          {visibles.map((u) => (
             <option key={u} value={u}>
-              {UNIT_LABEL[u as Unit]}
+              {UNIT_LABEL[u]}
             </option>
           ))}
         </select>

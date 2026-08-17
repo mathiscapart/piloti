@@ -13,7 +13,7 @@ import {
   type Unit,
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, scopedUnits } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { formatEventRange, monthKey, monthLabel } from "@/modules/planning/format";
 import { listEvents, type EventListItem } from "@/modules/planning/queries";
@@ -34,6 +34,10 @@ export default async function PlanningPage({ searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!can(user, "event.view")) redirect("/dashboard");
   const canManage = can(user, "event.manage");
+  // Le bilan des présences est borné à la branche (D-024) : sans périmètre,
+  // la page redirigerait — autant ne pas proposer le bouton.
+  const canSeeAttendance =
+    can(user, "member.view") && scopedUnits(user, UNITS).length > 0;
 
   const { unit, type, scope } = await searchParams;
   const unitFilter = unit && (UNITS as readonly string[]).includes(unit) ? unit : "";
@@ -75,7 +79,7 @@ export default async function PlanningPage({ searchParams }: PageProps) {
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          {can(user, "member.view") ? (
+          {canSeeAttendance ? (
             <Button asChild variant="outline">
               <Link href="/planning/presences">
                 <Users className="size-4" />

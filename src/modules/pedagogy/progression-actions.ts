@@ -6,11 +6,60 @@ import { after } from "next/server";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, inUnitScope } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
 // US-S04…S07 — actions du suivi pédagogique sur un jeune (chef : pedago.manage).
+
+// Périmètre d'unité : `pedago.manage` dit qu'un CHEF peut suivre des jeunes,
+// pas qu'il peut suivre TOUS les jeunes. Chaque action d'écriture ci-dessous
+// passe par `requirePedagoScope`, qui résout le jeune visé puis vérifie
+// `inUnitScope`. La LECTURE (`pedago.view`) reste ouverte à tout l'encadrement :
+// seule l'écriture — étapes, badges, objectifs et notes sensibles (US-S07) —
+// est bornée à la branche. ADMIN et RG ne sont pas bornés (cf. `inUnitScope`).
+const HORS_BRANCHE = "Ce jeune n'est pas dans ta branche.";
+
+type PedagoScope =
+  | { ok: false; result: ActionResult }
+  | {
+      ok: true;
+      user: Awaited<ReturnType<typeof getCurrentUser>>;
+      jeune: { id: string; unit: string | null; firstName: string };
+    };
+
+async function requirePedagoScope(jeuneId: string): Promise<PedagoScope> {
+  const user = await getCurrentUser();
+  if (!can(user, "pedago.manage")) {
+    return { ok: false, result: { error: "Permission refusée." } };
+  }
+  const jeune = await db.user.findUnique({
+    where: { id: jeuneId },
+    select: { id: true, unit: true, firstName: true },
+  });
+  if (!jeune) return { ok: false, result: { error: "Jeune introuvable." } };
+  if (!inUnitScope(user, jeune.unit)) {
+    return { ok: false, result: { error: HORS_BRANCHE } };
+  }
+  return { ok: true, user, jeune };
+}
+
+// Variante pour les actions qui reçoivent l'id d'une RESSOURCE (attribution,
+// objectif, note) et non celui du jeune : le `can()` a déjà été fait en amont —
+// on garde l'ordre conventionnel getCurrentUser() → can() → résolution — et il
+// ne reste qu'à vérifier la branche du propriétaire de la ressource.
+// Renvoie l'erreur à retourner, ou `null` si l'action peut continuer.
+async function refuseIfOutOfScope(
+  user: Awaited<ReturnType<typeof getCurrentUser>>,
+  jeuneId: string,
+): Promise<ActionResult | null> {
+  const jeune = await db.user.findUnique({
+    where: { id: jeuneId },
+    select: { unit: true },
+  });
+  if (!jeune) return { error: "Jeune introuvable." };
+  return inUnitScope(user, jeune.unit) ? null : { error: HORS_BRANCHE };
+}
 
 // Jeune + ses parents (liens familiaux) — destinataires des notifications.
 async function jeuneAndParents(jeuneId: string): Promise<string[]> {
@@ -34,15 +83,15 @@ export async function proposeStep(
   jeuneId: string,
   stepId: string,
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
+  const scope = await requirePedagoScope(jeuneId);
+  if (!scope.ok) return scope.result;
+  const { user, jeune } = scope;
 
-  const [jeune, step, existing] = await Promise.all([
-    db.user.findUnique({ where: { id: jeuneId }, select: { id: true, unit: true, firstName: true } }),
+  const [step, existing] = await Promise.all([
     db.progressionStep.findUnique({ where: { id: stepId }, select: { id: true, name: true } }),
     db.stepValidation.findUnique({ where: { stepId_userId: { stepId, userId: jeuneId } } }),
   ]);
-  if (!jeune || !step) return { error: "Jeune ou étape introuvable." };
+  if (!step) return { error: "Étape introuvable." };
   if (existing) return { error: "Validation déjà en cours ou confirmée." };
 
   await withAudit(
@@ -78,23 +127,25 @@ export async function confirmStep(
   jeuneId: string,
   stepId: string,
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
+  const scope = await requirePedagoScope(jeuneId);
+  if (!scope.ok) return scope.result;
+  const { user, jeune } = scope;
 
   const validation = await db.stepValidation.findUnique({
     where: { stepId_userId: { stepId, userId: jeuneId } },
   });
   if (!validation) return { error: "Aucune proposition à confirmer." };
   if (validation.status === "CONFIRMED") return { error: "Étape déjà validée." };
-  // Règle des 2 chefs : le confirmateur doit différer du proposeur.
+  // Règle des 2 chefs : le confirmateur doit différer du proposeur. Combinée au
+  // périmètre d'unité, la 2e validation vient forcément d'un chef de la branche.
   if (validation.proposedById === user.id) {
     return { error: "Un autre chef doit confirmer cette étape (validation à 2)." };
   }
 
-  const [jeune, step] = await Promise.all([
-    db.user.findUnique({ where: { id: jeuneId }, select: { firstName: true } }),
-    db.progressionStep.findUnique({ where: { id: stepId }, select: { name: true } }),
-  ]);
+  const step = await db.progressionStep.findUnique({
+    where: { id: stepId },
+    select: { name: true },
+  });
 
   await withAudit(
     (tx) =>
@@ -111,7 +162,7 @@ export async function confirmStep(
       userId: uid,
       type: "STEP_VALIDATED",
       title: "Étape validée 🎉",
-      body: `L'étape « ${step?.name ?? ""} » a été validée pour ${jeune?.firstName ?? "le jeune"}.`,
+      body: `L'étape « ${step?.name ?? ""} » a été validée pour ${jeune.firstName}.`,
       link: `/membres/${jeuneId}/progression`,
       messageId: `stepvalidated-${stepId}-${jeuneId}`,
     }));
@@ -125,8 +176,9 @@ export async function removeValidation(
   jeuneId: string,
   stepId: string,
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
+  const scope = await requirePedagoScope(jeuneId);
+  if (!scope.ok) return scope.result;
+  const { user } = scope;
   const validation = await db.stepValidation.findUnique({
     where: { stepId_userId: { stepId, userId: jeuneId } },
     select: { id: true },
@@ -152,6 +204,20 @@ export async function awardBadge(
   const badge = await db.badge.findUnique({ where: { id: badgeId }, select: { id: true, name: true, icon: true } });
   if (!badge) return { error: "Badge introuvable." };
   if (jeuneIds.length === 0) return { error: "Sélectionne au moins un jeune." };
+
+  // Périmètre d'unité sur une action MULTI-jeunes : on vérifie les unités en une
+  // seule requête, et on rejette EN BLOC si un seul jeune est hors branche.
+  // Filtrer silencieusement serait pire : l'AuditLog dirait « badge attribué »
+  // sur un sous-ensemble, sans que le chef sache qui a été écarté.
+  const uniques = [...new Set(jeuneIds)]; // un doublon ne doit pas passer pour un id inconnu
+  const cibles = await db.user.findMany({
+    where: { id: { in: uniques } },
+    select: { id: true, unit: true },
+  });
+  if (cibles.length !== uniques.length) return { error: "Jeune introuvable." };
+  if (cibles.some((j) => !inUnitScope(user, j.unit))) {
+    return { error: "La sélection contient des jeunes hors de ta branche." };
+  }
 
   // Évite les doublons (contrainte unique badgeId+userId).
   const already = await db.badgeAward.findMany({
@@ -194,6 +260,8 @@ export async function revokeBadge(awardId: string): Promise<ActionResult> {
   if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
   const award = await db.badgeAward.findUnique({ where: { id: awardId }, select: { id: true, userId: true } });
   if (!award) return { error: "Attribution introuvable." };
+  const outOfScope = await refuseIfOutOfScope(user, award.userId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     (tx) => tx.badgeAward.delete({ where: { id: awardId } }),
@@ -212,8 +280,9 @@ export async function setGoal(
   stepId: string,
   badgeId: string,
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
+  const scope = await requirePedagoScope(jeuneId);
+  if (!scope.ok) return scope.result;
+  const { user } = scope;
   const trimmed = title.trim();
   if (!trimmed) return { error: "Intitulé requis." };
 
@@ -246,6 +315,8 @@ export async function toggleGoal(goalId: string): Promise<ActionResult> {
   if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
   const goal = await db.pedagogicalGoal.findUnique({ where: { id: goalId } });
   if (!goal) return { error: "Objectif introuvable." };
+  const outOfScope = await refuseIfOutOfScope(user, goal.userId);
+  if (outOfScope) return outOfScope;
 
   const achieved = goal.status !== "ACHIEVED";
   await withAudit(
@@ -268,6 +339,8 @@ export async function deleteGoal(goalId: string): Promise<ActionResult> {
   if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
   const goal = await db.pedagogicalGoal.findUnique({ where: { id: goalId }, select: { id: true, userId: true } });
   if (!goal) return { error: "Objectif introuvable." };
+  const outOfScope = await refuseIfOutOfScope(user, goal.userId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     (tx) => tx.pedagogicalGoal.delete({ where: { id: goalId } }),
@@ -280,12 +353,11 @@ export async function deleteGoal(goalId: string): Promise<ActionResult> {
 // ── US-S07 — note de suivi (sensible) ───────────────────────────────────────
 
 export async function addNote(jeuneId: string, content: string): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
+  const scope = await requirePedagoScope(jeuneId);
+  if (!scope.ok) return scope.result;
+  const { user } = scope;
   const trimmed = content.trim();
   if (!trimmed) return { error: "Note vide." };
-  const jeune = await db.user.findUnique({ where: { id: jeuneId }, select: { id: true } });
-  if (!jeune) return { error: "Jeune introuvable." };
 
   await withAudit(
     (tx) =>
@@ -303,6 +375,8 @@ export async function deleteNote(noteId: string): Promise<ActionResult> {
   if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
   const note = await db.pedagogicalNote.findUnique({ where: { id: noteId }, select: { id: true, userId: true } });
   if (!note) return { error: "Note introuvable." };
+  const outOfScope = await refuseIfOutOfScope(user, note.userId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     (tx) => tx.pedagogicalNote.delete({ where: { id: noteId } }),

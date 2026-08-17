@@ -15,6 +15,7 @@ import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
 import { maybeAlertAbsences, notifyEventAudience } from "./event-hooks";
+import { canActOnEvent } from "./event-scope";
 import { eventSchema } from "./types";
 
 function absoluteUrl(path: string): string {
@@ -103,6 +104,12 @@ export async function createEvent(
   if (!parsed.success) {
     return { error: formErrorMessage(parsed.error) };
   }
+  // Périmètre d'unité (D-024) : un chef crée pour SA branche, ou pour tout le
+  // groupe. Sans ce contrôle, la branche cible n'est qu'un champ du formulaire.
+  if (!canActOnEvent(user, "event.manage", parsed.data.unit)) {
+    return { error: "Tu ne peux créer un événement que pour ta branche." };
+  }
+
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
   const deadline = parseDeadline(parsed.data.registrationDeadline);
@@ -152,14 +159,24 @@ export async function updateEvent(
   }
   const existing = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true },
+    select: { id: true, unit: true },
   });
   if (!existing) return { error: "Événement introuvable." };
+  // Périmètre d'unité : sur la branche ACTUELLE de l'événement…
+  if (!canActOnEvent(user, "event.manage", existing.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
 
   const parsed = eventSchema.safeParse(readForm(formData));
   if (!parsed.success) {
     return { error: formErrorMessage(parsed.error) };
   }
+  // …ET sur la branche CIBLE : sans ce second contrôle, il suffirait de changer
+  // la branche dans le formulaire pour transférer un événement à une autre unité.
+  if (!canActOnEvent(user, "event.manage", parsed.data.unit)) {
+    return { error: "Tu ne peux pas déplacer cet événement vers une autre branche." };
+  }
+
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
   const deadline = parseDeadline(parsed.data.registrationDeadline);
@@ -215,6 +232,11 @@ export async function deleteEvent(eventId: string): Promise<ActionResult> {
     },
   });
   if (!existing) return { error: "Événement introuvable." };
+  // Périmètre d'unité : la suppression est l'action la moins réversible du
+  // planning, elle est bornée comme la modification.
+  if (!canActOnEvent(user, "event.manage", existing.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
 
   await withAudit(
     (tx) => tx.event.delete({ where: { id: eventId } }),
@@ -247,9 +269,14 @@ export async function setAttendance(
 
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true },
+    select: { id: true, unit: true },
   });
   if (!event) return { error: "Événement introuvable." };
+  // Périmètre d'unité : un chef ne pointe que les événements de sa branche
+  // (les événements de groupe restant ouverts à tous, cf. `canActOnEvent`).
+  if (!canActOnEvent(actor, "event.manage", event.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
 
   await withAudit(
     (tx) =>

@@ -14,6 +14,11 @@
 //   (`*.view` vs `*.create/...`) afin de permettre le « lecture seule » du RG.
 //   Permission conditionnée par la branche : un JEUNE (SCOUT) des branches
 //   Pionniers/Compagnons peut créer un prêt.
+//
+// Périmètre d'unité — la matrice ci-dessous ne dit QUE « quel rôle a le droit ».
+// Certaines actions valent en plus « seulement sur ma branche » : c'est
+// `inUnitScope()` (bas de fichier), appelé EN PLUS de `can()` par les surfaces
+// concernées (écriture pédagogique, pointage des présences, modération).
 
 import type { AccountStatus, Role } from "@/lib/enums";
 
@@ -241,6 +246,75 @@ export function can(user: AuthCtx, action: Action): boolean {
 /** Pratique pour l'UI : l'utilisateur possède-t-il ce rôle (principal ou additionnel) ? */
 export function hasRole(user: AuthCtx, role: Role): boolean {
   return effectiveRoles(user).includes(role);
+}
+
+/**
+ * Périmètre d'unité. `can()` répond « ce rôle a-t-il le droit ? » ; cette
+ * fonction répond « sur QUELLE branche ? ». Les deux se combinent : le rôle
+ * donne le droit, l'unité en donne l'étendue — un CHEF est chef de SA branche,
+ * pas du groupe. Généralisation de `canModerateReport` (SAFE-02), qui en est
+ * désormais un cas d'usage.
+ *
+ * - ADMIN (superutilisateur) et RESPONSABLE_GROUPE (vue groupe) ne sont pas bornés.
+ * - Fail-closed : un CHEF sans `unit` renseignée n'encadre aucune branche, et
+ *   une ressource sans unité (`targetUnit === null`) n'appartient à personne.
+ *   Le cas inverse — une ressource « de groupe » ouverte à tout l'encadrement,
+ *   ex. un événement sans unité — se traite AU SITE D'APPEL (`unit === null ||
+ *   inUnitScope(...)`), pas ici : la primitive ne devine pas la sémantique du null.
+ *
+ * Ne contrôle pas le statut du compte : c'est le rôle de `can()`, qu'on appelle
+ * toujours en premier.
+ */
+export function inUnitScope(user: AuthCtx, targetUnit: string | null): boolean {
+  const roles = effectiveRoles(user);
+  if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
+  return targetUnit !== null && user.unit === targetUnit;
+}
+
+// Rôles rattachés à une branche. Tous les autres — trésorier, secrétaire,
+// responsable matériel, responsable de groupe, admin — exercent une fonction
+// TRANSVERSE au groupe : les borner à une unité n'aurait pas de sens (le
+// trésorier encaisse pour tout le monde), et les casserait puisqu'ils n'ont
+// généralement pas de `unit` renseignée.
+const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
+
+/**
+ * Périmètre d'unité pour UNE action donnée : « ce compte peut-il faire cette
+ * action sur cette branche ? ». Combine `can()` et `inUnitScope()`, en tenant
+ * compte du rôle par lequel le droit arrive.
+ *
+ * La nuance est indispensable dès qu'une action est partagée entre un rôle
+ * borné et un rôle transverse : `budget.manage` appartient au CHEF **et** au
+ * TRÉSORIER. Le chef ne gère que le budget des événements de sa branche ; le
+ * trésorier gère tout, sans quoi il ne pourrait plus rien encaisser. On ne
+ * borne donc que si le droit ne vient QUE de rôles bornés.
+ */
+export function canActOnUnit(
+  user: AuthCtx,
+  action: Action,
+  targetUnit: string | null,
+): boolean {
+  if (!can(user, action)) return false;
+  if (ANY_ACTIVE.has(action)) return true;
+  const roles = effectiveRoles(user);
+  if (roles.includes("ADMIN")) return true;
+  // Le droit vient-il (aussi) d'un rôle non borné ? Alors aucune limite d'unité.
+  const allowed = PERMISSIONS[action] ?? [];
+  const viaRoleTransverse = roles.some(
+    (r) => !UNIT_BOUND_ROLES.has(r) && (allowed as string[]).includes(r),
+  );
+  if (viaRoleTransverse) return true;
+  return inUnitScope(user, targetUnit);
+}
+
+/**
+ * Branches sur lesquelles `user` a la main, dérivées de `inUnitScope` (pendant
+ * de `assignableRoles` pour les rôles). Pratique pour filtrer une requête ou un
+ * sélecteur d'unité sans jamais tester un rôle en dur côté page :
+ * liste complète = non borné (ADMIN/RG), liste vide = aucun périmètre.
+ */
+export function scopedUnits(user: AuthCtx, catalog: readonly string[]): string[] {
+  return catalog.filter((u) => inUnitScope(user, u));
 }
 
 // US-32 — la zone /admin n'est plus 100 % ADMIN : différentes rubriques sont

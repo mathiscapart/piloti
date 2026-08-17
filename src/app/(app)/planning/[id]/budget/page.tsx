@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
+import { canActOnEvent } from "@/modules/planning/event-scope";
 import { getEventBudget } from "@/modules/finance/budget";
 import { formatEuros } from "@/modules/finance/format";
 
@@ -19,10 +20,15 @@ export default async function EventBudgetPage({ params }: PageProps) {
   const { id } = await params;
   const user = await getCurrentUser();
   if (!can(user, "budget.view")) redirect(`/planning/${id}`);
-  const canManage = can(user, "budget.manage");
 
   const data = await getEventBudget(id);
   if (!data) notFound();
+
+  // Périmètre d'unité (D-024) : la lecture du budget reste ouverte à
+  // l'encadrement, mais un CHEF ne l'édite que pour sa branche. Le TRÉSORIER,
+  // rôle transverse, garde la main sur tous les budgets — c'est `canActOnUnit`
+  // qui fait la distinction, pas un test de rôle ici.
+  const canManage = canActOnEvent(user, "budget.manage", data.event.unit);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">

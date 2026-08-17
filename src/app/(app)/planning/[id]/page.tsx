@@ -30,6 +30,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getChildrenOf } from "@/modules/family/queries";
+import { canActOnEvent } from "@/modules/planning/event-scope";
 import { formatEventRange } from "@/modules/planning/format";
 import {
   getAttendanceCount,
@@ -66,7 +67,13 @@ export default async function EventDetailPage({ params }: PageProps) {
   const data = await getEventWithRegistrations(id, user.id);
   if (!data) notFound();
   const { event, registrations, reminders, myResponse } = data;
-  const canManage = can(user, "event.manage");
+  // Périmètre d'unité (D-024) : toute ACTION sur l'événement — le modifier, le
+  // supprimer, pointer ses présences — est bornée à la branche concernée ; un
+  // événement de groupe (`unit === null`) reste ouvert à tout l'encadrement.
+  // La LECTURE reste ouverte : un chef d'une autre branche voit la fiche et la
+  // liste des réponses, il ne peut simplement rien y changer.
+  const isStaff = can(user, "event.manage");
+  const canManage = canActOnEvent(user, "event.manage", event.unit);
 
   const deadlinePassed =
     event.registrationDeadline != null &&
@@ -82,7 +89,7 @@ export default async function EventDetailPage({ params }: PageProps) {
       registrations.find((r) => r.user.id === child.id)?.response ?? null,
   }));
 
-  // US-P07 — résumé de présence (pour les chefs).
+  // US-P07 — résumé de présence (pour les chefs qui peuvent pointer).
   const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
 
   // US-F04/F05 — accès au budget de l'événement.
@@ -265,7 +272,7 @@ export default async function EventDetailPage({ params }: PageProps) {
       ) : null}
 
       {/* Vue chef : liste des réponses. */}
-      {canManage && event.registrationOpen ? (
+      {isStaff && event.registrationOpen ? (
         <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
           <div className="flex items-center gap-2">
             <Users className="size-4 text-trail" />

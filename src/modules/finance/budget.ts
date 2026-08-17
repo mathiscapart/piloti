@@ -14,6 +14,9 @@ export async function getEventBudget(eventId: string) {
     select: {
       id: true,
       name: true,
+      // Branche de l'événement : nécessaire au périmètre d'unité (D-024) pour
+      // décider qui peut ÉDITER ce budget, la lecture restant ouverte.
+      unit: true,
       priceCents: true,
       requirePayment: true,
       startDate: true,

@@ -6,12 +6,35 @@ import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, canActOnUnit } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
 // US-S01/S02 — gestion des référentiels (chef admin : pedago.referential).
 
 const VALID_UNITS = new Set<string>(UNITS);
+
+// Périmètre d'unité (D-024) : les ÉTAPES sont rattachées à une branche
+// (`ProgressionStep.unit`), un chef ne gouverne donc que le référentiel de la
+// sienne. L'archivage était le plus sensible : `listSteps` filtre sur
+// `archived: false`, une étape archivée disparaît de la progression affichée
+// aux jeunes de la branche et laisse les validations déjà posées orphelines.
+// Les BADGES échappent volontairement à cette règle : `Badge.unitsJson` est
+// multi-branches par conception (`[]` = toutes), le catalogue est transverse.
+const HORS_BRANCHE_ETAPE = "Cette étape appartient à une autre branche.";
+
+async function refuseIfStepOutOfScope(
+  user: Awaited<ReturnType<typeof getCurrentUser>>,
+  stepId: string,
+): Promise<ActionResult | null> {
+  const step = await db.progressionStep.findUnique({
+    where: { id: stepId },
+    select: { unit: true },
+  });
+  if (!step) return { error: "Étape introuvable." };
+  return canActOnUnit(user, "pedago.referential", step.unit)
+    ? null
+    : { error: HORS_BRANCHE_ETAPE };
+}
 
 // ── Étapes de progression (US-S01) ──────────────────────────────────────────
 
@@ -23,6 +46,9 @@ export async function createStep(
   const user = await getCurrentUser();
   if (!can(user, "pedago.referential")) return { error: "Permission refusée." };
   if (!VALID_UNITS.has(unit)) return { error: "Branche invalide." };
+  if (!canActOnUnit(user, "pedago.referential", unit)) {
+    return { error: "Tu ne peux créer une étape que pour ta branche." };
+  }
   const trimmed = name.trim();
   if (!trimmed) return { error: "Nom requis." };
 
@@ -53,8 +79,8 @@ export async function updateStep(
   const trimmed = name.trim();
   if (!trimmed) return { error: "Nom requis." };
 
-  const step = await db.progressionStep.findUnique({ where: { id: stepId }, select: { id: true } });
-  if (!step) return { error: "Étape introuvable." };
+  const outOfScope = await refuseIfStepOutOfScope(user, stepId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     (tx) =>
@@ -74,6 +100,9 @@ export async function moveStep(stepId: string, dir: "up" | "down"): Promise<Acti
 
   const step = await db.progressionStep.findUnique({ where: { id: stepId } });
   if (!step) return { error: "Étape introuvable." };
+  if (!canActOnUnit(user, "pedago.referential", step.unit)) {
+    return { error: HORS_BRANCHE_ETAPE };
+  }
 
   const siblings = await db.progressionStep.findMany({
     where: { unit: step.unit, archived: false },
@@ -100,8 +129,8 @@ export async function moveStep(stepId: string, dir: "up" | "down"): Promise<Acti
 export async function archiveStep(stepId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!can(user, "pedago.referential")) return { error: "Permission refusée." };
-  const step = await db.progressionStep.findUnique({ where: { id: stepId }, select: { id: true } });
-  if (!step) return { error: "Étape introuvable." };
+  const outOfScope = await refuseIfStepOutOfScope(user, stepId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     (tx) => tx.progressionStep.update({ where: { id: stepId }, data: { archived: true } }),

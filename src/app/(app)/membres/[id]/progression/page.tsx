@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, inUnitScope } from "@/lib/permissions";
 import { isChildOf } from "@/modules/family/queries";
 import { listBadgesForUnit } from "@/modules/pedagogy/referential";
 import { getProgression } from "@/modules/pedagogy/progression";
@@ -26,11 +26,16 @@ export default async function ProgressionPage({ params }: PageProps) {
   const isParent = !isStaff && !isSelf ? await isChildOf(user.id, id) : false;
   if (!isStaff && !isSelf && !isParent) redirect("/dashboard");
 
-  const canManage = can(user, "pedago.manage");
   const includeNotes = isStaff;
 
   const data = await getProgression(id, includeNotes);
   if (!data) notFound();
+
+  // Périmètre d'unité : la lecture reste ouverte à tout l'encadrement, l'ÉCRITURE
+  // est réservée aux chefs de la branche du jeune (ADMIN/RG non bornés) — même
+  // règle que les actions de `progression-actions.ts`, pour ne pas afficher des
+  // boutons qui échoueraient à l'usage.
+  const canManage = can(user, "pedago.manage") && inUnitScope(user, data.jeune.unit);
 
   // Badges attribuables (catalogue filtré par la branche du jeune), pour les chefs.
   const awardable = canManage

@@ -18,6 +18,7 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 import { notify } from "@/modules/notifications/notify";
+import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 
 import { notifyTreasurers } from "./expense-notify";
 import { formatEuros, parseAmountToCents } from "./format";
@@ -68,14 +69,18 @@ export async function createExpense(
 
   const note = String(formData.get("note") ?? "").trim() || null;
 
+  // L'`eventId` vient du formulaire : rattacher une dépense à un événement
+  // alimente SON budget (cf. `getEventBudget`, qui agrège tout ce qui n'est pas
+  // REJECTED — une note PENDING compte donc immédiatement). Même périmètre
+  // d'unité que `addEventTicket` (D-024), sans quoi ce chemin le contournerait.
+  // On REFUSE au lieu de retomber sur `null` : sinon le déclarant croirait sa
+  // dépense imputée au camp alors qu'elle serait enregistrée sans rattachement.
   let eventId: string | null = null;
   const eventIdRaw = String(formData.get("eventId") ?? "").trim();
   if (eventIdRaw) {
-    const ev = await db.event.findUnique({
-      where: { id: eventIdRaw },
-      select: { id: true },
-    });
-    eventId = ev?.id ?? null;
+    const outOfScope = await refuseIfEventOutOfScope(user, "expense.create", eventIdRaw);
+    if (outOfScope) return outOfScope;
+    eventId = eventIdRaw;
   }
 
   // Reçu : traité comme une photo (resize/WebP). Obligatoire au-dessus du seuil.

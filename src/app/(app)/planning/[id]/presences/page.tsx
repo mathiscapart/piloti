@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
+import { canActOnEvent } from "@/modules/planning/event-scope";
 import { formatEventRange } from "@/modules/planning/format";
 import { getAttendanceRoster } from "@/modules/planning/queries";
 
@@ -21,6 +22,11 @@ export default async function AttendancePage({ params }: PageProps) {
   const data = await getAttendanceRoster(id);
   if (!data) notFound();
   const { event, roster } = data;
+
+  // Périmètre d'unité : pointage réservé aux chefs de la branche concernée
+  // (un événement de groupe, `unit === null`, reste ouvert à tous). Même règle
+  // que `setAttendance` — sans quoi la page s'ouvrirait sur une liste inerte.
+  if (!canActOnEvent(user, "event.manage", event.unit)) redirect(`/planning/${id}`);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">

@@ -15,6 +15,8 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 
+import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
+
 import { notifyTreasurers } from "./expense-notify";
 import { parseAmountToCents } from "./format";
 
@@ -35,11 +37,11 @@ export async function setEventPricing(
     if (priceCents === null) return { error: "Tarif invalide." };
   }
 
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: { id: true },
-  });
-  if (!event) return { error: "Événement introuvable." };
+  // Périmètre d'unité (D-024) : le budget suit l'événement. Un CHEF est borné à
+  // sa branche ; le TRÉSORIER, rôle transverse, ne l'est pas — c'est
+  // `canActOnUnit` qui fait cette distinction, pas un test de rôle ici.
+  const outOfScope = await refuseIfEventOutOfScope(user, "budget.manage", eventId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     (tx) =>
@@ -66,11 +68,8 @@ export async function setEventPaymentRequired(
   const user = await getCurrentUser();
   if (!can(user, "budget.manage")) return { error: "Permission refusée." };
 
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: { id: true },
-  });
-  if (!event) return { error: "Événement introuvable." };
+  const outOfScope = await refuseIfEventOutOfScope(user, "budget.manage", eventId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     (tx) =>
@@ -102,6 +101,9 @@ export async function setBudgetLine(
   const trimmed = plannedStr.trim();
   const plannedCents = trimmed.length === 0 ? 0 : parseAmountToCents(trimmed);
   if (plannedCents === null) return { error: "Montant invalide." };
+
+  const outOfScope = await refuseIfEventOutOfScope(user, "budget.manage", eventId);
+  if (outOfScope) return outOfScope;
 
   await withAudit(
     async (tx) => {
@@ -138,6 +140,9 @@ export async function recordEventPayment(
   const amountCents = parseAmountToCents(amountStr);
   if (amountCents === null) return { error: "Montant invalide." };
 
+  const outOfScope = await refuseIfEventOutOfScope(actor, "budget.manage", eventId);
+  if (outOfScope) return outOfScope;
+
   const reg = await db.eventRegistration.findUnique({
     where: { eventId_userId: { eventId, userId } },
     select: { id: true, paidCents: true },
@@ -172,11 +177,11 @@ export async function addEventTicket(
   const user = await getCurrentUser();
   if (!can(user, "expense.create")) return { error: "Permission refusée." };
 
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: { id: true },
-  });
-  if (!event) return { error: "Événement introuvable." };
+  // Une note de frais rattachée à un événement alimente le budget de CET
+  // événement : même périmètre. Les rôles transverses (matériel, secrétaire,
+  // trésorier) restent libres, seul un CHEF est borné à sa branche.
+  const outOfScope = await refuseIfEventOutOfScope(user, "expense.create", eventId);
+  if (outOfScope) return outOfScope;
 
   const amountCents = parseAmountToCents(String(formData.get("amount") ?? ""));
   if (amountCents === null || amountCents <= 0) return { error: "Montant invalide." };

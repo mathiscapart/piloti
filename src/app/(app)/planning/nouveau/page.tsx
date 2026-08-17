@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 
 import { listPlaceOptions } from "@/modules/camp/places";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { UNITS } from "@/lib/enums";
+import { can, scopedUnits } from "@/lib/permissions";
 import { createEvent } from "@/modules/planning/actions";
 
 import { EventForm } from "../EventForm";
@@ -14,6 +15,10 @@ export default async function NewEventPage() {
   if (!can(user, "event.manage")) redirect("/planning");
 
   const places = await listPlaceOptions();
+  // Périmètre d'unité (D-024) : on ne propose que les branches sur lesquelles
+  // le chef peut créer. `createEvent` revérifie — le filtre est un confort, pas
+  // le contrôle.
+  const units = scopedUnits(user, UNITS);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -32,6 +37,7 @@ export default async function NewEventPage() {
           action={createEvent}
           submitLabel="Créer l'événement"
           places={places}
+          units={units}
         />
       </section>
     </div>

@@ -8,6 +8,7 @@ import { CAMP_EQUIPMENT } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
+import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 
 import { geocodeAddress } from "./geocode";
 
@@ -216,6 +217,19 @@ export async function addReview(
   });
   if (!place) return { error: "Lieu introuvable." };
 
+  // US-L07 — l'avis peut être rattaché à un camp, ce qui lui donne sa branche
+  // et son année. Le camp vient du client : on vérifie qu'il existe et qu'il
+  // s'est bien tenu ici, sinon le filtre afficherait des rattachements faux.
+  if (eventId) {
+    const event = await db.event.findUnique({
+      where: { id: eventId },
+      select: { campPlaceId: true },
+    });
+    if (!event || event.campPlaceId !== placeId) {
+      return { error: "Camp invalide pour ce lieu." };
+    }
+  }
+
   const trimmed = comment.trim();
 
   await withAudit(
@@ -244,11 +258,12 @@ export async function linkEventToPlace(
   const user = await getCurrentUser();
   if (!can(user, "event.manage")) return { error: "Permission refusée." };
 
-  const event = await db.event.findUnique({
-    where: { id: eventId },
-    select: { id: true },
-  });
-  if (!event) return { error: "Événement introuvable." };
+  // Cette action écrit sur l'ÉVÉNEMENT (`campPlaceId`) : même périmètre d'unité
+  // que `updateEvent` (D-024), sinon elle offrirait un second chemin pour
+  // modifier l'événement d'une autre branche.
+  const outOfScope = await refuseIfEventOutOfScope(user, "event.manage", eventId);
+  if (outOfScope) return outOfScope;
+
   if (placeId) {
     const place = await db.campPlace.findUnique({
       where: { id: placeId },

@@ -15,7 +15,7 @@
 //   l'ADMIN peut tout traiter. `canModerateReport` combine ça à `canModerate`
 //   (la permission `moderation.review`, indépendante de l'unité).
 
-import { can, effectiveRoles, type Action } from "@/lib/permissions";
+import { can, effectiveRoles, inUnitScope, type Action } from "@/lib/permissions";
 
 type ModerationCtx = Parameters<typeof can>[0];
 
@@ -54,12 +54,10 @@ interface ReportUnitCtx {
 // Un signalement dont `concernedUnit` est null (auteur sans unité) n'est
 // traitable que par un ADMIN — fail-closed plutôt que d'ouvrir à tous les CHEF.
 export function canModerateReport(user: ModerationCtx, report: ReportUnitCtx): boolean {
-  if (!canModerate(user)) return false;
-  const roles = effectiveRoles(user);
   // ADMIN et RESPONSABLE_GROUPE traitent toutes les unités ; un CHEF est limité
-  // à l'unité concernée par le signalement.
-  if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
-  return report.concernedUnit !== null && user.unit === report.concernedUnit;
+  // à l'unité concernée par le signalement — c'est exactement `inUnitScope`,
+  // dont cette règle était l'implémentation d'origine (SAFE-02).
+  return canModerate(user) && inUnitScope(user, report.concernedUnit);
 }
 
 interface ModeratorCandidate {

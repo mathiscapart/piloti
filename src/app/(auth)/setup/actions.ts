@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { birthDateSchema } from "@/lib/legal/age";
 import { passwordSchema } from "@/lib/password-policy";
 
 export interface SetupActionResult {
@@ -19,6 +20,11 @@ const schema = z
     email: z.string().email("Email invalide."),
     password: passwordSchema,
     confirmPassword: z.string().min(1, "Confirmez le mot de passe."),
+    // SAFE-01 — un compte ACTIVE a toujours une date de naissance connue : le
+    // proxy refuse la session sinon (cf. src/proxy.ts). C'est l'un des quatre
+    // chemins de création qui garantissent cet invariant. Même validation que
+    // l'inscription (birthDateSchema, source unique).
+    birthDate: birthDateSchema,
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: "Les mots de passe ne correspondent pas.",
@@ -60,10 +66,21 @@ export async function setupAction(
     return { error: "Erreur lors de la création du compte. Réessayez." };
   }
 
-  // 2. Passer le compte en ACTIVE + ADMIN (better-auth crée PENDING + CHEF par défaut)
+  // 2. Passer le compte en ACTIVE + ADMIN (better-auth crée PENDING + CHEF par
+  // défaut). SEC-08 (Vuln 2) — `birthDate` est `input: false` : positionné ici
+  // plutôt que via signUpEmail.
   await db.user.update({
     where: { email: parsed.data.email },
-    data: { status: "ACTIVE", role: "ADMIN", emailVerified: true },
+    data: {
+      status: "ACTIVE",
+      // US-32 — `roles` est la source de vérité des permissions (`effectiveRoles`).
+      // L'oublier ici donnait un premier admin sans aucun droit, et sans recours :
+      // seul un compte ayant "admin.access" peut attribuer des rôles.
+      roles: JSON.stringify(["ADMIN"]),
+      role: "ADMIN", // miroir d'affichage (déprécié)
+      emailVerified: true,
+      birthDate: parsed.data.birthDate,
+    },
   });
 
   // 3. Connecter l'administrateur directement

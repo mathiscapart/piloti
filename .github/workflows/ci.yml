@@ -49,6 +49,24 @@ jobs:
       - name: Génération du client Prisma
         run: pnpm db:generate
 
+      # Garde-fou anti-régression P3018 : une migration non rejouable sur base
+      # vierge (table/colonne déjà créée par une migration précédente, etc.)
+      # passe inaperçue sur la prod baselinée (qui ne rejoue jamais l'historique
+      # complet) mais fait tomber `migrate deploy` sur un déploiement neuf.
+      # On rejoue donc tout l'historique sur une base SQLite jetable, puis on
+      # vérifie qu'aucune dérive ne subsiste entre les migrations et
+      # `schema.prisma` (une divergence indiquerait un schéma modifié sans
+      # migration correspondante, ou une migration qui ne reconstruit pas
+      # fidèlement le schéma). Placé juste après `prisma generate` : c'est une
+      # vérification de la couche base de données, indépendante du lint/tsc/
+      # build applicatifs, et rapide à faire échouer en premier sur SQLite.
+      - name: Migrations Prisma rejouables sur base vierge
+        env:
+          DATABASE_URL: "file:./ci-migrate-check.db"
+        run: |
+          pnpm prisma migrate deploy
+          pnpm prisma migrate diff --from-migrations prisma/migrations --to-schema prisma/schema.prisma --exit-code
+
       - name: Lint (ESLint)
         run: pnpm lint
 

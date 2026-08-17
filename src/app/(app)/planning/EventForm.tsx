@@ -38,11 +38,16 @@ export function EventForm({
   defaults,
   submitLabel,
   places = [],
+  units = UNITS,
 }: {
   action: (prev: ActionResult, formData: FormData) => Promise<ActionResult>;
   defaults?: Partial<EventFormValues>;
   submitLabel: string;
   places?: { id: string; name: string }[];
+  // Branches proposées au choix — restreintes au périmètre du chef (D-024) par
+  // la page appelante, qui seule dispose de la session. « Tout le groupe »
+  // reste toujours ouvert : un événement de groupe concerne tout le monde.
+  units?: readonly string[];
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
@@ -94,7 +99,7 @@ export function EventForm({
             className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm text-earth"
           >
             <option value="">Tout le groupe</option>
-            {UNITS.map((u) => (
+            {units.map((u) => (
               <option key={u} value={u}>
                 {UNIT_LABEL[u as Unit]}
               </option>

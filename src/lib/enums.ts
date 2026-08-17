@@ -43,11 +43,24 @@ export const EXTRA_ROLES = [
   "MEMBRE_LOCAL",
 ] as const;
 
-// RGPD-02 — type de consentement à l'inscription (Consent.type). SELF = donné
-// par la personne elle-même (≥ 15 ans). PARENTAL = attestation du responsable
-// légal pour un mineur de moins de 15 ans (cf. src/lib/legal/versions.ts).
-export const CONSENT_TYPES = ["SELF", "PARENTAL"] as const;
+// RGPD-02 / US-C08 — type de consentement (Consent.type). SELF = donné par la
+// personne elle-même (≥ 15 ans). PARENTAL = attestation du responsable légal
+// pour un mineur de moins de 15 ans (cf. src/lib/legal/versions.ts). IMAGE_RIGHTS
+// = droit à l'image (cf. src/modules/consent), append-only comme le reste de
+// `Consent` : porte sa valeur dans `Consent.value` (cf. IMAGE_RIGHTS_STATUSES).
+export const CONSENT_TYPES = ["SELF", "PARENTAL", "IMAGE_RIGHTS"] as const;
 export type ConsentType = (typeof CONSENT_TYPES)[number];
+
+// US-C08 — droit à l'image. RESTREINT_INTERNE = usage réservé à la
+// communication interne du groupe (pas de diffusion publique/réseaux sociaux).
+export const IMAGE_RIGHTS_STATUSES = ["OUI", "NON", "RESTREINT_INTERNE"] as const;
+export type ImageRightsStatus = (typeof IMAGE_RIGHTS_STATUSES)[number];
+
+export const IMAGE_RIGHTS_LABEL: Record<ImageRightsStatus, string> = {
+  OUI: "Autorisé",
+  NON: "Refusé",
+  RESTREINT_INTERNE: "Usage interne uniquement",
+};
 
 export const ACCOUNT_STATUSES = [
   "PENDING",
@@ -76,6 +89,16 @@ export const UNIT_LABEL: Record<Unit, string> = {
   COMPAGNONS: "Compagnons (17-21 ans)",
   ADULTES: "Adultes (responsables, local)",
 };
+
+// US-CM-01 — branches trop jeunes pour un compte autonome : le compte existe
+// (pour être rattaché à un matériel, une progression…) mais ne se connecte
+// jamais lui-même — un parent agit pour lui via son propre compte (FamilyLink).
+export const NO_LOGIN_UNITS = ["FARFADETS", "LOUVETEAUX"] as const;
+
+export function unitAllowsLogin(unit: Unit | string | null | undefined): boolean {
+  if (!unit) return true;
+  return !(NO_LOGIN_UNITS as readonly string[]).includes(unit);
+}
 
 export const EQUIPMENT_CONDITIONS = [
   "NEUF",
@@ -267,8 +290,25 @@ export const NOTIFICATION_TYPES = [
   "STEP_VALIDATION_REQUEST", // US-S04 — 2e chef sollicité pour confirmer une étape
   "STEP_VALIDATED", // US-S04 — étape confirmée (→ jeune / parent)
   "BADGE_AWARDED", // US-S05 — badge attribué (→ jeune / parent)
+  "REPORT_CREATED", // SAFE-02 — signalement créé (→ les modérateurs concernés : ADMIN + CHEF de l'unité)
+  "REPORT_UPDATE", // SAFE-02 — signalement traité (résolu ou rejeté) → le signalant
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
+
+// SAFE-02 — signalement & modération de contenu. `targetType` est polymorphe :
+// Message (salon) et DirectMessage n'ont pas de parent commun (cf. Report,
+// prisma/schema.prisma).
+export const REPORT_TARGET_TYPES = ["CHANNEL_MESSAGE", "DIRECT_MESSAGE"] as const;
+export type ReportTargetType = (typeof REPORT_TARGET_TYPES)[number];
+
+export const REPORT_STATUSES = ["PENDING", "RESOLVED", "DISMISSED"] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
+export const REPORT_STATUS_LABEL: Record<ReportStatus, string> = {
+  PENDING: "En attente",
+  RESOLVED: "Résolu",
+  DISMISSED: "Rejeté",
+};
 
 // V7 — statuts du suivi pédagogique.
 export const STEP_VALIDATION_STATUSES = ["PROPOSED", "CONFIRMED"] as const;
@@ -297,6 +337,8 @@ export const AUDIT_ACTIONS = [
   "USER_SUSPENDED",
   "USER_ROLE_CHANGED",
   "USER_UNIT_CHANGED",
+  // SAFE-01 — correction admin d'une date de naissance (from/to en métadonnées).
+  "USER_BIRTHDATE_CHANGED",
   "USER_PROFILE_UPDATED",
   "USER_DELETED",
   "USER_PASSWORD_CHANGED",
@@ -368,5 +410,16 @@ export const AUDIT_ACTIONS = [
   "PEDAGO_GOAL_SET",
   "PEDAGO_GOAL_UPDATED",
   "PEDAGO_NOTE_ADDED",
+  "MESSAGE_REPORTED",
+  "MESSAGE_HIDDEN",
+  "REPORT_RESOLVED",
+  "REPORT_DISMISSED",
+  // US-CM-01 — compte enfant sans connexion, créé par la SECRÉTAIRE/ADMIN.
+  "USER_CHILD_ACCOUNT_CREATED",
+  // US-CM-01 — modification d'un compte par un admin/secrétaire (peut faire
+  // basculer canLogin: false → true si l'email placeholder est remplacé).
+  "USER_ACCOUNT_UPDATED",
+  // US-C08 — droit à l'image.
+  "IMAGE_RIGHTS_STATUS_SET",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -114,9 +114,10 @@ export default async function MembersPage({ searchParams }: PageProps) {
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {members.map((m) => {
-            const roleLabels = effectiveRoles(m)
-              .map((r) => ROLE_LABEL[r as Role] ?? r)
-              .join(", ");
+            const roles = effectiveRoles(m);
+            const roleLabels = roles.map((r) => ROLE_LABEL[r as Role] ?? r).join(", ");
+            // US-CM-01 — compte enfant géré par un parent, sans connexion propre.
+            const noLoginAccount = roles.includes("SCOUT") && m.canLogin === false;
             return (
               <li
                 key={m.id}
@@ -141,6 +142,11 @@ export default async function MembersPage({ searchParams }: PageProps) {
                     {roleLabels || "—"}
                     {m.unit ? ` · ${UNIT_LABEL[m.unit as Unit] ?? m.unit}` : ""}
                   </p>
+                  {noLoginAccount ? (
+                    <span className="mt-1 inline-flex items-center rounded-full bg-sand px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-trail">
+                      Compte sans connexion (parent)
+                    </span>
+                  ) : null}
                 </div>
                 {m.phone ? (
                   <a

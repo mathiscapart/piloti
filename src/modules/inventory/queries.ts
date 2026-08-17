@@ -440,6 +440,8 @@ export async function getMemberDetail(id: string) {
       roles: true,
       status: true,
       image: true,
+      // US-CM-01 — compte enfant sans connexion propre (badge fiche membre).
+      canLogin: true,
       // US-26 — profil parent enrichi
       profession: true,
       skills: true,
@@ -493,6 +495,8 @@ export async function listMembers(opts: MemberFilter = {}) {
       unit: true,
       phone: true,
       email: true,
+      // US-CM-01 — compte enfant sans connexion propre (badge annuaire).
+      canLogin: true,
     },
   });
 

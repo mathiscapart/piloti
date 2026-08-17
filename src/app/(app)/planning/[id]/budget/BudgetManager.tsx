@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { toast } from "sonner";
@@ -109,18 +108,10 @@ export function BudgetManager({
             {price > 0 ? formatEuros(price) : "Gratuit"}
           </p>
         )}
-        {price > 0 ? (
-          <p className="text-xs text-trail">
-            Chaque jeune paie ce tarif pondéré par sa{" "}
-            <Link
-              href="/finances/tranches"
-              className="font-bold text-forest underline-offset-2 hover:underline"
-            >
-              tranche de quotient familial
-            </Link>
-            .
-          </p>
-        ) : null}
+        {/* QF masqué — décision groupe, cf. DECISIONS.md (l'explication du
+            tarif pondéré par tranche de quotient familial est retirée de
+            l'UI ; la pondération reste appliquée en coulisse si une tranche
+            existe déjà pour le jeune). */}
 
         {price > 0 ? (
           <label className="flex items-start gap-2 pt-1">

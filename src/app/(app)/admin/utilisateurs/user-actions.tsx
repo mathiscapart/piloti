@@ -22,6 +22,7 @@ import {
   changeUserPassword,
   deleteUser,
   reactivateUser,
+  setUserBirthDate,
   setUserRoles,
   setUserUnit,
   suspendUser,
@@ -232,6 +233,77 @@ export function UnitEditor({
   );
 }
 
+// SAFE-01 — seul chemin de correction d'une date de naissance déjà posée :
+// l'intéressé ne peut que la renseigner une fois. Livré dans le même lot que le
+// verrou, sinon une faute de frappe à l'inscription serait sans recours.
+export function BirthDateEditor({
+  userId,
+  currentBirthDate,
+}: {
+  userId: string;
+  currentBirthDate: string | null;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState<string>(currentBirthDate ?? "");
+  const [pending, start] = useTransition();
+
+  function save() {
+    const fd = new FormData();
+    fd.set("userId", userId);
+    fd.set("birthDate", value);
+    start(async () => {
+      const res = await setUserBirthDate(emptyState, fd);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Date de naissance mise à jour.");
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setValue(currentBirthDate ?? "");
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          {currentBirthDate ? `Né(e) le ${currentBirthDate}` : "Date de naissance —"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Date de naissance</DialogTitle>
+          <DialogDescription>
+            Elle détermine les règles de protection des mineurs (messagerie
+            privée notamment). Toute correction est tracée dans le journal
+            d&apos;audit.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label htmlFor={`birthDate-${userId}`}>Date de naissance</Label>
+          <Input
+            id={`birthDate-${userId}`}
+            type="date"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </div>
+        <DialogFooter>
+          <Button onClick={save} disabled={pending || !value}>
+            {pending ? "Enregistrement…" : "Enregistrer"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function SuspendButton({
   userId,
   fullName,
@@ -305,9 +377,14 @@ export function ReactivateButton({
 export function DeleteUserButton({
   userId,
   fullName,
+  redirectTo,
 }: {
   userId: string;
   fullName: string;
+  // Page dédiée à ce compte (ex. /admin/utilisateurs/[id]/modifier) : une fois
+  // le compte supprimé, cette page n'a plus de cible, on redirige plutôt que
+  // de laisser un simple router.refresh() sur une route désormais invalide.
+  redirectTo?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -326,7 +403,8 @@ export function DeleteUserButton({
       if (res.error) toast.error(res.error);
       else {
         toast.success(`Compte de ${fullName} supprimé.`);
-        router.refresh();
+        if (redirectTo) router.push(redirectTo);
+        else router.refresh();
       }
     });
   }

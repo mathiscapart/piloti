@@ -5,3 +5,8 @@
 export const PRIVACY_VERSION = "2026-07-16";
 export const TERMS_VERSION = "2026-07-16";
 export const LEGAL_VERSION = "2026-07-16";
+
+// US-C08 — droit à l'image. Même convention : à faire évoluer si le texte/la
+// politique de droit à l'image change substantiellement (cf. Consent.type
+// IMAGE_RIGHTS, prisma/schema.prisma).
+export const IMAGE_RIGHTS_VERSION = "2026-08-01";

@@ -4,7 +4,9 @@ import { notFound, redirect } from "next/navigation";
 
 import { listPlaceOptions } from "@/modules/camp/places";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { UNITS } from "@/lib/enums";
+import { can, scopedUnits } from "@/lib/permissions";
+import { canActOnEvent } from "@/modules/planning/event-scope";
 import { updateEvent } from "@/modules/planning/actions";
 import { toDatetimeLocal } from "@/modules/planning/format";
 import { getEvent } from "@/modules/planning/queries";
@@ -22,8 +24,14 @@ export default async function EditEventPage({ params }: PageProps) {
 
   const event = await getEvent(id);
   if (!event) notFound();
+  // Périmètre d'unité (D-024) : même règle que `updateEvent`, sinon le
+  // formulaire s'ouvrirait pour se faire refuser à l'enregistrement.
+  if (!canActOnEvent(user, "event.manage", event.unit)) redirect(`/planning/${id}`);
 
   const places = await listPlaceOptions();
+  // Mêmes branches proposées qu'à la création : `updateEvent` refuse de toute
+  // façon un déplacement hors périmètre.
+  const units = scopedUnits(user, UNITS);
   const action = updateEvent.bind(null, event.id);
 
   return (
@@ -43,6 +51,7 @@ export default async function EditEventPage({ params }: PageProps) {
           action={action}
           submitLabel="Enregistrer les modifications"
           places={places}
+          units={units}
           defaults={{
             name: event.name,
             type: event.type,

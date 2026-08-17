@@ -7,13 +7,31 @@
 
 import { z } from "zod";
 
-// Bornes de validation de la date de naissance, partagées par l'inscription
-// (register/actions.ts) et par la complétion de profil a posteriori
-// (completer-profil/actions.ts) : une seule définition des bornes valides.
+// SAFE-01 — bornes de plausibilité. L'âge est déclaratif, donc invérifiable en
+// soi, mais rien n'obligeait la date à être crédible : une saisie à quelques
+// mois passait sans broncher, et surtout « 1900 » suffisait à un jeune pour se
+// déclarer centenaire — donc majeur — et débloquer la messagerie privée dès
+// l'inscription. 5 ans laisse une marge sous les Farfadets (6 ans).
+export const MIN_PLAUSIBLE_AGE = 5;
+export const MAX_PLAUSIBLE_AGE = 110;
+
+// Bornes de validation de la date de naissance, partagées par les quatre
+// chemins de création (register, setup, createChildAccount, seed) et par la
+// correction admin (setUserBirthDate) : une seule définition des bornes
+// valides, donc aucun chemin ne peut poser une date que les autres refusent.
+// Les deux contrôles sont des `refine`, donc évalués à la validation. Le
+// `.max(new Date())` précédent figeait « maintenant » au chargement du module
+// et dérivait sur un serveur qui tourne des semaines.
 export const birthDateSchema = z.coerce
   .date("Date de naissance invalide.")
-  .min(new Date("1900-01-01"), "Date de naissance invalide.")
-  .max(new Date(), "La date de naissance ne peut pas être dans le futur.");
+  .refine(
+    (d) => d <= new Date(),
+    "La date de naissance ne peut pas être dans le futur.",
+  )
+  .refine((d) => {
+    const age = computeAge(d);
+    return age !== null && age >= MIN_PLAUSIBLE_AGE && age <= MAX_PLAUSIBLE_AGE;
+  }, `Date de naissance invraisemblable (âge attendu entre ${MIN_PLAUSIBLE_AGE} et ${MAX_PLAUSIBLE_AGE} ans).`);
 
 // RGPD-02 — en-dessous de ce seuil, l'inscription requiert l'attestation d'un
 // responsable légal en plus du consentement de la personne elle-même.

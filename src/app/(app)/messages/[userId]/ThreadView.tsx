@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Flag, Send } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import {
   sendDirectMessage,
 } from "@/modules/communication/dm-actions";
 import type { Thread } from "@/modules/communication/dm-queries";
+import { reportMessage } from "@/modules/communication/moderation-actions";
 
 const TIME_FMT = new Intl.DateTimeFormat("fr-FR", {
   hour: "2-digit",
@@ -71,6 +72,15 @@ export function ThreadView({ initial }: { initial: Thread }) {
     setSending(false);
   }
 
+  // SAFE-02 — signale un message reçu aux modérateurs (motif facultatif).
+  async function report(messageId: string) {
+    const reason = window.prompt("Pourquoi signales-tu ce message ? (optionnel)");
+    if (reason === null) return; // annulé
+    const res = await reportMessage("DIRECT_MESSAGE", messageId, reason.trim() || undefined);
+    if (res.error) toast.error(res.error);
+    else toast.success("Message signalé aux modérateurs.");
+  }
+
   // Accusé de lecture : sous le dernier message envoyé par moi, s'il est lu.
   const lastMineRead = (() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -97,7 +107,10 @@ export function ThreadView({ initial }: { initial: Thread }) {
           messages.map((m) => (
             <div
               key={m.id}
-              className={cn("flex", m.mine ? "justify-end" : "justify-start")}
+              className={cn(
+                "group flex items-end gap-1",
+                m.mine ? "justify-end" : "justify-start",
+              )}
             >
               <div
                 className={cn(
@@ -117,6 +130,16 @@ export function ThreadView({ initial }: { initial: Thread }) {
                   {TIME_FMT.format(new Date(m.createdAt))}
                 </p>
               </div>
+              {!m.mine ? (
+                <button
+                  type="button"
+                  onClick={() => report(m.id)}
+                  className="rounded p-1 text-trail opacity-0 transition-opacity hover:bg-brick-soft hover:text-brick-ink group-hover:opacity-100"
+                  title="Signaler"
+                >
+                  <Flag className="size-3.5" />
+                </button>
+              ) : null}
             </div>
           ))
         )}

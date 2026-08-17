@@ -30,6 +30,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getChildrenOf } from "@/modules/family/queries";
+import { canActOnEvent } from "@/modules/planning/event-scope";
 import { formatEventRange } from "@/modules/planning/format";
 import {
   getAttendanceCount,
@@ -79,7 +80,13 @@ export default async function EventDetailPage({ params }: PageProps) {
     awaiting,
     addable,
   } = data;
-  const canManage = can(user, "event.manage");
+  // Périmètre d'unité (D-024) : toute ACTION sur l'événement — le modifier, le
+  // supprimer, pointer ses présences, gérer ses inscriptions (US-P05) — est
+  // bornée à la branche concernée ; un événement de groupe (`unit === null`)
+  // reste ouvert à tout l'encadrement. La LECTURE reste ouverte : un chef d'une
+  // autre branche voit la fiche et la liste des réponses, il ne peut rien y changer.
+  const isStaff = can(user, "event.manage");
+  const canManage = canActOnEvent(user, "event.manage", event.unit);
 
   const deadlinePassed =
     event.registrationDeadline != null &&
@@ -100,7 +107,7 @@ export default async function EventDetailPage({ params }: PageProps) {
     };
   });
 
-  // US-P07 — résumé de présence (pour les chefs).
+  // US-P07 — résumé de présence (pour les chefs qui peuvent pointer).
   const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
 
   // US-F04/F05 — accès au budget de l'événement.
@@ -297,8 +304,10 @@ export default async function EventDetailPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {/* US-P05 — vue chef : gestion des inscriptions. */}
-      {canManage && event.registrationOpen ? (
+      {/* US-P05 — vue chef : inscriptions. La LECTURE (liste, compteur, export)
+          reste ouverte à tout l'encadrement, conformément à D-024 ; seules les
+          MUTATIONS (inscrire, désister) sont bornées à la branche via `canManage`. */}
+      {isStaff && event.registrationOpen ? (
         <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -361,10 +370,12 @@ export default async function EventDetailPage({ params }: PageProps) {
                               « {reg.comment} »
                             </span>
                           ) : null}
-                          <WithdrawRegistrationButton
-                            eventId={event.id}
-                            userId={reg.user.id}
-                          />
+                          {canManage ? (
+                            <WithdrawRegistrationButton
+                              eventId={event.id}
+                              userId={reg.user.id}
+                            />
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -416,7 +427,7 @@ export default async function EventDetailPage({ params }: PageProps) {
             </div>
           ) : null}
 
-          {addable.length > 0 ? (
+          {canManage && addable.length > 0 ? (
             <div className="space-y-2 border-t border-stone/50 pt-3">
               <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
                 Inscrire un jeune

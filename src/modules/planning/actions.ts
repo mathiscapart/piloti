@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import type { ZodError } from "zod";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
@@ -14,6 +15,7 @@ import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
 import { maybeAlertAbsences, notifyEventAudience } from "./event-hooks";
+import { canActOnEvent, refuseIfEventOutOfScope } from "./event-scope";
 import { eventSchema, withdrawalReasonSchema } from "./types";
 
 function absoluteUrl(path: string): string {
@@ -45,19 +47,36 @@ function parseDates(
   return { start, end };
 }
 
+// `FormData.get()` renvoie `null` (pas `""`) quand le champ est absent du DOM
+// — ex. le <select> campPlaceId n'est pas rendu s'il n'y a aucun lieu de camp.
+// Le schéma Zod n'accepte que `string | undefined` : on normalise ici pour
+// éviter de laisser fuir un message Zod brut ("expected string, received null").
 function readForm(formData: FormData) {
+  const str = (key: string) => formData.get(key)?.toString() ?? "";
   return {
-    name: formData.get("name"),
-    type: formData.get("type"),
-    startDate: formData.get("startDate"),
-    endDate: formData.get("endDate"),
-    unit: formData.get("unit"),
-    location: formData.get("location"),
-    description: formData.get("description"),
-    campPlaceId: formData.get("campPlaceId"),
+    name: str("name"),
+    type: str("type"),
+    startDate: str("startDate"),
+    endDate: str("endDate"),
+    unit: str("unit"),
+    location: str("location"),
+    description: str("description"),
+    campPlaceId: str("campPlaceId"),
     registrationOpen: formData.get("registrationOpen"),
-    registrationDeadline: formData.get("registrationDeadline"),
+    registrationDeadline: str("registrationDeadline"),
   };
+}
+
+// Nos schémas portent un message français pour chaque cas attendu ; si un
+// message Zod technique fuit malgré tout (ex. "Invalid input: expected
+// string, received null"), on retombe sur un message compréhensible plutôt
+// que d'exposer le jargon interne de la validation.
+function formErrorMessage(error: ZodError): string {
+  const message = error.issues[0]?.message;
+  if (!message || /expected .+, received/i.test(message)) {
+    return "Certains champs du formulaire sont invalides. Vérifie les informations saisies.";
+  }
+  return message;
 }
 
 // La date limite d'inscription (datetime-local, optionnelle) suit la même règle
@@ -83,8 +102,14 @@ export async function createEvent(
 
   const parsed = eventSchema.safeParse(readForm(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+    return { error: formErrorMessage(parsed.error) };
   }
+  // Périmètre d'unité (D-024) : un chef crée pour SA branche, ou pour tout le
+  // groupe. Sans ce contrôle, la branche cible n'est qu'un champ du formulaire.
+  if (!canActOnEvent(user, "event.manage", parsed.data.unit)) {
+    return { error: "Tu ne peux créer un événement que pour ta branche." };
+  }
+
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
   const deadline = parseDeadline(parsed.data.registrationDeadline);
@@ -134,14 +159,24 @@ export async function updateEvent(
   }
   const existing = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true },
+    select: { id: true, unit: true },
   });
   if (!existing) return { error: "Événement introuvable." };
+  // Périmètre d'unité : sur la branche ACTUELLE de l'événement…
+  if (!canActOnEvent(user, "event.manage", existing.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
 
   const parsed = eventSchema.safeParse(readForm(formData));
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+    return { error: formErrorMessage(parsed.error) };
   }
+  // …ET sur la branche CIBLE : sans ce second contrôle, il suffirait de changer
+  // la branche dans le formulaire pour transférer un événement à une autre unité.
+  if (!canActOnEvent(user, "event.manage", parsed.data.unit)) {
+    return { error: "Tu ne peux pas déplacer cet événement vers une autre branche." };
+  }
+
   const dates = parseDates(parsed.data.startDate, parsed.data.endDate);
   if ("error" in dates) return { error: dates.error };
   const deadline = parseDeadline(parsed.data.registrationDeadline);
@@ -197,6 +232,11 @@ export async function deleteEvent(eventId: string): Promise<ActionResult> {
     },
   });
   if (!existing) return { error: "Événement introuvable." };
+  // Périmètre d'unité : la suppression est l'action la moins réversible du
+  // planning, elle est bornée comme la modification.
+  if (!canActOnEvent(user, "event.manage", existing.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
 
   await withAudit(
     (tx) => tx.event.delete({ where: { id: eventId } }),
@@ -229,9 +269,14 @@ export async function setAttendance(
 
   const event = await db.event.findUnique({
     where: { id: eventId },
-    select: { id: true },
+    select: { id: true, unit: true },
   });
   if (!event) return { error: "Événement introuvable." };
+  // Périmètre d'unité : un chef ne pointe que les événements de sa branche
+  // (les événements de groupe restant ouverts à tous, cf. `canActOnEvent`).
+  if (!canActOnEvent(actor, "event.manage", event.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
 
   await withAudit(
     (tx) =>
@@ -338,10 +383,14 @@ export async function rsvpEvent(
   );
 
   // Confirmation par email à la personne qui agit (best-effort, après réponse).
+  // SEC-08 (Vuln 5) — plus de <strong> ici : notificationEmailHtml() échappe
+  // désormais systématiquement `body`, et targetName est un nom de profil
+  // (texte libre, potentiellement attaqué) qu'on ne veut pas faire passer
+  // pour du HTML de confiance.
   const label = RSVP_LABEL[response as RsvpResponse];
   const body = targetName
-    ? `Inscription enregistrée pour <strong>${targetName}</strong> : <strong>${label}</strong>.`
-    : `Votre réponse a bien été enregistrée : <strong>${label}</strong>.`;
+    ? `Inscription enregistrée pour ${targetName} : ${label}.`
+    : `Votre réponse a bien été enregistrée : ${label}.`;
   after(() =>
     sendEmail({
       to: user.email,
@@ -377,6 +426,12 @@ export async function addRegistration(
     select: { id: true, unit: true },
   });
   if (!event) return { error: "Événement introuvable." };
+  // Périmètre d'unité (D-024) : le contrôle d'éligibilité ci-dessous porte sur
+  // la branche de la CIBLE ; celui-ci porte sur celle de l'ACTEUR. Sans lui, un
+  // chef d'une autre branche inscrirait des jeunes sur cet événement.
+  if (!canActOnEvent(actor, "event.manage", event.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
 
   const target = await db.user.findUnique({
     where: { id: userId },
@@ -423,6 +478,11 @@ export async function withdrawRegistration(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Motif invalide." };
   }
+
+  // Périmètre d'unité (D-024) : désister est une mutation sur l'événement,
+  // bornée comme le pointage ou la modification.
+  const outOfScope = await refuseIfEventOutOfScope(actor, "event.manage", eventId);
+  if (outOfScope) return outOfScope;
 
   const existing = await db.eventRegistration.findUnique({
     where: { eventId_userId: { eventId, userId } },

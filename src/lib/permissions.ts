@@ -14,6 +14,11 @@
 //   (`*.view` vs `*.create/...`) afin de permettre le « lecture seule » du RG.
 //   Permission conditionnée par la branche : un JEUNE (SCOUT) des branches
 //   Pionniers/Compagnons peut créer un prêt.
+//
+// Périmètre d'unité — la matrice ci-dessous ne dit QUE « quel rôle a le droit ».
+// Certaines actions valent en plus « seulement sur ma branche » : c'est
+// `inUnitScope()` (bas de fichier), appelé EN PLUS de `can()` par les surfaces
+// concernées (écriture pédagogique, pointage des présences, modération).
 
 import type { AccountStatus, Role } from "@/lib/enums";
 
@@ -40,12 +45,16 @@ export const ACTIONS = [
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "member.view",
   "member.directory", // US-26 — annuaire des compétences parents (RG)
+  "member.image_rights.manage", // US-C08 — définir le statut de droit à l'image (RG + SEC)
   // Dons
   "donation.create",
   "donation.view", // consulter les dons (RESPONSABLE_MATERIEL + RG lecture seule)
   "donation.review",
   // Communication
   "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
+  // SAFE-02 — signalement & modération de contenu (salons + messagerie privée).
+  "moderation.view", // consulter la file de modération (CHEF + RG, lecture)
+  "moderation.review", // traiter la file : masquer un message, résoudre/rejeter
   // Planning & événements (US-P01/P02/P03)
   "event.view", // consulter le calendrier (tout utilisateur actif)
   "event.manage", // créer / modifier / supprimer un événement (encadrants)
@@ -75,6 +84,9 @@ export const ACTIONS = [
 export type Action = (typeof ACTIONS)[number];
 
 interface AuthCtx {
+  // Optionnel : uniquement utilisé pour tracer un `roles` corrompu (cf.
+  // `effectiveRoles`) ; absent → le log se contente d'un contexte partiel.
+  id?: string;
   role: Role | string;
   // Rôles additionnels : tableau, ou chaîne JSON (telle que stockée en base).
   roles?: string[] | string | null;
@@ -130,12 +142,24 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "member.view": [CHEF, RG, SEC, TRES],
   // Annuaire des compétences : RG + SECRÉTAIRE (US-32) ; ADMIN superuser.
   "member.directory": [RG, SEC],
+  // US-C08 — déroge volontairement à la convention « RG = lecture seule »
+  // documentée en tête de fichier : comme `moderation.review` (protection des
+  // mineurs), le droit à l'image est un motif de conformité/protection, pas
+  // une gestion opérationnelle courante — le RG a besoin d'y écrire, pas
+  // seulement d'en consulter la valeur. SEC gère aussi (dossiers admin des
+  // membres) ; ADMIN superuser.
+  "member.image_rights.manage": [RG, SEC],
   // Dons — MAT accepte/refuse ; RG = lecture seule sur tout (consulte les dons) ; ADMIN.
   "donation.create": [], // géré par ANY_ACTIVE
   "donation.view": [MAT, RG],
   "donation.review": [MAT],
   // Communication — publier une annonce / diffusion urgente : encadrants.
   "announcement.publish": [CHEF, RG],
+  // SAFE-02 — la file de modération se consulte ET se traite par les chefs et le
+  // responsable de groupe (masquer, résoudre, rejeter). Un CHEF est limité à son
+  // unité (cf. canModerateReport) ; RG et ADMIN voient et traitent toutes les unités.
+  "moderation.view": [CHEF, RG],
+  "moderation.review": [CHEF, RG],
   // Planning — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
   "event.view": [],
   "event.manage": [CHEF],
@@ -183,7 +207,14 @@ export function effectiveRoles(user: Partial<AuthCtx>): string[] {
     try {
       const parsed = JSON.parse(user.roles);
       if (Array.isArray(parsed)) return parsed.map(String);
-    } catch {
+    } catch (err) {
+      // Fail-closed : on retourne bien [] (aucun droit), mais on trace
+      // l'anomalie — un `roles` corrompu prive silencieusement un compte de
+      // ses droits, ce qui doit rester visible pour l'admin/le support.
+      console.warn(
+        `[permissions] effectiveRoles: JSON "roles" invalide pour l'utilisateur ${user.id ?? "?"} — fail-closed, aucun rôle accordé.`,
+        err,
+      );
       return [];
     }
   }
@@ -215,6 +246,75 @@ export function can(user: AuthCtx, action: Action): boolean {
 /** Pratique pour l'UI : l'utilisateur possède-t-il ce rôle (principal ou additionnel) ? */
 export function hasRole(user: AuthCtx, role: Role): boolean {
   return effectiveRoles(user).includes(role);
+}
+
+/**
+ * Périmètre d'unité. `can()` répond « ce rôle a-t-il le droit ? » ; cette
+ * fonction répond « sur QUELLE branche ? ». Les deux se combinent : le rôle
+ * donne le droit, l'unité en donne l'étendue — un CHEF est chef de SA branche,
+ * pas du groupe. Généralisation de `canModerateReport` (SAFE-02), qui en est
+ * désormais un cas d'usage.
+ *
+ * - ADMIN (superutilisateur) et RESPONSABLE_GROUPE (vue groupe) ne sont pas bornés.
+ * - Fail-closed : un CHEF sans `unit` renseignée n'encadre aucune branche, et
+ *   une ressource sans unité (`targetUnit === null`) n'appartient à personne.
+ *   Le cas inverse — une ressource « de groupe » ouverte à tout l'encadrement,
+ *   ex. un événement sans unité — se traite AU SITE D'APPEL (`unit === null ||
+ *   inUnitScope(...)`), pas ici : la primitive ne devine pas la sémantique du null.
+ *
+ * Ne contrôle pas le statut du compte : c'est le rôle de `can()`, qu'on appelle
+ * toujours en premier.
+ */
+export function inUnitScope(user: AuthCtx, targetUnit: string | null): boolean {
+  const roles = effectiveRoles(user);
+  if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
+  return targetUnit !== null && user.unit === targetUnit;
+}
+
+// Rôles rattachés à une branche. Tous les autres — trésorier, secrétaire,
+// responsable matériel, responsable de groupe, admin — exercent une fonction
+// TRANSVERSE au groupe : les borner à une unité n'aurait pas de sens (le
+// trésorier encaisse pour tout le monde), et les casserait puisqu'ils n'ont
+// généralement pas de `unit` renseignée.
+const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
+
+/**
+ * Périmètre d'unité pour UNE action donnée : « ce compte peut-il faire cette
+ * action sur cette branche ? ». Combine `can()` et `inUnitScope()`, en tenant
+ * compte du rôle par lequel le droit arrive.
+ *
+ * La nuance est indispensable dès qu'une action est partagée entre un rôle
+ * borné et un rôle transverse : `budget.manage` appartient au CHEF **et** au
+ * TRÉSORIER. Le chef ne gère que le budget des événements de sa branche ; le
+ * trésorier gère tout, sans quoi il ne pourrait plus rien encaisser. On ne
+ * borne donc que si le droit ne vient QUE de rôles bornés.
+ */
+export function canActOnUnit(
+  user: AuthCtx,
+  action: Action,
+  targetUnit: string | null,
+): boolean {
+  if (!can(user, action)) return false;
+  if (ANY_ACTIVE.has(action)) return true;
+  const roles = effectiveRoles(user);
+  if (roles.includes("ADMIN")) return true;
+  // Le droit vient-il (aussi) d'un rôle non borné ? Alors aucune limite d'unité.
+  const allowed = PERMISSIONS[action] ?? [];
+  const viaRoleTransverse = roles.some(
+    (r) => !UNIT_BOUND_ROLES.has(r) && (allowed as string[]).includes(r),
+  );
+  if (viaRoleTransverse) return true;
+  return inUnitScope(user, targetUnit);
+}
+
+/**
+ * Branches sur lesquelles `user` a la main, dérivées de `inUnitScope` (pendant
+ * de `assignableRoles` pour les rôles). Pratique pour filtrer une requête ou un
+ * sélecteur d'unité sans jamais tester un rôle en dur côté page :
+ * liste complète = non borné (ADMIN/RG), liste vide = aucun périmètre.
+ */
+export function scopedUnits(user: AuthCtx, catalog: readonly string[]): string[] {
+  return catalog.filter((u) => inUnitScope(user, u));
 }
 
 // US-32 — la zone /admin n'est plus 100 % ADMIN : différentes rubriques sont

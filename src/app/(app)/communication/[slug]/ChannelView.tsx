@@ -1,6 +1,6 @@
 "use client";
 
-import { ImagePlus, Pin, Send, SmilePlus, Trash2 } from "lucide-react";
+import { Flag, ImagePlus, Pin, Send, SmilePlus, Trash2 } from "lucide-react";
 import { useActionState, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ import {
   togglePin,
   toggleReaction,
 } from "@/modules/communication/actions";
+import { reportMessage } from "@/modules/communication/moderation-actions";
 import { loadPolls } from "@/modules/communication/poll-actions";
 import type { PollWithVotes } from "@/modules/communication/poll-actions";
 
@@ -324,6 +325,14 @@ function MessageRow({
     await togglePin(msg.id);
     onChanged();
   }
+  // SAFE-02 — signale ce message aux modérateurs (motif facultatif).
+  async function handleReport() {
+    const reason = window.prompt("Pourquoi signales-tu ce message ? (optionnel)");
+    if (reason === null) return; // annulé
+    const res = await reportMessage("CHANNEL_MESSAGE", msg.id, reason.trim() || undefined);
+    if (res.error) toast.error(res.error);
+    else toast.success("Message signalé aux modérateurs.");
+  }
   const canDelete = mine || isAdmin;
 
   return (
@@ -374,6 +383,16 @@ function MessageRow({
               title="Supprimer"
             >
               <Trash2 className="size-4" />
+            </button>
+          ) : null}
+          {!mine ? (
+            <button
+              type="button"
+              onClick={handleReport}
+              className="rounded p-1 text-trail hover:bg-brick-soft hover:text-brick-ink"
+              title="Signaler"
+            >
+              <Flag className="size-4" />
             </button>
           ) : null}
         </span>

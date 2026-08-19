@@ -7,7 +7,12 @@ import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
-import { birthDateSchema, requiresParentalConsent } from "@/lib/legal/age";
+import {
+  birthDateSchema,
+  canSelfRegister,
+  MIN_LOGIN_AGE,
+  requiresParentalConsent,
+} from "@/lib/legal/age";
 import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 
@@ -37,8 +42,8 @@ const schema = z
     // RGPD-02 — consentement à la politique de confidentialité + aux CGU,
     // obligatoire pour toute inscription.
     acceptPrivacy: z.literal("on", "Vous devez accepter la politique de confidentialité et les CGU."),
-    // RGPD-02 — attestation parentale, requise uniquement pour un mineur de
-    // moins de 15 ans (cf. superRefine ci-dessous).
+    // RGPD-02 (amendé, US-CM-04) — attestation parentale, requise pour tout
+    // mineur (moins de 18 ans, cf. superRefine ci-dessous).
     acceptParental: z.literal("on").optional(),
     guardianName: z
       .string()
@@ -50,12 +55,25 @@ const schema = z
     path: ["confirmPassword"],
   })
   .superRefine((d, ctx) => {
+    // US-CM-04 — refus sec en dessous de MIN_LOGIN_AGE. Ce contrôle vient AVANT
+    // celui du consentement parental, et coupe court : afficher en plus « il
+    // manque l'autorisation parentale » laisserait croire qu'une case cochée
+    // débloquerait l'inscription, alors qu'aucune case ne le peut.
+    if (!canSelfRegister(d.birthDate)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `L'inscription en ligne est réservée aux ${MIN_LOGIN_AGE} ans et plus. Demande à un parent ou à un chef de créer ta fiche.`,
+        path: ["birthDate"],
+      });
+      return;
+    }
+
     if (!requiresParentalConsent(d.birthDate)) return;
     if (d.acceptParental !== "on") {
       ctx.addIssue({
         code: "custom",
         message:
-          "L'autorisation d'un responsable légal est requise pour les mineurs de moins de 15 ans.",
+          "L'autorisation d'un responsable légal est requise tant que le jeune est mineur.",
         path: ["acceptParental"],
       });
     }

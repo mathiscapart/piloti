@@ -30,6 +30,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getChildrenOf } from "@/modules/family/queries";
+import { isConcernedByEvent } from "@/modules/planning/audience";
 import { canActOnEvent } from "@/modules/planning/event-scope";
 import { formatEventRange } from "@/modules/planning/format";
 import {
@@ -38,8 +39,11 @@ import {
   getEventWithRegistrations,
 } from "@/modules/planning/queries";
 
+import { AddRegistrationControl } from "../AddRegistrationControl";
 import { DeleteEventButton } from "../DeleteEventButton";
+import { PrintButton } from "../presences/PrintButton";
 import { RsvpControl } from "../RsvpControl";
+import { WithdrawRegistrationButton } from "../WithdrawRegistrationButton";
 
 const DEADLINE_FMT = new Intl.DateTimeFormat("fr-FR", {
   day: "2-digit",
@@ -66,12 +70,22 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   const data = await getEventWithRegistrations(id, user.id);
   if (!data) notFound();
-  const { event, registrations, reminders, myResponse } = data;
+  const {
+    event,
+    registrations,
+    reminders,
+    myResponse,
+    myStatus,
+    myWithdrawalReason,
+    expectedCount,
+    awaiting,
+    addable,
+  } = data;
   // Périmètre d'unité (D-024) : toute ACTION sur l'événement — le modifier, le
-  // supprimer, pointer ses présences — est bornée à la branche concernée ; un
-  // événement de groupe (`unit === null`) reste ouvert à tout l'encadrement.
-  // La LECTURE reste ouverte : un chef d'une autre branche voit la fiche et la
-  // liste des réponses, il ne peut simplement rien y changer.
+  // supprimer, pointer ses présences, gérer ses inscriptions (US-P05) — est
+  // bornée à la branche concernée ; un événement de groupe (`unit === null`)
+  // reste ouvert à tout l'encadrement. La LECTURE reste ouverte : un chef d'une
+  // autre branche voit la fiche et la liste des réponses, il ne peut rien y changer.
   const isStaff = can(user, "event.manage");
   const canManage = canActOnEvent(user, "event.manage", event.unit);
 
@@ -83,11 +97,26 @@ export default async function EventDetailPage({ params }: PageProps) {
   const myChildren = event.registrationOpen
     ? await getChildrenOf(user.id)
     : [];
-  const childRsvps = myChildren.map((child) => ({
-    child,
-    response:
-      registrations.find((r) => r.user.id === child.id)?.response ?? null,
-  }));
+  const childRsvps = myChildren.map((child) => {
+    const reg = registrations.find((r) => r.user.id === child.id);
+    return {
+      child,
+      response: reg?.response ?? null,
+      comment: reg?.comment ?? null,
+      withdrawn: reg?.status === "WITHDRAWN",
+      withdrawalReason: reg?.withdrawalReason ?? null,
+    };
+  });
+
+  // US-P04 — on ne s'inscrit qu'aux événements qui nous concernent : la même
+  // règle que `rsvpEvent`, pour ne jamais afficher un contrôle que le serveur
+  // refusera. Un encadrant garde la main pour LUI-MÊME (il vient prêter main
+  // forte sur une autre branche) ; ses enfants, eux, suivent la règle commune.
+  const jeSuisConcerne =
+    isStaff || isConcernedByEvent(event.unit, user.unit ?? null);
+  const enfantsConcernes = childRsvps.filter((c) =>
+    isConcernedByEvent(event.unit, c.child.unit ?? null),
+  );
 
   // US-P07 — résumé de présence (pour les chefs qui peuvent pointer).
   const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
@@ -113,9 +142,16 @@ export default async function EventDetailPage({ params }: PageProps) {
   const isLoanIncoherent = (l: (typeof eventLoans)[number]) =>
     l.expectedReturn < event.startDate || l.startDate > event.endDate;
 
-  // Regroupement des réponses par type (pour la vue chef).
+  // Regroupement des réponses par type (pour la vue chef). Les désistements
+  // sont montrés à part (US-P05), donc exclus des groupes par réponse.
+  const activeRegistrations = registrations.filter(
+    (reg) => reg.status !== "WITHDRAWN",
+  );
+  const withdrawnRegistrations = registrations.filter(
+    (reg) => reg.status === "WITHDRAWN",
+  );
   const byResponse = (r: RsvpResponse) =>
-    registrations.filter((reg) => reg.response === r);
+    activeRegistrations.filter((reg) => reg.response === r);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -244,15 +280,34 @@ export default async function EventDetailPage({ params }: PageProps) {
             </p>
           ) : (
             <>
-              <p className="text-sm text-trail">Indiquez votre présence :</p>
-              <RsvpControl eventId={event.id} current={myResponse} />
+              {!jeSuisConcerne && enfantsConcernes.length === 0 ? (
+                <p className="text-sm text-trail">
+                  Cet événement concerne les{" "}
+                  <span className="font-bold text-earth">
+                    {UNIT_LABEL[event.unit as Unit] ?? event.unit}
+                  </span>{" "}
+                  — tu peux le consulter, mais pas t&apos;y inscrire.
+                </p>
+              ) : null}
 
-              {childRsvps.length > 0 ? (
+              {jeSuisConcerne ? (
+                <>
+                  <p className="text-sm text-trail">Indiquez votre présence :</p>
+                  <RsvpControl
+                    eventId={event.id}
+                    current={myResponse}
+                    withdrawn={myStatus === "WITHDRAWN"}
+                    withdrawalReason={myWithdrawalReason}
+                  />
+                </>
+              ) : null}
+
+              {enfantsConcernes.length > 0 ? (
                 <div className="space-y-3 border-t border-stone/50 pt-3">
                   <p className="text-sm font-medium text-earth">
                     Inscrire mes enfants :
                   </p>
-                  {childRsvps.map(({ child, response }) => (
+                  {enfantsConcernes.map(({ child, response, comment, withdrawn, withdrawalReason }) => (
                     <div key={child.id} className="space-y-1.5">
                       <p className="text-sm font-bold text-earth">
                         {child.firstName} {child.lastName}
@@ -260,7 +315,10 @@ export default async function EventDetailPage({ params }: PageProps) {
                       <RsvpControl
                         eventId={event.id}
                         current={response}
+                        currentComment={comment}
                         forUserId={child.id}
+                        withdrawn={withdrawn}
+                        withdrawalReason={withdrawalReason}
                       />
                     </div>
                   ))}
@@ -271,17 +329,31 @@ export default async function EventDetailPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {/* Vue chef : liste des réponses. */}
+      {/* US-P05 — vue chef : inscriptions. La LECTURE (liste, compteur, export)
+          reste ouverte à tout l'encadrement, conformément à D-024 ; seules les
+          MUTATIONS (inscrire, désister) sont bornées à la branche via `canManage`. */}
       {isStaff && event.registrationOpen ? (
         <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
-          <div className="flex items-center gap-2">
-            <Users className="size-4 text-trail" />
-            <h2 className="font-bold text-earth">
-              Réponses ({registrations.length})
-            </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="size-4 text-trail" />
+              <h2 className="font-bold text-earth">
+                {activeRegistrations.length} inscrit
+                {activeRegistrations.length > 1 ? "s" : ""} / {expectedCount}{" "}
+                attendu{expectedCount > 1 ? "s" : ""}
+              </h2>
+            </div>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a href={`/planning/${event.id}/registrations/export`}>
+                  Exporter en CSV
+                </a>
+              </Button>
+              <PrintButton />
+            </div>
           </div>
 
-          {registrations.length === 0 ? (
+          {activeRegistrations.length === 0 ? (
             <p className="text-sm text-trail">Aucune réponse pour le moment.</p>
           ) : (
             <div className="space-y-4">
@@ -298,11 +370,11 @@ export default async function EventDetailPage({ params }: PageProps) {
                     >
                       {RSVP_LABEL[r as RsvpResponse]} ({list.length})
                     </h3>
-                    <ul className="flex flex-wrap gap-2">
+                    <ul className="space-y-2">
                       {list.map((reg) => (
                         <li
                           key={reg.user.id}
-                          className="flex items-center gap-2 rounded-full bg-sand px-2 py-1"
+                          className="flex flex-wrap items-center gap-2 rounded-xl bg-sand px-3 py-2"
                         >
                           <UserAvatar
                             image={reg.user.image}
@@ -313,6 +385,22 @@ export default async function EventDetailPage({ params }: PageProps) {
                           <span className="text-sm font-medium text-earth">
                             {reg.user.firstName} {reg.user.lastName}
                           </span>
+                          {reg.user.unit ? (
+                            <span className="text-xs text-trail">
+                              {UNIT_LABEL[reg.user.unit as Unit] ?? reg.user.unit}
+                            </span>
+                          ) : null}
+                          {reg.comment ? (
+                            <span className="w-full text-xs italic text-trail md:w-auto md:flex-1">
+                              « {reg.comment} »
+                            </span>
+                          ) : null}
+                          {canManage ? (
+                            <WithdrawRegistrationButton
+                              eventId={event.id}
+                              userId={reg.user.id}
+                            />
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -321,6 +409,35 @@ export default async function EventDetailPage({ params }: PageProps) {
               })}
             </div>
           )}
+
+          {awaiting.length > 0 ? (
+            <div className="space-y-1 border-t border-stone/50 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
+                En attente de réponse ({awaiting.length})
+              </h3>
+              <p className="text-sm text-trail">
+                {awaiting
+                  .map((u) => `${u.firstName} ${u.lastName}`)
+                  .join(", ")}
+              </p>
+            </div>
+          ) : null}
+
+          {withdrawnRegistrations.length > 0 ? (
+            <div className="space-y-2 border-t border-stone/50 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
+                Désistés ({withdrawnRegistrations.length})
+              </h3>
+              <ul className="space-y-1">
+                {withdrawnRegistrations.map((reg) => (
+                  <li key={reg.user.id} className="text-sm text-trail">
+                    {reg.user.firstName} {reg.user.lastName}
+                    {reg.withdrawalReason ? ` — ${reg.withdrawalReason}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
 
           {reminders.length > 0 ? (
             <div className="space-y-1 border-t border-stone/50 pt-3">
@@ -332,6 +449,15 @@ export default async function EventDetailPage({ params }: PageProps) {
                   .map((r) => `${r.user.firstName} ${r.user.lastName}`)
                   .join(", ")}
               </p>
+            </div>
+          ) : null}
+
+          {canManage && addable.length > 0 ? (
+            <div className="space-y-2 border-t border-stone/50 pt-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-trail">
+                Inscrire un jeune
+              </h3>
+              <AddRegistrationControl eventId={event.id} candidates={addable} />
             </div>
           ) : null}
         </section>

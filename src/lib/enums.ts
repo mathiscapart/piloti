@@ -147,6 +147,16 @@ export const RSVP_LABEL: Record<RsvpResponse, string> = {
   MAYBE: "Peut-être",
 };
 
+// US-P05 — statut d'inscription géré par le chef (distinct du RSVP membre).
+// « En attente » n'est pas stocké : c'est un jeune éligible sans inscription.
+export const REGISTRATION_STATUSES = ["REGISTERED", "WITHDRAWN"] as const;
+export type RegistrationStatus = (typeof REGISTRATION_STATUSES)[number];
+
+export const REGISTRATION_STATUS_LABEL: Record<RegistrationStatus, string> = {
+  REGISTERED: "Inscrit",
+  WITHDRAWN: "Désisté",
+};
+
 // US-F06/F07 — notes de frais.
 export const EXPENSE_CATEGORIES = [
   "TRANSPORT",
@@ -358,6 +368,8 @@ export const AUDIT_ACTIONS = [
   "EVENT_DELETED",
   "EVENT_RSVP",
   "EVENT_ATTENDANCE",
+  "EVENT_REGISTRATION_ADDED",
+  "EVENT_REGISTRATION_WITHDRAWN",
   "TASK_CREATED",
   "TASK_UPDATED",
   "TASK_DELETED",

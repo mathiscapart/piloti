@@ -1,4 +1,5 @@
-import { UserCog } from "lucide-react";
+import { ChevronRight, UserCog, Users } from "lucide-react";
+import Link from "next/link";
 
 import { NotificationSettings } from "@/components/notifications/NotificationSettings";
 import { db } from "@/lib/db";
@@ -6,6 +7,7 @@ import { ROLE_LABEL, UNIT_LABEL, type Role, type Unit } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { effectiveRoles } from "@/lib/permissions";
 import { vapidPublicKey } from "@/lib/push";
+import { getChildrenOf } from "@/modules/family/queries";
 
 import {
   AvatarForm,
@@ -13,13 +15,15 @@ import {
   ProfileForm,
   SkillsProfileForm,
 } from "./account-forms";
+import { UserAvatar } from "@/components/ui/user-avatar";
+
 import { CalendarSubscription } from "./CalendarSubscription";
 
 export default async function AccountPage() {
   const user = await getCurrentUser();
   const roles = effectiveRoles(user);
   const isParent = roles.includes("PARENT");
-  const [pref, profile] = await Promise.all([
+  const [pref, profile, enfants] = await Promise.all([
     db.notificationPreference.findUnique({
       where: { userId: user.id },
       select: { emailEnabled: true, pushEnabled: true },
@@ -36,6 +40,9 @@ export default async function AccountPage() {
           },
         })
       : Promise.resolve(null),
+    // Volontairement PAS conditionné au rôle PARENT : un chef peut avoir ses
+    // propres enfants au groupe. C'est le lien familial qui fait foi, pas le rôle.
+    getChildrenOf(user.id),
   ]);
 
   return (
@@ -50,6 +57,52 @@ export default async function AccountPage() {
         </h1>
         <p className="text-trail">{user.email}</p>
       </header>
+
+      {/* Mes enfants — seul point d'entrée du parent vers ses enfants : la fiche
+          membre est réservée à `member.view`, que le rôle PARENT n'a pas. Sans
+          cette section, un parent n'a aucun moyen de naviguer vers la
+          progression de son enfant, alors que la page l'y autorise. */}
+      {enfants.length > 0 ? (
+        <section className="space-y-3 rounded-2xl bg-snow p-5 shadow-card">
+          <h2 className="flex items-center gap-2 font-bold text-earth">
+            <Users className="size-4 text-trail" />
+            Mes enfants
+          </h2>
+          <ul className="space-y-2">
+            {enfants.map((enfant) => (
+              <li key={enfant.id}>
+                <Link
+                  href={`/membres/${enfant.id}/progression`}
+                  className="flex items-center gap-3 rounded-xl bg-sand/60 p-2 transition-colors hover:bg-sand"
+                >
+                  <UserAvatar
+                    image={enfant.image}
+                    firstName={enfant.firstName}
+                    lastName={enfant.lastName}
+                    className="size-9"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-earth">
+                      {enfant.firstName} {enfant.lastName}
+                    </span>
+                    <span className="block truncate text-xs text-trail">
+                      {enfant.unit
+                        ? (UNIT_LABEL[enfant.unit as Unit] ?? enfant.unit)
+                        : "Sans branche"}
+                      {enfant.canLogin === false ? " · compte sans connexion" : ""}
+                    </span>
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-trail" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-trail">
+            Suis leur progression, et réponds aux invitations pour eux depuis le
+            planning.
+          </p>
+        </section>
+      ) : null}
 
       {/* Rôles & branche — lecture seule (attribués par l'administration). */}
       <section className="space-y-2 rounded-2xl bg-snow p-5 shadow-card">

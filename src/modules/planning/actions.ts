@@ -14,9 +14,10 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
+import { isConcernedByEvent } from "./audience";
 import { maybeAlertAbsences, notifyEventAudience } from "./event-hooks";
-import { canActOnEvent } from "./event-scope";
-import { eventSchema } from "./types";
+import { canActOnEvent, refuseIfEventOutOfScope } from "./event-scope";
+import { eventSchema, withdrawalReasonSchema } from "./types";
 
 function absoluteUrl(path: string): string {
   const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
@@ -304,12 +305,15 @@ export async function setAttendance(
 }
 
 // US-P04 — un membre répond à un événement ouvert aux inscriptions
-// (présent / absent / peut-être). Réponse modifiable ; confirmation par email.
-// Un parent peut répondre pour un de ses enfants rattachés (`targetUserId`).
+// (présent / absent / peut-être), avec un commentaire libre optionnel
+// (US-P05, ex : allergie, transport). Réponse modifiable ; confirmation par
+// email. Un parent peut répondre pour un de ses enfants rattachés
+// (`targetUserId`).
 export async function rsvpEvent(
   eventId: string,
   response: string,
   targetUserId?: string,
+  comment?: string,
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!(RSVP_RESPONSES as readonly string[]).includes(response)) {
@@ -319,6 +323,9 @@ export async function rsvpEvent(
   // Cible : soi-même par défaut, sinon un enfant rattaché (autorisation).
   const targetId = targetUserId ?? user.id;
   let targetName: string | null = null;
+  // Branche de la personne inscrite : la sienne par défaut, celle de l'enfant
+  // quand un parent inscrit pour lui.
+  let targetUnit: string | null = user.unit ?? null;
   if (targetId !== user.id) {
     const ok = await isChildOf(user.id, targetId);
     if (!ok) {
@@ -326,10 +333,11 @@ export async function rsvpEvent(
     }
     const child = await db.user.findUnique({
       where: { id: targetId },
-      select: { firstName: true, lastName: true },
+      select: { firstName: true, lastName: true, unit: true },
     });
     if (!child) return { error: "Compte introuvable." };
     targetName = `${child.firstName} ${child.lastName}`;
+    targetUnit = child.unit;
   }
 
   const event = await db.event.findUnique({
@@ -337,6 +345,7 @@ export async function rsvpEvent(
     select: {
       id: true,
       name: true,
+      unit: true,
       registrationOpen: true,
       registrationDeadline: true,
     },
@@ -349,12 +358,42 @@ export async function rsvpEvent(
     return { error: "La date limite d'inscription est dépassée." };
   }
 
+  // On ne s'inscrit qu'aux événements qui nous concernent. Seule exception :
+  // un ENCADRANT qui s'inscrit LUI-MÊME — un chef vient volontiers prêter main
+  // forte sur la sortie d'une autre branche, et il ne figure pas dans la
+  // feuille de pointage, qui ne liste que les jeunes de l'unité. L'exemption ne
+  // vaut pas pour un enfant : personne n'inscrit un jeune hors de sa branche.
+  const encadrantPourLuiMeme = targetId === user.id && can(user, "event.manage");
+  if (!encadrantPourLuiMeme && !isConcernedByEvent(event.unit, targetUnit)) {
+    return {
+      error: targetName
+        ? `${targetName} n'est pas concerné par cet événement.`
+        : "Cet événement ne concerne pas ta branche.",
+    };
+  }
+
+  // US-P05 — un désistement acté par un chef est prioritaire et bloquant : le
+  // membre/parent ne peut pas s'auto-réinscrire, seul un chef relève
+  // l'inscription via addRegistration.
+  const existing = await db.eventRegistration.findUnique({
+    where: { eventId_userId: { eventId, userId: targetId } },
+    select: { status: true },
+  });
+  if (existing?.status === "WITHDRAWN") {
+    return {
+      error:
+        "Cette inscription a été désistée par un chef. Contacte un chef pour être réinscrit.",
+    };
+  }
+
+  const trimmedComment = comment?.trim() || null;
+
   await withAudit(
     (tx) =>
       tx.eventRegistration.upsert({
         where: { eventId_userId: { eventId, userId: targetId } },
-        create: { eventId, userId: targetId, response },
-        update: { response },
+        create: { eventId, userId: targetId, response, comment: trimmedComment },
+        update: { response, comment: trimmedComment },
       }),
     {
       action: "EVENT_RSVP",
@@ -383,6 +422,105 @@ export async function rsvpEvent(
         cta: "Voir l'événement",
       }),
     }),
+  );
+
+  revalidatePath(`/planning/${eventId}`);
+  return { error: null };
+}
+
+// US-P05 — un chef inscrit manuellement un jeune (cas particulier, ou pour
+// relever une inscription désistée). On revérifie toujours côté serveur que
+// la cible est un jeune actif éligible : ne jamais faire confiance à un
+// `userId` de formulaire pour une inscription.
+export async function addRegistration(
+  eventId: string,
+  userId: string,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "event.manage")) {
+    return { error: "Réservé aux chefs." };
+  }
+
+  const event = await db.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, unit: true },
+  });
+  if (!event) return { error: "Événement introuvable." };
+  // Périmètre d'unité (D-024) : le contrôle d'éligibilité ci-dessous porte sur
+  // la branche de la CIBLE ; celui-ci porte sur celle de l'ACTEUR. Sans lui, un
+  // chef d'une autre branche inscrirait des jeunes sur cet événement.
+  if (!canActOnEvent(actor, "event.manage", event.unit)) {
+    return { error: "Cet événement concerne une autre branche." };
+  }
+
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { status: true, roles: true, unit: true },
+  });
+  const isEligible =
+    !!target &&
+    target.status === "ACTIVE" &&
+    (JSON.parse(target.roles || "[]") as string[]).includes("SCOUT") &&
+    (!event.unit || target.unit === event.unit);
+  if (!isEligible) return { error: "Jeune non éligible à cet événement." };
+
+  await withAudit(
+    (tx) =>
+      tx.eventRegistration.upsert({
+        where: { eventId_userId: { eventId, userId } },
+        create: { eventId, userId, response: "PRESENT", status: "REGISTERED" },
+        update: { status: "REGISTERED", withdrawalReason: null },
+      }),
+    {
+      action: "EVENT_REGISTRATION_ADDED",
+      userId: actor.id,
+      metadata: { eventId, userId },
+    },
+  );
+
+  revalidatePath(`/planning/${eventId}`);
+  return { error: null };
+}
+
+// US-P05 — un chef marque un désistement, avec motif. Bloque le RSVP du
+// membre/parent tant qu'un chef n'a pas relevé l'inscription (cf. rsvpEvent).
+export async function withdrawRegistration(
+  eventId: string,
+  userId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "event.manage")) {
+    return { error: "Réservé aux chefs." };
+  }
+
+  const parsed = withdrawalReasonSchema.safeParse(reason);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Motif invalide." };
+  }
+
+  // Périmètre d'unité (D-024) : désister est une mutation sur l'événement,
+  // bornée comme le pointage ou la modification.
+  const outOfScope = await refuseIfEventOutOfScope(actor, "event.manage", eventId);
+  if (outOfScope) return outOfScope;
+
+  const existing = await db.eventRegistration.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+    select: { id: true },
+  });
+  if (!existing) return { error: "Inscription introuvable." };
+
+  await withAudit(
+    (tx) =>
+      tx.eventRegistration.update({
+        where: { eventId_userId: { eventId, userId } },
+        data: { status: "WITHDRAWN", withdrawalReason: parsed.data },
+      }),
+    {
+      action: "EVENT_REGISTRATION_WITHDRAWN",
+      userId: actor.id,
+      metadata: { eventId, userId, reason: parsed.data },
+    },
   );
 
   revalidatePath(`/planning/${eventId}`);

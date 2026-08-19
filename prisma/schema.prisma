@@ -663,6 +663,12 @@ model EventRegistration {
   paidCents Int      @default(0)
   // US-F05 — inscription au tarif « cas social » (tarif réduit de l'événement).
   social    Boolean  @default(false)
+  // US-P05 — statut géré par le chef (distinct du RSVP membre ci-dessus).
+  // Tant que WITHDRAWN, le RSVP du membre/parent est refusé (cf. rsvpEvent) :
+  // seul un chef peut relever l'inscription via addRegistration.
+  status           String  @default("REGISTERED") // RegistrationStatus: REGISTERED | WITHDRAWN
+  comment          String? // commentaire libre du membre/parent au RSVP
+  withdrawalReason String? // motif de désistement, saisi par le chef
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 

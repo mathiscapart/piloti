@@ -41,3 +41,10 @@ export const eventSchema = z.object({
 });
 
 export type EventInput = z.infer<typeof eventSchema>;
+
+// US-P05 — motif de désistement saisi par le chef.
+export const withdrawalReasonSchema = z
+  .string()
+  .trim()
+  .min(1, "Motif requis.")
+  .max(500, "Motif trop long.");

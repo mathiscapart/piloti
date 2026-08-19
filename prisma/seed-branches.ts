@@ -69,6 +69,20 @@ const CHEF_RENFORT = {
   birthDate: new Date("1988-09-21"),
 };
 
+// Parent d'une Louveteaux. Sans lui, aucun compte PARENT ni aucun `FamilyLink`
+// n'existe en développement : tout le parcours parental est intestable —
+// répondre à une invitation pour son enfant (US-P04), consulter sa progression
+// (US-S10), recevoir les notifications qui lui sont destinées.
+const PARENT = {
+  email: "sophie.petit@parent.piloti.fr",
+  password: "PilotiParent2024!",
+  firstName: "Sophie",
+  lastName: "Petit",
+  birthDate: new Date("1986-04-03"),
+  // Rattaché à l'enfant portant ce prénom + nom (cf. JEUNES).
+  enfant: { firstName: "Léa", lastName: "Petit" },
+};
+
 // Adresse e-mail dérivée du nom : accents retirés, espaces en tirets.
 function emailDe(j: JeuneInput): string {
   const slug = (s: string) =>
@@ -231,6 +245,50 @@ async function main() {
   for (const input of JEUNES) {
     jeunes.push({ ...input, row: await creerJeune(input) });
   }
+  // ── Parent + lien familial ────────────────────────────────────────────────
+  let parent = await db.user.findUnique({ where: { email: PARENT.email } });
+  if (!parent) {
+    await auth.api.signUpEmail({
+      body: {
+        email: PARENT.email,
+        password: PARENT.password,
+        name: `${PARENT.firstName} ${PARENT.lastName}`,
+        firstName: PARENT.firstName,
+        lastName: PARENT.lastName,
+      },
+    });
+    parent = await db.user.update({
+      where: { email: PARENT.email },
+      data: {
+        role: "PARENT",
+        roles: JSON.stringify(["PARENT"]),
+        status: "ACTIVE",
+        emailVerified: true,
+        // Un parent n'appartient à aucune branche : `unit` reste null, ce qui
+        // vérifie au passage qu'un compte sans unité reste parfaitement utilisable.
+        unit: null,
+        birthDate: PARENT.birthDate,
+      },
+    });
+    console.log(`  parent créé : ${PARENT.email}`);
+  }
+
+  const enfant = jeunes.find(
+    (j) =>
+      j.firstName === PARENT.enfant.firstName && j.lastName === PARENT.enfant.lastName,
+  );
+  if (enfant) {
+    const lien = await db.familyLink.findFirst({
+      where: { parentId: parent.id, childId: enfant.row.id },
+    });
+    if (!lien) {
+      await db.familyLink.create({
+        data: { parentId: parent.id, childId: enfant.row.id },
+      });
+      console.log(`  lien familial : ${PARENT.firstName} → ${enfant.firstName} ${enfant.lastName}`);
+    }
+  }
+
   const parUnite = (unit: Unit) => jeunes.filter((j) => j.unit === unit);
   console.log(`  ${jeunes.length} jeunes (créés ou déjà présents)`);
 

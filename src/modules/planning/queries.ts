@@ -38,18 +38,55 @@ export async function getEvent(id: string) {
 
 export type EventDetail = NonNullable<Awaited<ReturnType<typeof getEvent>>>;
 
-// US-P04 — détail enrichi : l'événement, la liste des réponses (pour les chefs)
-// et la réponse de l'utilisateur courant (pour le contrôle d'inscription).
+function hasRole(rolesJson: string, role: string): boolean {
+  try {
+    return (JSON.parse(rolesJson) as string[]).includes(role);
+  } catch {
+    return false;
+  }
+}
+
+// US-P05/P07 — jeunes actifs concernés par un événement : toute la branche
+// ciblée, ou tout le groupe si l'événement n'a pas d'unité (unit === null).
+async function getEligibleScouts(unit: string | null) {
+  const jeunes = await db.user.findMany({
+    where: {
+      status: "ACTIVE",
+      roles: { contains: "SCOUT" },
+      ...(unit ? { unit } : {}),
+    },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      image: true,
+      unit: true,
+      roles: true,
+    },
+  });
+  return jeunes.filter((u) => hasRole(u.roles, "SCOUT"));
+}
+
+// US-P04/P05 — détail enrichi : l'événement, la liste des réponses (pour les
+// chefs) et la réponse de l'utilisateur courant (pour le contrôle
+// d'inscription). `awaiting` : jeunes éligibles n'ayant donné aucune réponse
+// (« en attente », US-P05 — ce n'est pas un statut stocké, juste l'écart entre
+// le roster attendu et les inscriptions). `addable` : jeunes qu'un chef peut
+// inscrire manuellement (aucune inscription active — absente ou désistée).
 export async function getEventWithRegistrations(id: string, userId: string) {
   const event = await db.event.findUnique({ where: { id } });
   if (!event) return null;
 
-  const [registrations, reminders] = await Promise.all([
+  const [registrations, reminders, eligible] = await Promise.all([
     db.eventRegistration.findMany({
       where: { eventId: id },
       orderBy: [{ createdAt: "asc" }],
       select: {
         response: true,
+        status: true,
+        comment: true,
+        withdrawalReason: true,
         user: {
           select: { id: true, firstName: true, lastName: true, image: true, unit: true },
         },
@@ -63,25 +100,37 @@ export async function getEventWithRegistrations(id: string, userId: string) {
         user: { select: { id: true, firstName: true, lastName: true } },
       },
     }),
+    getEligibleScouts(event.unit),
   ]);
 
-  const myResponse =
-    registrations.find((r) => r.user.id === userId)?.response ?? null;
+  const mine = registrations.find((r) => r.user.id === userId);
+  const myResponse = mine?.response ?? null;
+  const myStatus = mine?.status ?? null;
+  const myWithdrawalReason = mine?.withdrawalReason ?? null;
 
-  return { event, registrations, reminders, myResponse };
+  const registeredIds = new Set(registrations.map((r) => r.user.id));
+  const activeIds = new Set(
+    registrations.filter((r) => r.status !== "WITHDRAWN").map((r) => r.user.id),
+  );
+  const awaiting = eligible.filter((u) => !registeredIds.has(u.id));
+  const addable = eligible.filter((u) => !activeIds.has(u.id));
+
+  return {
+    event,
+    registrations,
+    reminders,
+    myResponse,
+    myStatus,
+    myWithdrawalReason,
+    expectedCount: eligible.length,
+    awaiting,
+    addable,
+  };
 }
 
 export type EventRegistrationEntry = Awaited<
   ReturnType<typeof getEventWithRegistrations>
 >;
-
-function hasRole(rolesJson: string, role: string): boolean {
-  try {
-    return (JSON.parse(rolesJson) as string[]).includes(role);
-  } catch {
-    return false;
-  }
-}
 
 // US-P07 — feuille de pointage : les jeunes concernés par l'événement (unité
 // ciblée, ou toutes si événement de groupe) avec leur présence relevée.
@@ -94,22 +143,7 @@ export async function getAttendanceRoster(eventId: string) {
   if (!event) return null;
 
   const [jeunes, attendance] = await Promise.all([
-    db.user.findMany({
-      where: {
-        status: "ACTIVE",
-        roles: { contains: "SCOUT" },
-        ...(event.unit ? { unit: event.unit } : {}),
-      },
-      orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        image: true,
-        unit: true,
-        roles: true,
-      },
-    }),
+    getEligibleScouts(event.unit),
     db.attendance.findMany({
       where: { eventId },
       select: { userId: true, present: true },
@@ -117,18 +151,16 @@ export async function getAttendanceRoster(eventId: string) {
   ]);
 
   const map = new Map(attendance.map((a) => [a.userId, a.present]));
-  const roster = jeunes
-    .filter((u) => hasRole(u.roles, "SCOUT"))
-    .map((u) => ({
-      user: {
-        id: u.id,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        image: u.image,
-        unit: u.unit,
-      },
-      present: map.get(u.id) ?? null,
-    }));
+  const roster = jeunes.map((u) => ({
+    user: {
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      image: u.image,
+      unit: u.unit,
+    },
+    present: map.get(u.id) ?? null,
+  }));
 
   return { event, roster };
 }

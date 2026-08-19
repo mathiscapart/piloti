@@ -319,3 +319,19 @@ Ce déplacement a imposé un raffinement de la primitive. `inUnitScope` n'exempt
 Non borné après examen : le rattachement d'un **prêt** à un événement (`loan-actions.ts`) et le champ `eventId` d'un **avis de lieu** (`place-actions.ts`) — aucun des deux ne modifie l'événement, le matériel est une ressource de groupe, et `loan.create` appartient aussi au responsable matériel, rôle transverse.
 
 `prisma/seed-branches.ts` refuse désormais de s'exécuter si `NODE_ENV === "production"` : contrairement à `seed.ts` dont le `deleteMany` initial le cantonne de lui-même au développement, il est additif et se serait exécuté sans signal sur une base de production, y créant des comptes ACTIVE dont les mots de passe sont en clair dans un dépôt public.
+
+---
+
+## D-025 — On ne s'inscrit qu'aux événements qui nous concernent
+
+**Contexte** : `rsvpEvent` (US-P04) ne regardait **jamais** `Event.unit`. Ses seuls contrôles étaient : réponse valide, cible = soi ou un enfant rattaché, événement existant, inscriptions ouvertes, date limite non dépassée. N'importe quel compte actif pouvait donc s'inscrire à n'importe quel événement ouvert — un Louveteau de 8 ans au week-end Pionniers. Ce n'était pas une régression : le comportement existait depuis l'origine de l'US.
+
+L'incohérence est devenue visible avec US-P05, qui ajoute le chemin encadré `addRegistration` : celui-ci vérifie `(!event.unit || target.unit === event.unit)`. Un chef ne pouvait donc pas inscrire un jeune hors branche, alors que ce même jeune le pouvait tout seul — **le libre-service était plus permissif que le chemin encadré**.
+
+**Choix** :
+- Une règle **pure et sans dépendance**, `isConcernedByEvent(eventUnit, targetUnit)` dans `modules/planning/audience.ts`, partagée par la Server Action (qui refuse) et par la fiche événement (qui n'affiche pas le contrôle). L'écran ne propose jamais une inscription que le serveur rejettera. Testée : c'est de la logique pure, donc dans le périmètre Vitest du projet, contrairement à la règle `WITHDRAWN` qui reste enfouie dans `rsvpEvent`.
+- C'est la branche de la **personne inscrite** qui compte, pas celle de qui remplit le formulaire : un parent n'a pas de branche, c'est son **enfant** qui doit être concerné. `enfantsConcernes` filtre donc la liste « Inscrire mes enfants ».
+- **Une exception, pour l'encadrant et pour lui seul** : un chef peut s'inscrire à l'événement d'une autre branche. Un chef vient volontiers prêter main-forte sur la sortie d'une autre unité, et il ne pollue pas la feuille de pointage, qui ne liste que les jeunes de l'unité. L'exemption ne vaut **pas** pour un enfant : personne, chef compris, n'inscrit un jeune hors de sa branche.
+- Un événement de groupe (`unit === null`) concerne tout le monde, comme partout ailleurs (cf. D-024).
+
+**Conséquences** : un jeune et son parent ne voient plus qu'un message de lecture seule sur les événements des autres branches. Les inscriptions hors branche **déjà en base** ne sont pas nettoyées par ce correctif — il empêche les nouvelles, pas les anciennes. Limite de vérification assumée : le masquage des contrôles a été exercé dans l'application avec trois comptes réels (jeune, parent, chef), mais le refus **serveur** face à un appel forgé n'a pas été reproduit — une Server Action se déclenche par un POST signé difficile à forger hors navigateur. Ce qui est démontré, c'est la fonction pure et son branchement relu.

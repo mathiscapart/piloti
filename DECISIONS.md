@@ -335,3 +335,19 @@ L'incohérence est devenue visible avec US-P05, qui ajoute le chemin encadré `a
 - Un événement de groupe (`unit === null`) concerne tout le monde, comme partout ailleurs (cf. D-024).
 
 **Conséquences** : un jeune et son parent ne voient plus qu'un message de lecture seule sur les événements des autres branches. Les inscriptions hors branche **déjà en base** ne sont pas nettoyées par ce correctif — il empêche les nouvelles, pas les anciennes. Limite de vérification assumée : le masquage des contrôles a été exercé dans l'application avec trois comptes réels (jeune, parent, chef), mais le refus **serveur** face à un appel forgé n'a pas été reproduit — une Server Action se déclenche par un POST signé difficile à forger hors navigateur. Ce qui est démontré, c'est la fonction pure et son branchement relu.
+
+---
+
+## D-026 — US-CM-04 : plus aucune auto-inscription sous 15 ans
+
+**Contexte** : le formulaire d'inscription demandait une attestation de responsable légal en dessous de 15 ans — mais **c'est l'enfant lui-même qui cochait la case**. Un jeune de 10 ans obtenait donc un compte connectable en s'auto-attestant, et tout le mécanisme de consentement RGPD-02 se contournait d'un clic. Contrairement à l'intuition, aucune règle automatique ne l'en empêchait : `canLogin` a pour défaut `true`, et le seul endroit du code qui le passe à `false` est `createChildAccount`, l'écran admin « Nouveau jeune » (US-CM-01). Un compte né de l'inscription publique était connectable quel que soit l'âge.
+
+**Choix** :
+- `MIN_LOGIN_AGE = 15` et `canSelfRegister()` dans `src/lib/legal/age.ts`, source unique déjà partagée par la Server Action et le formulaire. Fail-closed sur date inconnue : la règle ne se contourne pas en vidant le champ.
+- Le refus est **sec** et vient **avant** le contrôle de consentement parental, qui est court-circuité. Afficher en plus « il manque l'autorisation parentale » laisserait croire qu'une case cochée débloquerait l'inscription, alors qu'aucune case ne le peut. Le message oriente vers la seule voie possible : « demande à un parent ou à un chef de créer ta fiche ».
+- `PARENTAL_CONSENT_AGE` passe de **15 à 18 ans** (amendement RGPD-02 du 2026-08-08) : tout mineur inscrit requiert désormais l'autorisation d'un responsable légal, là où les 15-17 ans n'avaient plus rien à fournir. Numériquement égal à `MAJORITY_AGE`, mais conceptuellement distinct — l'un est une règle de consentement, l'autre la minorité légale — d'où deux constantes maintenues.
+- Côté formulaire, le refus s'affiche **dès la saisie de la date** et désactive le bouton, plutôt que de laisser remplir dix champs pour un rejet final.
+
+**Portée volontairement réduite** : la fiche US-CM-04 exige aussi que les 15-17 ans passent par une **invitation** plutôt que par l'auto-inscription. Ce critère dépend d'US-CM-05 (mécanisme d'invitation), qui n'existe pas : l'appliquer maintenant enfermerait dehors tous les 15-17 ans sans fiche. Ce lot livre donc le sous-ensemble déployable — refus sous 15 ans, consentement étendu à 18 — qui ferme la non-conformité **sans bloquer personne**. La fermeture de l'auto-inscription des 15-17 ans viendra avec US-CM-05. Rappel de la fiche : ce lot doit être déployé **avant** US-CM-06, sinon un compte révoqué pourrait se recréer entre les deux déploiements.
+
+**Vérification** : pour la première fois de cette série, le refus **serveur** a été exercé sur un **appel forgé**, en reconstituant l'encodage natif d'une Server Action Next (`$ACTION_REF_1`, `$ACTION_1:0`, `$ACTION_1:1`, `$ACTION_KEY`, extraits du HTML rendu). Un POST direct, interface entièrement contournée, pour un enfant de 10 ans avec **toutes les cases parentales cochées**, reçoit le refus d'âge et ne crée aucun compte (vérifié en base). Un jeune de 16 ans sans autorisation reçoit le refus de consentement — et non le refus d'âge. Ce mode de vérification lève la limite signalée en D-024 et D-025, où seul le masquage des contrôles avait pu être démontré.

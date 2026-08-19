@@ -15,6 +15,8 @@ import {
   computeAge,
   isAdult,
   isMinor,
+  MIN_LOGIN_AGE,
+  canSelfRegister,
   requiresParentalConsent,
 } from "./age";
 
@@ -36,8 +38,12 @@ function setToday(year: number, month: number, day: number): void {
 }
 
 describe("age — seuils", () => {
-  it("expose les trois seuils attendus", () => {
-    expect(PARENTAL_CONSENT_AGE).toBe(15);
+  it("expose les seuils attendus", () => {
+    // US-CM-04 — le consentement parental suit désormais la minorité (18 ans)
+    // et non plus le seuil RGPD de 15 ; MIN_LOGIN_AGE reprend le 15 ans, mais
+    // pour une autre question : le droit de s'inscrire seul.
+    expect(MIN_LOGIN_AGE).toBe(15);
+    expect(PARENTAL_CONSENT_AGE).toBe(18);
     expect(DIRECT_MESSAGE_MIN_AGE).toBe(15);
     expect(MAJORITY_AGE).toBe(18);
   });
@@ -94,17 +100,21 @@ describe("computeAge — fail-safe sur date absente ou invalide", () => {
   });
 });
 
-describe("requiresParentalConsent (RGPD-02, seuil 15 ans)", () => {
+describe("requiresParentalConsent (RGPD-02 amendé, seuil 18 ans)", () => {
   beforeEach(() => vi.useFakeTimers());
 
-  it("requiert un consentement parental en-dessous de 15 ans", () => {
+  it("requiert un consentement parental pour tout mineur", () => {
     setToday(2024, 6, 15);
     expect(requiresParentalConsent(d(2010, 6, 16))).toBe(true); // 13 ans
+    // US-CM-04 — le cas qui change : à 15-17 ans, l'autorisation est désormais
+    // requise alors qu'elle ne l'était plus sous l'ancien seuil.
+    expect(requiresParentalConsent(d(2009, 6, 15))).toBe(true); // 15 ans pile
+    expect(requiresParentalConsent(d(2007, 6, 16))).toBe(true); // 16 ans
   });
 
-  it("ne requiert plus de consentement parental à 15 ans pile", () => {
+  it("ne requiert plus de consentement parental à 18 ans pile", () => {
     setToday(2024, 6, 15);
-    expect(requiresParentalConsent(d(2009, 6, 15))).toBe(false); // 15 ans jour J
+    expect(requiresParentalConsent(d(2006, 6, 15))).toBe(false); // 18 ans jour J
   });
 
   it("renvoie false (fail-safe) sur date inconnue", () => {
@@ -237,4 +247,27 @@ describe("birthDateSchema — bornes de plausibilité", () => {
 // jamais faire fuiter une date figée vers un test qui n'en a pas besoin.
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("canSelfRegister (US-CM-04)", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  it("refuse l'auto-inscription en dessous de 15 ans", () => {
+    setToday(2024, 6, 15);
+    expect(canSelfRegister(d(2010, 6, 16))).toBe(false); // 13 ans
+    expect(canSelfRegister(d(2009, 6, 16))).toBe(false); // 14 ans, la veille
+  });
+
+  it("autorise à partir de 15 ans pile", () => {
+    setToday(2024, 6, 15);
+    expect(canSelfRegister(d(2009, 6, 15))).toBe(true); // 15 ans jour J
+    expect(canSelfRegister(d(1990, 1, 1))).toBe(true); // adulte
+  });
+
+  it("fail-closed sur date inconnue — la règle ne se contourne pas en vidant le champ", () => {
+    expect(canSelfRegister(null)).toBe(false);
+    expect(canSelfRegister(undefined)).toBe(false);
+    expect(canSelfRegister("")).toBe(false);
+    expect(canSelfRegister("pas-une-date")).toBe(false);
+  });
 });

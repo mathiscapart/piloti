@@ -11,6 +11,9 @@ const MEMBER_SELECT = {
   lastName: true,
   image: true,
   unit: true,
+  // US-CM-01 — un compte enfant n'a pas de connexion propre : le parent doit le
+  // savoir en voyant la fiche, sinon il cherchera des identifiants inexistants.
+  canLogin: true,
 } as const;
 
 function hasRole(rolesJson: string, role: string): boolean {

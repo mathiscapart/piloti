@@ -30,6 +30,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getChildrenOf } from "@/modules/family/queries";
+import { isConcernedByEvent } from "@/modules/planning/audience";
 import { canActOnEvent } from "@/modules/planning/event-scope";
 import { formatEventRange } from "@/modules/planning/format";
 import {
@@ -106,6 +107,16 @@ export default async function EventDetailPage({ params }: PageProps) {
       withdrawalReason: reg?.withdrawalReason ?? null,
     };
   });
+
+  // US-P04 — on ne s'inscrit qu'aux événements qui nous concernent : la même
+  // règle que `rsvpEvent`, pour ne jamais afficher un contrôle que le serveur
+  // refusera. Un encadrant garde la main pour LUI-MÊME (il vient prêter main
+  // forte sur une autre branche) ; ses enfants, eux, suivent la règle commune.
+  const jeSuisConcerne =
+    isStaff || isConcernedByEvent(event.unit, user.unit ?? null);
+  const enfantsConcernes = childRsvps.filter((c) =>
+    isConcernedByEvent(event.unit, c.child.unit ?? null),
+  );
 
   // US-P07 — résumé de présence (pour les chefs qui peuvent pointer).
   const attendanceCount = canManage ? await getAttendanceCount(event.id) : 0;
@@ -269,20 +280,34 @@ export default async function EventDetailPage({ params }: PageProps) {
             </p>
           ) : (
             <>
-              <p className="text-sm text-trail">Indiquez votre présence :</p>
-              <RsvpControl
-                eventId={event.id}
-                current={myResponse}
-                withdrawn={myStatus === "WITHDRAWN"}
-                withdrawalReason={myWithdrawalReason}
-              />
+              {!jeSuisConcerne && enfantsConcernes.length === 0 ? (
+                <p className="text-sm text-trail">
+                  Cet événement concerne les{" "}
+                  <span className="font-bold text-earth">
+                    {UNIT_LABEL[event.unit as Unit] ?? event.unit}
+                  </span>{" "}
+                  — tu peux le consulter, mais pas t&apos;y inscrire.
+                </p>
+              ) : null}
 
-              {childRsvps.length > 0 ? (
+              {jeSuisConcerne ? (
+                <>
+                  <p className="text-sm text-trail">Indiquez votre présence :</p>
+                  <RsvpControl
+                    eventId={event.id}
+                    current={myResponse}
+                    withdrawn={myStatus === "WITHDRAWN"}
+                    withdrawalReason={myWithdrawalReason}
+                  />
+                </>
+              ) : null}
+
+              {enfantsConcernes.length > 0 ? (
                 <div className="space-y-3 border-t border-stone/50 pt-3">
                   <p className="text-sm font-medium text-earth">
                     Inscrire mes enfants :
                   </p>
-                  {childRsvps.map(({ child, response, comment, withdrawn, withdrawalReason }) => (
+                  {enfantsConcernes.map(({ child, response, comment, withdrawn, withdrawalReason }) => (
                     <div key={child.id} className="space-y-1.5">
                       <p className="text-sm font-bold text-earth">
                         {child.firstName} {child.lastName}

@@ -14,6 +14,7 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
+import { isConcernedByEvent } from "./audience";
 import { maybeAlertAbsences, notifyEventAudience } from "./event-hooks";
 import { canActOnEvent, refuseIfEventOutOfScope } from "./event-scope";
 import { eventSchema, withdrawalReasonSchema } from "./types";
@@ -322,6 +323,9 @@ export async function rsvpEvent(
   // Cible : soi-même par défaut, sinon un enfant rattaché (autorisation).
   const targetId = targetUserId ?? user.id;
   let targetName: string | null = null;
+  // Branche de la personne inscrite : la sienne par défaut, celle de l'enfant
+  // quand un parent inscrit pour lui.
+  let targetUnit: string | null = user.unit ?? null;
   if (targetId !== user.id) {
     const ok = await isChildOf(user.id, targetId);
     if (!ok) {
@@ -329,10 +333,11 @@ export async function rsvpEvent(
     }
     const child = await db.user.findUnique({
       where: { id: targetId },
-      select: { firstName: true, lastName: true },
+      select: { firstName: true, lastName: true, unit: true },
     });
     if (!child) return { error: "Compte introuvable." };
     targetName = `${child.firstName} ${child.lastName}`;
+    targetUnit = child.unit;
   }
 
   const event = await db.event.findUnique({
@@ -340,6 +345,7 @@ export async function rsvpEvent(
     select: {
       id: true,
       name: true,
+      unit: true,
       registrationOpen: true,
       registrationDeadline: true,
     },
@@ -350,6 +356,20 @@ export async function rsvpEvent(
   }
   if (event.registrationDeadline && event.registrationDeadline < new Date()) {
     return { error: "La date limite d'inscription est dépassée." };
+  }
+
+  // On ne s'inscrit qu'aux événements qui nous concernent. Seule exception :
+  // un ENCADRANT qui s'inscrit LUI-MÊME — un chef vient volontiers prêter main
+  // forte sur la sortie d'une autre branche, et il ne figure pas dans la
+  // feuille de pointage, qui ne liste que les jeunes de l'unité. L'exemption ne
+  // vaut pas pour un enfant : personne n'inscrit un jeune hors de sa branche.
+  const encadrantPourLuiMeme = targetId === user.id && can(user, "event.manage");
+  if (!encadrantPourLuiMeme && !isConcernedByEvent(event.unit, targetUnit)) {
+    return {
+      error: targetName
+        ? `${targetName} n'est pas concerné par cet événement.`
+        : "Cet événement ne concerne pas ta branche.",
+    };
   }
 
   // US-P05 — un désistement acté par un chef est prioritaire et bloquant : le

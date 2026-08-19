@@ -53,6 +53,10 @@ const JEUNES: JeuneInput[] = [
   { firstName: "Maxime", lastName: "Perrin", unit: "PIONNIERS", birthYear: 2011 },
   { firstName: "Sarah", lastName: "Dumas", unit: "PIONNIERS", birthYear: 2011 },
   { firstName: "Antoine", lastName: "Leroy", unit: "PIONNIERS", birthYear: 2012 },
+  // Frère de Léa Petit (cf. PARENT) : 16 ans, donc au-dessus de MIN_LOGIN_AGE.
+  // Il a un compte à lui, là où sa sœur Louveteaux n'en a pas — c'est le
+  // contraste que la fratrie sert à exercer (US-CM-04).
+  { firstName: "Tom", lastName: "Petit", unit: "PIONNIERS", birthYear: 2010 },
 ];
 
 // Second chef sur les SCOUTS. Sans lui, chaque branche n'a qu'un seul chef et
@@ -79,8 +83,13 @@ const PARENT = {
   firstName: "Sophie",
   lastName: "Petit",
   birthDate: new Date("1986-04-03"),
-  // Rattaché à l'enfant portant ce prénom + nom (cf. JEUNES).
-  enfant: { firstName: "Léa", lastName: "Petit" },
+  // Rattaché aux enfants portant ces prénom + nom (cf. JEUNES). Deux branches
+  // et deux régimes : une Louveteaux trop jeune pour un compte, un Pionnier de
+  // 16 ans qui se connecte lui-même.
+  enfants: [
+    { firstName: "Léa", lastName: "Petit" },
+    { firstName: "Tom", lastName: "Petit" },
+  ],
 };
 
 // Adresse e-mail dérivée du nom : accents retirés, espaces en tirets.
@@ -273,11 +282,11 @@ async function main() {
     console.log(`  parent créé : ${PARENT.email}`);
   }
 
-  const enfant = jeunes.find(
-    (j) =>
-      j.firstName === PARENT.enfant.firstName && j.lastName === PARENT.enfant.lastName,
-  );
-  if (enfant) {
+  for (const attendu of PARENT.enfants) {
+    const enfant = jeunes.find(
+      (j) => j.firstName === attendu.firstName && j.lastName === attendu.lastName,
+    );
+    if (!enfant) continue;
     const lien = await db.familyLink.findFirst({
       where: { parentId: parent.id, childId: enfant.row.id },
     });
@@ -285,7 +294,9 @@ async function main() {
       await db.familyLink.create({
         data: { parentId: parent.id, childId: enfant.row.id },
       });
-      console.log(`  lien familial : ${PARENT.firstName} → ${enfant.firstName} ${enfant.lastName}`);
+      console.log(
+        `  lien familial : ${PARENT.firstName} → ${enfant.firstName} ${enfant.lastName} (${enfant.unit})`,
+      );
     }
   }
 

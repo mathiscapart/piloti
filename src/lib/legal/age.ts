@@ -33,9 +33,21 @@ export const birthDateSchema = z.coerce
     return age !== null && age >= MIN_PLAUSIBLE_AGE && age <= MAX_PLAUSIBLE_AGE;
   }, `Date de naissance invraisemblable (âge attendu entre ${MIN_PLAUSIBLE_AGE} et ${MAX_PLAUSIBLE_AGE} ans).`);
 
-// RGPD-02 — en-dessous de ce seuil, l'inscription requiert l'attestation d'un
-// responsable légal en plus du consentement de la personne elle-même.
-export const PARENTAL_CONSENT_AGE = 15;
+// US-CM-04 — âge minimum pour s'inscrire SOI-MÊME. En dessous, aucune
+// auto-inscription possible : la fiche du jeune est créée par un parent ou un
+// chef (US-CM-03) et c'est son responsable légal qui agit pour lui (US-CM-01).
+// Sans ce refus, l'attestation parentale reste auto-déclarée par l'enfant
+// lui-même, et tout le mécanisme de consentement se contourne d'une case cochée.
+export const MIN_LOGIN_AGE = 15;
+
+// RGPD-02 (amendé le 2026-08-08, US-CM-04) — en-dessous de ce seuil,
+// l'inscription requiert l'attestation d'un responsable légal en plus du
+// consentement de la personne elle-même. Le seuil est passé de 15 à 18 ans :
+// TOUT mineur inscrit requiert désormais cette autorisation, et non plus les
+// seuls moins de 15 ans — qui, depuis US-CM-04, ne s'inscrivent plus du tout.
+// Numériquement égal à MAJORITY_AGE, mais conceptuellement distinct : l'un est
+// une règle de consentement, l'autre la minorité légale.
+export const PARENTAL_CONSENT_AGE = 18;
 
 // SAFE-01 — en-dessous de ce seuil, aucun message privé n'est possible, ni émis
 // ni reçu. Au-dessus, les échanges privés restent limités aux chefs de l'unité
@@ -43,7 +55,8 @@ export const PARENTAL_CONSENT_AGE = 15;
 export const DIRECT_MESSAGE_MIN_AGE = 15;
 
 // SAFE-01 — majorité légale : sépare les encadrants adultes des jeunes. Ne pas
-// confondre avec PARENTAL_CONSENT_AGE, qui est un seuil RGPD, pas la minorité.
+// confondre avec PARENTAL_CONSENT_AGE (règle de consentement) ni avec
+// MIN_LOGIN_AGE (droit de s'inscrire seul), même si les valeurs coïncident.
 export const MAJORITY_AGE = 18;
 
 /**
@@ -74,6 +87,17 @@ export function computeAge(birthDate: Date | string | null | undefined): number 
 export function requiresParentalConsent(birthDate: Date | string | null | undefined): boolean {
   const age = computeAge(birthDate);
   return age !== null && age < PARENTAL_CONSENT_AGE;
+}
+
+/**
+ * US-CM-04 — cette personne peut-elle s'inscrire elle-même à l'application ?
+ * Date inconnue : `false`. Un compte sans date de naissance ne doit jamais
+ * franchir l'inscription, sans quoi la règle serait contournable en vidant le
+ * champ — même principe que `isAdult`.
+ */
+export function canSelfRegister(birthDate: Date | string | null | undefined): boolean {
+  const age = computeAge(birthDate);
+  return age !== null && age >= MIN_LOGIN_AGE;
 }
 
 /**

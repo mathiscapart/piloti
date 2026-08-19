@@ -16,9 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { UNITS } from "@/lib/enums";
-// RGPD-02 — le bloc parental s'affiche selon le même seuil que la Server Action
-// (`requiresParentalConsent`), depuis la source unique `src/lib/legal/age`.
-import { requiresParentalConsent } from "@/lib/legal/age";
+// RGPD-02 / US-CM-04 — le bloc parental et le refus d'âge suivent exactement les
+// mêmes seuils que la Server Action, depuis la source unique `src/lib/legal/age`.
+import {
+  canSelfRegister,
+  MIN_LOGIN_AGE,
+  requiresParentalConsent,
+} from "@/lib/legal/age";
 import { cn } from "@/lib/utils";
 
 import { signUpAction, type SignUpActionResult } from "./actions";
@@ -40,7 +44,11 @@ export function RegisterForm() {
   const [state, action, pending] = useActionState(signUpAction, initialState);
   const [profileType, setProfileType] = useState<ProfileType>("UNIT");
   const [birthDate, setBirthDate] = useState("");
-  const minor = requiresParentalConsent(birthDate);
+  // US-CM-04 — en dessous de MIN_LOGIN_AGE, aucune inscription en ligne : on
+  // l'annonce dès la saisie de la date plutôt que de laisser remplir tout le
+  // formulaire pour un refus final. Tant que le champ est vide, on ne juge rien.
+  const tropJeune = birthDate !== "" && !canSelfRegister(birthDate);
+  const minor = !tropJeune && requiresParentalConsent(birthDate);
 
   if (state.success) {
     return (
@@ -205,11 +213,26 @@ export function RegisterForm() {
         </Label>
       </div>
 
+      {tropJeune ? (
+        <div
+          role="alert"
+          className="space-y-1 rounded-lg border border-brick/30 bg-brick-soft p-3"
+        >
+          <p className="text-sm font-bold text-brick-ink">
+            L&apos;inscription en ligne est réservée aux {MIN_LOGIN_AGE} ans et plus.
+          </p>
+          <p className="text-xs text-brick-ink">
+            Demande à un parent ou à un chef de créer ta fiche : tu seras
+            rattaché au groupe sans avoir de compte à toi.
+          </p>
+        </div>
+      ) : null}
+
       {minor ? (
         <div className="space-y-3 rounded-lg border border-sun/40 bg-sun-soft p-3">
           <p className="text-xs font-medium text-sun-ink">
-            Compte d&apos;un mineur de moins de 15 ans : l&apos;autorisation d&apos;un
-            responsable légal est requise.
+            Compte d&apos;un mineur : l&apos;autorisation d&apos;un responsable légal
+            est requise.
           </p>
           <div className="flex items-start gap-2">
             <Checkbox id="acceptParental" name="acceptParental" value="on" required className="mt-0.5" />
@@ -234,7 +257,7 @@ export function RegisterForm() {
         </p>
       ) : null}
 
-      <Button type="submit" className="w-full" disabled={pending}>
+      <Button type="submit" className="w-full" disabled={pending || tropJeune}>
         {pending ? "Création…" : "Demander un accès"}
       </Button>
     </form>

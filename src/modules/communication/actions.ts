@@ -199,6 +199,14 @@ export async function togglePin(messageId: string): Promise<ActionResult> {
   const message = await db.message.findUnique({ where: { id: messageId } });
   if (!message) return { error: "Message introuvable." };
 
+  // SEC — être chef ne suffit pas : il faut aussi avoir accès AU SALON. Sans ce
+  // contrôle, un chef pouvait épingler/désépingler dans n'importe quel salon,
+  // y compris ceux d'une autre unité (cf. `loadMessages` juste en dessous).
+  const channel = await db.channel.findUnique({ where: { id: message.channelId } });
+  if (!channel || !canAccessChannel(user, channel)) {
+    return { error: "Salon inaccessible." };
+  }
+
   await db.message.update({
     where: { id: messageId },
     data: { pinnedAt: message.pinnedAt ? null : new Date() },
@@ -233,6 +241,10 @@ export async function loadMessages(channelId: string) {
 // Marque le salon comme lu pour l'utilisateur (efface l'indicateur non-lu).
 export async function markChannelRead(channelId: string): Promise<void> {
   const user = await getCurrentUser();
+  // SEC — n'écrit un marqueur de lecture que sur un salon réellement accessible.
+  const channel = await db.channel.findUnique({ where: { id: channelId } });
+  if (!channel || !canAccessChannel(user, channel)) return;
+
   await db.channelRead.upsert({
     where: { channelId_userId: { channelId, userId: user.id } },
     create: { channelId, userId: user.id, lastReadAt: new Date() },

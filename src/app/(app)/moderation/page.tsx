@@ -146,8 +146,6 @@ export default async function ModerationPage({ searchParams }: PageProps) {
               {canReview && r.status === "PENDING" && r.target ? (
                 <ModerationActions
                   reportId={r.id}
-                  targetType={r.targetType}
-                  targetId={r.targetId}
                   alreadyHidden={r.target.hidden}
                 />
               ) : null}

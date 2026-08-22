@@ -8,16 +8,17 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
-// Rattachement familial — géré par l'administration (user.manage). Crée/supprime
-// un lien parent→jeune, tracé dans l'AuditLog.
+// Rattachement familial — géré par les chefs, le responsable de groupe, la
+// secrétaire et l'ADMIN (`member.family.manage`). Crée/supprime un lien
+// parent→jeune, tracé dans l'AuditLog.
 
 export async function linkFamily(
   parentId: string,
   childId: string,
 ): Promise<ActionResult> {
   const actor = await getCurrentUser();
-  if (!can(actor, "user.manage")) {
-    return { error: "Réservé à l'administration." };
+  if (!can(actor, "member.family.manage")) {
+    return { error: "Réservé aux chefs et à l'administration." };
   }
   if (parentId === childId) {
     return { error: "Un compte ne peut pas être son propre parent." };
@@ -54,8 +55,8 @@ export async function unlinkFamily(
   childId: string,
 ): Promise<ActionResult> {
   const actor = await getCurrentUser();
-  if (!can(actor, "user.manage")) {
-    return { error: "Réservé à l'administration." };
+  if (!can(actor, "member.family.manage")) {
+    return { error: "Réservé aux chefs et à l'administration." };
   }
 
   const link = await db.familyLink.findUnique({

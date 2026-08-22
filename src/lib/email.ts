@@ -27,7 +27,12 @@ export async function sendEmail({
     process.env.RESEND_FROM_EMAIL ?? "noreply@piloti.mathiscapart.xyz";
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
-    await resend.emails.send({ from, to, subject, html });
+    const { error } = await resend.emails.send({ from, to, subject, html });
+    if (error) {
+      // Le SDK ne jette pas sur une erreur d'API : sans ce test, un refus serait
+      // indistinguable d'un envoi réussi.
+      console.error(`[email] refus Resend "${subject}" → ${to}:`, error);
+    }
   } catch (err) {
     // Un échec d'email ne doit jamais casser l'action métier appelante.
     console.error(`[email] échec d'envoi "${subject}" à ${to}:`, err);

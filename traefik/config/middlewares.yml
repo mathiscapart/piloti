@@ -44,3 +44,32 @@ http:
         customResponseHeaders:
           server: ""
           x-powered-by: ""
+          # Isolation cross-origin. Sûr ici : la CSP est déjà en `default-src
+          # 'self'`, l'authentification est en email/mot de passe (aucune popup
+          # OAuth à préserver) et aucune ressource n'est chargée depuis une
+          # autre origine que les tuiles de carte (images, non concernées).
+          cross-origin-opener-policy: "same-origin"
+          cross-origin-resource-policy: "same-origin"
+
+    # Rate limit global. better-auth plafonne déjà login/signup, mais rien ne
+    # protégeait les uploads, les exports, le SSE ni les Server Actions — tout
+    # entre par ici, c'est donc le seul endroit où poser une limite globale.
+    #
+    # `sourceCriterion.requestHeaderName: Cf-Connecting-Ip` : derrière
+    # cloudflared, TOUTES les requêtes portent l'IP du tunnel. Sans ce réglage,
+    # Traefik compte tout le trafic sur une seule source et le premier
+    # utilisateur actif épuiserait le quota de tout le groupe.
+    #
+    # Valeurs volontairement TRÈS larges : on vise l'abus automatisé (qui fait
+    # des milliers de requêtes), jamais la navigation humaine. Les photos
+    # d'incidents sont servies en `no-store` : une galerie recharge toutes ses
+    # images à chaque affichage, donc une consultation normale génère beaucoup
+    # plus de requêtes qu'on ne l'imagine. Un 429 intermittent serait pénible à
+    # diagnostiquer — mieux vaut une limite lâche qui tient que stricte qui gêne.
+    rate-limit:
+      rateLimit:
+        average: 300
+        period: 1m
+        burst: 100
+        sourceCriterion:
+          requestHeaderName: Cf-Connecting-Ip

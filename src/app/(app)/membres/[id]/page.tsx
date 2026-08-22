@@ -77,7 +77,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
   // Rattachement familial : liens du membre + (pour user.manage) listes
   // d'ajout selon son rôle. Affiché pour parents et jeunes.
-  const canManageFamily = can(currentUser, "user.manage");
+  const canManageFamily = can(currentUser, "member.family.manage");
   const family = await getFamilyForMember(user.id);
   const [linkableChildren, linkableParents] = await Promise.all([
     canManageFamily && isParent ? listLinkableChildren(user.id) : Promise.resolve([]),

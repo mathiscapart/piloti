@@ -384,3 +384,41 @@ describe("canActOnUnit — périmètre conscient du rôle qui porte le droit", (
     expect(canActOnUnit(chefScouts, "event.view", "PIONNIERS")).toBe(true);
   });
 });
+
+// Rattachement familial parent ↔ jeune. La permission est volontairement
+// SÉPARÉE de `user.manage` (qui ouvre l'attribution des rôles) : ce test
+// verrouille la séparation, car les fusionner rendrait tout CHEF capable de
+// changer les rôles des comptes.
+describe("can — member.family.manage", () => {
+  const active = (roles: string[]) =>
+    ({ role: roles[0] ?? "SCOUT", roles, status: "ACTIVE" }) as const;
+
+  it.each([["CHEF"], ["RESPONSABLE_GROUPE"], ["SECRETAIRE"]])(
+    "autorise %s à gérer les rattachements familiaux",
+    (role) => {
+      expect(can(active([role]), "member.family.manage")).toBe(true);
+    },
+  );
+
+  it("autorise l'ADMIN (superutilisateur)", () => {
+    expect(can(active(["ADMIN"]), "member.family.manage")).toBe(true);
+  });
+
+  it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["RESPONSABLE_MATERIEL"]])(
+    "refuse %s",
+    (role) => {
+      expect(can(active([role]), "member.family.manage")).toBe(false);
+    },
+  );
+
+  it("n'accorde PAS `user.manage` au CHEF (pas d'élévation de privilèges)", () => {
+    expect(can(active(["CHEF"]), "member.family.manage")).toBe(true);
+    expect(can(active(["CHEF"]), "user.manage")).toBe(false);
+  });
+
+  it("refuse un CHEF dont le compte n'est pas ACTIVE", () => {
+    expect(
+      can({ role: "CHEF", roles: ["CHEF"], status: "PENDING" }, "member.family.manage"),
+    ).toBe(false);
+  });
+});

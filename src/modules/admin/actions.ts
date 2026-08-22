@@ -1,7 +1,6 @@
 "use server";
 
 import { unlink } from "fs/promises";
-import { join } from "path";
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -15,6 +14,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { birthDateSchema } from "@/lib/legal/age";
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
+import { uploadFsPath } from "@/lib/upload";
 import { can, canAssignRole, type Action } from "@/lib/permissions";
 import { NO_LOGIN_UNITS, ROLES, UNITS } from "@/lib/enums";
 
@@ -617,9 +617,10 @@ export async function deleteUser(
 
   // Best-effort : supprime l'avatar uploadé sur disque (ne bloque jamais
   // l'effacement si le fichier est déjà absent ou illisible).
-  if (target.image?.startsWith("/uploads/")) {
+  const avatarPath = target.image ? uploadFsPath(target.image) : null;
+  if (avatarPath) {
     try {
-      await unlink(join("public", target.image));
+      await unlink(avatarPath);
     } catch {
       // Silencieux : le fichier peut déjà être absent.
     }
@@ -678,6 +679,13 @@ export async function changeUserPassword(
       metadata: { targetUserId: parsed.data.userId },
     },
   );
+
+  // SEC — révoque les sessions ouvertes de la cible. Sans ça, le geste de
+  // reprise de contrôle ne reprenait rien : sur un compte compromis, la session
+  // de l'attaquant survivait au changement de mot de passe.
+  // `revokeSessionsOnPasswordReset` (src/lib/auth.ts) ne couvre QUE le flux
+  // self-service de better-auth, pas cette écriture directe en base.
+  await db.session.deleteMany({ where: { userId: parsed.data.userId } });
 
   return { error: null };
 }
@@ -870,7 +878,12 @@ export async function createChildAccount(
           unit,
           consentId: consent.id,
           familyLinkId: familyLink.id,
-          guardianName: `${guardian.firstName} ${guardian.lastName}`,
+          // RGPD — on trace une RÉFÉRENCE, jamais le nom en clair : `metadata`
+          // est un JSON figé que l'anonymisation ne repasse pas, alors que
+          // `Consent.guardianName` est justement scrubé par `anonymize.ts`.
+          // Geler le nom ici rendait le parent reconstructible après son
+          // effacement. L'id reste auditable et se résout en « Compte supprimé ».
+          guardianUserId: guardian.id,
         },
       }),
     );

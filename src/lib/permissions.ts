@@ -44,6 +44,7 @@ export const ACTIONS = [
   "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "member.view",
+  "member.family.manage", // rattachement parent ↔ jeune (CHEF, RG, SEC)
   "member.directory", // US-26 — annuaire des compétences parents (RG)
   "member.image_rights.manage", // US-C08 — définir le statut de droit à l'image (RG + SEC)
   // Dons
@@ -140,6 +141,13 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "user.approve": [SEC],
   "user.manage": [SEC],
   "member.view": [CHEF, RG, SEC, TRES],
+  // Rattachement familial parent ↔ jeune. Permission DÉDIÉE, volontairement
+  // séparée de `user.manage` : celle-ci ouvre l'attribution des rôles, et
+  // l'élargir au CHEF aurait été une élévation de privilèges. Comme
+  // `member.image_rights.manage`, déroge à la convention « RG = lecture
+  // seule » — le rattachement familial est un acte de suivi des jeunes, pas
+  // une opération technique de compte. ADMIN superuser.
+  "member.family.manage": [CHEF, RG, SEC],
   // Annuaire des compétences : RG + SECRÉTAIRE (US-32) ; ADMIN superuser.
   "member.directory": [RG, SEC],
   // US-C08 — déroge volontairement à la convention « RG = lecture seule »

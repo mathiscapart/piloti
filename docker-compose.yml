@@ -52,7 +52,7 @@ services:
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
     volumes:
       - piloti-data:/data
-      - piloti-uploads:/app/public/uploads
+      - piloti-uploads:/app/var/uploads
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -76,7 +76,7 @@ services:
       - "traefik.docker.network=piloti_internal"
       - "traefik.http.routers.piloti.rule=Host(`${TRAEFIK_DOMAIN:?TRAEFIK_DOMAIN manquant}`)"
       - "traefik.http.routers.piloti.entrypoints=web"
-      - "traefik.http.routers.piloti.middlewares=security-headers@file"
+      - "traefik.http.routers.piloti.middlewares=security-headers@file,rate-limit@file"
       - "traefik.http.services.piloti.loadbalancer.server.port=3000"
 
   # ---------------------------------------------------------------------------

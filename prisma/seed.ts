@@ -1,8 +1,32 @@
 import "dotenv/config";
 
+import { randomBytes } from "node:crypto";
+
 import { auth } from "../src/lib/auth";
 import { db } from "../src/lib/db";
 import type { AccountStatus, Role, Unit } from "../src/lib/enums";
+
+// === Garde-fou ===
+// Ce script commence par un `deleteMany()` en cascade : il DÉTRUIT la base
+// visée. Prod et staging partagent le même `DATABASE_URL` (`file:/data/piloti.db`),
+// donc le chemin ne permet pas de les distinguer — un `--env-file` de travers
+// suffisait à vider la prod. On exige donc une intention explicite dès que la
+// cible n'est pas la base de développement locale.
+function assertSafeToSeed(): void {
+  const url = process.env.DATABASE_URL ?? "";
+  const isLocalDev = url.includes("dev.db");
+  if (isLocalDev || process.env.SEED_CONFIRM === "1") return;
+  throw new Error(
+    `Seed refusé : DATABASE_URL="${url}" n'est pas la base de développement locale.\n` +
+      "Ce script EFFACE toutes les données de la base visée.\n" +
+      "Si c'est bien l'intention (staging), relancer avec SEED_CONFIRM=1.",
+  );
+}
+
+// Mot de passe des comptes factices. Jamais committé : fourni par
+// `SEED_PASSWORD`, sinon généré aléatoirement et affiché en fin de seed.
+const SEED_PASSWORD =
+  process.env.SEED_PASSWORD ?? `${randomBytes(12).toString("base64url")}aA1!`;
 
 // === Helpers ===
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -59,6 +83,8 @@ async function seedUser(input: SeedUserInput) {
 }
 
 async function main() {
+  assertSafeToSeed();
+
   console.log("→ Seed Piloti : reset en cours…");
 
   // Ordre inverse des FK
@@ -75,7 +101,7 @@ async function main() {
   console.log("→ Création des utilisateurs (via better-auth)…");
   const admin = await seedUser({
     email: "admin@piloti.fr",
-    password: "PilotiAdmin2024!",
+    password: SEED_PASSWORD,
     firstName: "Admin",
     lastName: "Piloti",
     birthDate: new Date("1985-02-14"),
@@ -85,7 +111,7 @@ async function main() {
 
   const thomas = await seedUser({
     email: "thomas.martin@sgdf.fr",
-    password: "PilotiChef2024!",
+    password: SEED_PASSWORD,
     firstName: "Thomas",
     lastName: "Martin",
     birthDate: new Date("1990-03-12"),
@@ -97,7 +123,7 @@ async function main() {
 
   const julie = await seedUser({
     email: "julie.bernard@sgdf.fr",
-    password: "PilotiChef2024!",
+    password: SEED_PASSWORD,
     firstName: "Julie",
     lastName: "Bernard",
     birthDate: new Date("1992-07-30"),
@@ -109,7 +135,7 @@ async function main() {
 
   const paul = await seedUser({
     email: "paul.durand@sgdf.fr",
-    password: "PilotiScout2024!",
+    password: SEED_PASSWORD,
     firstName: "Paul",
     lastName: "Durand",
     birthDate: new Date("2004-11-05"),
@@ -380,6 +406,10 @@ async function main() {
   console.log(`  - ${await db.loan.count()} prêts`);
   console.log(`  - ${await db.incident.count()} incidents`);
   console.log(`  - ${await db.auditLog.count()} entrées d'audit`);
+  if (!process.env.SEED_PASSWORD) {
+    console.log(`\n  Mot de passe des comptes factices : ${SEED_PASSWORD}`);
+    console.log("  (généré aléatoirement — fixez SEED_PASSWORD pour le choisir)");
+  }
 }
 
 main()

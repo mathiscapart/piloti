@@ -168,7 +168,7 @@ export async function toggleSocialCase(
         ? tx.campaignSocialCase.delete({ where: { id: existing.id } })
         : tx.campaignSocialCase.create({ data: { campaignId, userId } }),
     {
-      action: "CAMPAIGN_CREATED",
+      action: "CAMPAIGN_EXEMPTION_TOGGLED",
       userId: actor.id,
       metadata: { campaignId, userId, social: !existing },
     },
@@ -210,7 +210,7 @@ export async function updateCampaignReminders(
         },
       }),
     {
-      action: "CAMPAIGN_CREATED",
+      action: "CAMPAIGN_REMINDERS_UPDATED",
       userId: actor.id,
       metadata: { campaignId, reminderDays: days, templateEdited: tpl.length > 0 },
     },

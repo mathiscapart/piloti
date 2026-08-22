@@ -33,8 +33,9 @@
 #   1. `migrate`  : `prisma migrate deploy` sur le volume staging (vierge ou déjà seedé).
 #   2. `seed`     : one-shot, attend la fin de `migrate`, lance `pnpm db:seed`
 #                   (données factices uniquement — jamais un export de prod).
-#                   Idempotent côté script de seed : un redéploiement ne doit
-#                   pas dupliquer les données factices (cf. prisma/seed.ts).
+#                   DESTRUCTIF : le script vide la base avant de la recréer
+#                   (pas de doublon au redéploiement, mais rien n'est conservé).
+#                   Il refuse de tourner sans SEED_CONFIRM=1 (cf. prisma/seed.ts).
 #   3. `app`      : démarre seulement une fois `seed` terminé avec succès.
 #
 # Logs :       docker compose -f docker-compose.staging.yml logs -f app
@@ -76,6 +77,13 @@ services:
     environment:
       DATABASE_URL: file:/data/piloti.db
       BETTER_AUTH_SECRET: ${STAGING_BETTER_AUTH_SECRET:?STAGING_BETTER_AUTH_SECRET manquant}
+      # `prisma/seed.ts` EFFACE la base visée et refuse de tourner sans cette
+      # confirmation dès que la cible n'est pas la base de dev locale — prod et
+      # staging partageant le même DATABASE_URL, c'est le seul garde-fou possible.
+      SEED_CONFIRM: "1"
+      # Mot de passe des comptes factices. Jamais dans le code (l'ancien était
+      # committé sur un dépôt public, donc fuité définitivement).
+      SEED_PASSWORD: ${STAGING_SEED_PASSWORD:?STAGING_SEED_PASSWORD manquant}
     volumes:
       - piloti-staging-data:/data
     networks:
@@ -112,7 +120,7 @@ services:
       VAPID_SUBJECT: ${STAGING_VAPID_SUBJECT:-}
     volumes:
       - piloti-staging-data:/data
-      - piloti-staging-uploads:/app/public/uploads
+      - piloti-staging-uploads:/app/var/uploads
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -138,7 +146,7 @@ services:
       - "traefik.docker.network=piloti-staging_internal"
       - "traefik.http.routers.piloti-staging.rule=Host(`${STAGING_DOMAIN:?STAGING_DOMAIN manquant}`)"
       - "traefik.http.routers.piloti-staging.entrypoints=web"
-      - "traefik.http.routers.piloti-staging.middlewares=security-headers@file"
+      - "traefik.http.routers.piloti-staging.middlewares=security-headers@file,rate-limit@file"
       - "traefik.http.services.piloti-staging.loadbalancer.server.port=3000"
 
   # ---------------------------------------------------------------------------

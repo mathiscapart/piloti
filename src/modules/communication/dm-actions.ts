@@ -81,6 +81,11 @@ export async function sendDirectMessage(
       type: "DIRECT_MESSAGE",
       title: `${user.firstName} ${user.lastName}`,
       body: text.slice(0, 160),
+      // SAFE-01 — l'extrait reste dans la cloche in-app (surface authentifiée),
+      // mais ne part ni en push (écran verrouillé) ni en email (tiers Resend) :
+      // ces messages privés impliquent des mineurs. L'expéditeur reste affiché,
+      // c'est lui qui rend la notification actionnable.
+      externalBody: "Nouveau message privé.",
       link: `/messages/${user.id}`,
       channelId: convo.id,
     }),

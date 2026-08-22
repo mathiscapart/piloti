@@ -5,3 +5,10 @@ allowBuilds:
   prisma: true
   sharp: true
   unrs-resolver: true
+
+# SEC — Next tire `sharp` en dépendance optionnelle (optimiseur d'images) et
+# reste sur une 0.34.x vulnérable (GHSA-f88m-g3jw-g9cj, décodeurs GIF/TIFF/VIPS).
+# Notre dépendance directe est déjà en 0.35.x : cet override aligne aussi la
+# copie transitive, sinon deux versions coexistent et la faille reste servie.
+overrides:
+  sharp: '>=0.35.0'

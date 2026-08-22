@@ -4,6 +4,8 @@ Application de gestion du matériel pour un groupe scout SGDF. Inventaire, prêt
 
 **Stack :** Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind v4 · Prisma 7 · SQLite · better-auth
 
+**Licence :** [GNU AGPL v3 ou ultérieure](LICENSE) — logiciel libre.
+
 ---
 
 ## Démarrage rapide (développement)
@@ -289,3 +291,27 @@ Volumes Docker :
 - **Prisma 7** : utilise l'adapter `better-sqlite3` au lieu du moteur Rust natif — plus léger en Docker, pas de binaire plateforme-spécifique.
 - **better-auth** : gestion des sessions, hash scrypt des mots de passe, reset par email (Resend). Pas de plugin admin — les actions d'administration sont des Server Actions protégées par `can()`.
 - **Audit** : `AuditLog` est immuable et transactionnel. Chaque mutation de données laisse une trace avec `userId`, `action`, et un champ `metadata` JSON libre.
+
+---
+
+## Licence
+
+Piloti est un logiciel libre distribué sous licence **[GNU AGPL v3 ou ultérieure](LICENSE)** (`AGPL-3.0-or-later`).
+Copyright © 2026 Mathis Capart.
+
+Vous êtes libre d'utiliser, déployer, étudier, modifier et redistribuer Piloti. En contrepartie, l'AGPL impose deux obligations :
+
+- **Toute redistribution** — du code source comme d'une version modifiée — se fait sous cette même licence.
+- **Article 13, la clause réseau** — si vous hébergez une version *modifiée* de Piloti et que des personnes s'en servent à distance, vous devez leur offrir l'accès au code source de cette version. C'est ce qui empêche qu'un fork amélioré de Piloti devienne un service fermé.
+
+L'application expose déjà cet accès : footer de l'application (présent sur toute page authentifiée), footer des pages légales, et section dédiée des mentions légales.
+
+> **Si vous modifiez Piloti**, faites pointer `SOURCE_URL` dans `src/lib/legal/license.ts` vers votre propre dépôt. C'est le code réellement exécuté qui doit être accessible, pas celui d'amont.
+
+### Ce que la licence ne couvre pas
+
+Le nom « Scouts et Guides de France », le sigle « SGDF » et les éléments visuels de l'association nationale sont des marques protégées. L'AGPL porte sur le droit d'auteur du code, jamais sur le droit des marques : un fork peut réutiliser ce code, il ne peut pas se présenter comme un outil officiel SGDF.
+
+### Dépendances
+
+Les dépendances de production sont sous licences MIT, Apache-2.0, BSD-2-Clause, ISC et MPL-2.0 — toutes compatibles avec l'AGPL-3.0. Elles restent régies par leurs licences respectives.

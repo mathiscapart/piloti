@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 
+import { AppFooter } from "@/components/layout/AppFooter";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { NoticeHandler } from "@/components/layout/NoticeHandler";
@@ -34,9 +35,13 @@ export default async function AppLayout({
         <NoticeHandler />
       </Suspense>
       <Sidebar user={user} notifications={notifications} />
-      <div className="flex min-h-screen flex-col md:pl-64">
+      {/* pb-20 porté par le conteneur et non par <main> : la BottomNav est
+          `fixed`, donc hors flux — sans ce padding le AppFooter passerait
+          dessous sur mobile. */}
+      <div className="flex min-h-screen flex-col pb-20 md:pb-0 md:pl-64">
         <MobileHeader user={user} notifications={notifications} />
-        <main className="flex-1 pb-20 md:pb-0">{children}</main>
+        <main className="flex-1">{children}</main>
+        <AppFooter />
         <BottomNav user={user} />
       </div>
     </div>

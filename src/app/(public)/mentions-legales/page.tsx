@@ -1,5 +1,12 @@
 import type { Metadata } from "next";
 
+import {
+  COPYRIGHT_HOLDER,
+  COPYRIGHT_YEAR,
+  LICENSE_NAME,
+  LICENSE_URL,
+  SOURCE_URL,
+} from "@/lib/legal/license";
 import { LEGAL_VERSION } from "@/lib/legal/versions";
 
 export const metadata: Metadata = { title: "Mentions légales — Piloti" };
@@ -57,6 +64,41 @@ export default function MentionsLegalesPage() {
           associés sont la propriété de l&apos;association nationale. Toute
           reproduction en dehors du cadre du groupe est interdite sans
           autorisation.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Licence et code source</h2>
+        <p>
+          Piloti est un logiciel libre publié sous licence{" "}
+          <a
+            href={LICENSE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="font-bold text-forest underline-offset-4 hover:underline"
+          >
+            {LICENSE_NAME}
+          </a>
+          . Copyright © {COPYRIGHT_YEAR} {COPYRIGHT_HOLDER}.
+        </p>
+        <p>
+          Conformément à l&apos;article 13 de cette licence, le code source de la
+          version déployée ici est accessible à toute personne qui utilise
+          l&apos;application :{" "}
+          <a
+            href={SOURCE_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="font-bold text-forest underline-offset-4 hover:underline"
+          >
+            {SOURCE_URL}
+          </a>
+          .
+        </p>
+        <p>
+          Cette licence porte sur le code de l&apos;application. Elle ne confère
+          aucun droit sur les marques, dénominations et éléments visuels
+          mentionnés ci-dessus.
         </p>
       </section>
 

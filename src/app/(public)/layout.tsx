@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { SOURCE_URL } from "@/lib/legal/license";
+
 // RGPD-01 — layout sobre pour les pages légales (accessibles sans compte, cf.
 // court-circuit dans src/proxy.ts). Logo + contenu + footer de liens croisés.
 export default function PublicLayout({
@@ -29,6 +31,14 @@ export default function PublicLayout({
         <Link href="/cgu" className="underline-offset-4 hover:underline">
           CGU
         </Link>
+        <a
+          href={SOURCE_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline-offset-4 hover:underline"
+        >
+          Code source
+        </a>
         <Link href="/login" className="font-bold text-forest underline-offset-4 hover:underline">
           Retour à la connexion
         </Link>

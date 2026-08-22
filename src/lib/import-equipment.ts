@@ -3,6 +3,15 @@
 
 import { EQUIPMENT_CONDITIONS, type EquipmentCondition } from "@/lib/enums";
 
+// Bornes de l'import. Le CSV arrive d'un utilisateur : sans plafond, une seule
+// requête pouvait ouvrir une transaction Prisma de centaines de milliers de
+// lignes, et une quantité comme `99999999999` dépassait l'`Int` de SQLite —
+// l'erreur survenait alors EN PLEIN milieu de la transaction, pas à la
+// validation, donc sans rapport d'erreur exploitable pour l'utilisateur.
+export const MAX_IMPORT_ROWS = 2000;
+export const MAX_IMPORT_QUANTITY = 100_000;
+const MAX_FIELD_LENGTH = 500;
+
 // Colonnes du gabarit standard. L'ordre est libre : on mappe par en-tête.
 export const IMPORT_COLUMNS = [
   "nom",
@@ -124,6 +133,14 @@ export function parseAndValidate(
   const rows = parseCsv(csvText);
   if (rows.length === 0) return { rows: [], headerError: "Fichier vide." };
 
+  // -1 : la première ligne est l'en-tête, pas une donnée.
+  if (rows.length - 1 > MAX_IMPORT_ROWS) {
+    return {
+      rows: [],
+      headerError: `Fichier trop volumineux : ${rows.length - 1} lignes pour un maximum de ${MAX_IMPORT_ROWS}. Découpe-le en plusieurs imports.`,
+    };
+  }
+
   const header = rows[0].map((h) => fold(h));
   const idx = (name: string) => header.indexOf(name);
   const iName = idx("nom");
@@ -153,12 +170,18 @@ export function parseAndValidate(
     if (cells.every((c) => c.trim() === "")) continue;
 
     const line = r;
-    const name = (cells[iName] ?? "").trim();
-    const categoryInput = (iCat >= 0 ? cells[iCat] ?? "" : "").trim();
-    const qtyRaw = (iQty >= 0 ? cells[iQty] ?? "" : "").trim();
-    const condRaw = (iCond >= 0 ? cells[iCond] ?? "" : "").trim();
-    const location = (iLoc >= 0 ? cells[iLoc] ?? "" : "").trim();
-    const notes = (iNotes >= 0 ? cells[iNotes] ?? "" : "").trim();
+    // Tronque : un champ CSV est libre et peut peser des mégaoctets. On coupe
+    // plutôt que de rejeter, une valeur trop longue étant presque toujours un
+    // export mal formé, pas une intention de l'utilisateur.
+    const cell = (i: number) =>
+      (i >= 0 ? cells[i] ?? "" : "").trim().slice(0, MAX_FIELD_LENGTH);
+
+    const name = cell(iName);
+    const categoryInput = cell(iCat);
+    const qtyRaw = cell(iQty);
+    const condRaw = cell(iCond);
+    const location = cell(iLoc);
+    const notes = cell(iNotes);
 
     // Résolution catégorie : slug, puis libellé, sinon « Autre » (réceptacle).
     let category = "AUTRE";
@@ -178,11 +201,11 @@ export function parseAndValidate(
     let quantity = 1;
     if (qtyRaw) {
       const n = Number.parseInt(qtyRaw, 10);
-      if (!Number.isFinite(n) || n < 1) {
+      if (!Number.isFinite(n) || n < 1 || n > MAX_IMPORT_QUANTITY) {
         out.push({
           line, name, category, categoryInput, quantity: 1,
           condition: "BON", location, notes, status: "error",
-          message: `Quantité invalide : « ${qtyRaw} ».`,
+          message: `Quantité invalide : « ${qtyRaw} » (entre 1 et ${MAX_IMPORT_QUANTITY}).`,
         });
         continue;
       }

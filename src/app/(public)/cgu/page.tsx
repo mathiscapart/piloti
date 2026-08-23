@@ -29,10 +29,20 @@ export default function CguPage() {
           s&apos;engage à ne pas communiquer ses identifiants et à signaler toute
           utilisation frauduleuse de son compte.
         </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Âge et comptes des mineurs</h2>
         <p>
-          Pour les mineurs de moins de 15 ans, la création d&apos;un compte est
-          subordonnée à l&apos;autorisation d&apos;un responsable légal, recueillie lors
-          de l&apos;inscription.
+          Aucun compte n&apos;est ouvert à une personne de moins de 15 ans. Sa
+          fiche de membre est créée et tenue à jour par un responsable légal ou
+          par un encadrant du groupe, qui agit pour elle dans l&apos;application.
+        </p>
+        <p>
+          Entre 15 et 18 ans, l&apos;ouverture d&apos;un compte est subordonnée à
+          l&apos;autorisation d&apos;un responsable légal, recueillie et conservée avec
+          la fiche du jeune. À partir de 18 ans, l&apos;inscription se fait sans
+          autorisation de tiers.
         </p>
       </section>
 

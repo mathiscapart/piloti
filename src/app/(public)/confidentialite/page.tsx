@@ -56,9 +56,9 @@ export default function ConfidentialitePage() {
         <p>Selon les traitements, la base légale mobilisée est :</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Le <strong>consentement</strong> de la personne (ou de son
-            représentant légal si mineur de moins de 15 ans) pour la création
-            du compte et l&apos;usage de l&apos;application ;
+            Le <strong>consentement</strong> de la personne — ou celui de son
+            responsable légal lorsqu&apos;elle est mineure — pour la création du
+            compte et l&apos;usage de l&apos;application ;
           </li>
           <li>
             L&apos;<strong>intérêt légitime</strong> de l&apos;association à organiser ses
@@ -72,16 +72,46 @@ export default function ConfidentialitePage() {
       </section>
 
       <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Données des mineurs</h2>
+        <p>
+          Un jeune de moins de 15 ans ne dispose d&apos;aucun compte : ses données
+          sont saisies et consultées par son responsable légal ou par un
+          encadrant du groupe, et l&apos;autorisation parentale est attachée à sa
+          fiche de membre, non à une inscription qu&apos;il aurait faite lui-même.
+        </p>
+        <p>
+          Entre 15 et 18 ans, le jeune peut disposer d&apos;un compte, sous réserve
+          de l&apos;autorisation d&apos;un responsable légal conservée avec sa fiche.
+          Cette autorisation est requise pour tout mineur, quel que soit son âge.
+        </p>
+        <p>
+          Les échanges privés sont fermés aux moins de 15 ans ; au-delà et
+          jusqu&apos;à leur majorité, ils restent limités aux encadrants de leur
+          unité et à leurs responsables légaux.
+        </p>
+      </section>
+
+      <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Durées de conservation</h2>
         <p>
           Les données d&apos;un compte sont conservées tant que la personne est
           membre active du groupe. À la suppression d&apos;un compte, celui-ci est
-          désactivé et son email anonymisé (soft-delete) : les données liées à
+          désactivé et ses données identifiantes anonymisées (soft-delete) : les
+          données liées à
           l&apos;historique du groupe (prêts, incidents, journal d&apos;audit, notes de
           frais) sont conservées pour la cohérence de cet historique et les
           obligations comptables, mais la personne ne peut plus se connecter et
           n&apos;est plus identifiable directement. Les données comptables sont
           conservées 10 ans conformément aux obligations légales.
+        </p>
+        <p>
+          Le contenu des messages que vous avez écrits (annonces, messagerie
+          privée) est effacé lors de cette anonymisation et remplacé par une
+          mention explicite, afin qu&apos;aucun élément vous identifiant ne
+          subsiste dans un texte libre. Font exception les messages visés par un
+          signalement, conservés en l&apos;état au titre de la protection des
+          mineurs : la preuve d&apos;un dossier de modération doit survivre à
+          l&apos;effacement de son auteur.
         </p>
       </section>
 
@@ -117,7 +147,10 @@ export default function ConfidentialitePage() {
           <li>Droit de rectification des données inexactes ;</li>
           <li>
             Droit à l&apos;effacement (« droit à l&apos;oubli »), mis en œuvre par une
-            désactivation du compte et une anonymisation de l&apos;email ;
+            désactivation du compte, l&apos;anonymisation de vos données
+            identifiantes (email, nom, coordonnées) et l&apos;effacement du contenu
+            de vos messages, sous réserve de l&apos;exception de modération décrite
+            ci-dessus ;
           </li>
           <li>Droit à la portabilité de vos données ;</li>
           <li>Droit d&apos;opposition, pour les traitements fondés sur l&apos;intérêt légitime.</li>

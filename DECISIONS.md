@@ -406,3 +406,20 @@ L'incohérence est devenue visible avec US-P05, qui ajoute le chemin encadré `a
 - L'exception est calculée sur la table `Report` **au moment de l'anonymisation**. Un signalement créé APRÈS l'effacement d'un compte ne retrouvera pas le contenu déjà remplacé — acceptable : on ne signale pas un message qu'on ne peut plus lire.
 - Le filtre est construit en omettant la clause `id` quand aucun message n'est signalé : `notIn: []` n'est pas un no-op fiable selon les versions de Prisma, et une régression silencieuse ici n'effacerait plus rien.
 - **Résidu connu, non traité par ce lot** : les fichiers joints restent sur le disque après le vidage de `attachments`. Seul l'avatar est réellement supprimé (`deleteUser`, hors transaction). Supprimer des fichiers depuis `anonymizeUserInTx` mêlerait une opération non transactionnelle à une transaction Prisma — à traiter séparément, du côté appelant.
+
+---
+
+## D-029 — LEGAL-02 : les textes légaux énoncent la règle, pas le parcours qui l'applique
+
+**Contexte** : les CGU et la politique de confidentialité publiées affirmaient encore « pour les mineurs de moins de 15 ans, la création d'un compte est subordonnée à l'autorisation d'un responsable légal » — l'inverse de la règle en vigueur depuis US-CM-04 (D-026) et de l'amendement RGPD-02 du 2026-08-08 (`PARENTAL_CONSENT_AGE` passé de 15 à 18). Ce sont les documents que les utilisateurs acceptent à l'inscription : l'écart n'est pas cosmétique, il rend le consentement recueilli sur une base fausse.
+
+Le critère d'origine du ticket demandait d'écrire « entre 15 et 18 ans, le compte est activé par invitation ». Or US-CM-05 (le mécanisme d'invitation) n'est pas livré : aujourd'hui un jeune de 15 à 17 ans s'inscrit lui-même en déclarant son responsable légal (`register/actions.ts`, `Consent.type = "PARENTAL"`). Publier ce texte aurait remplacé une affirmation fausse par une autre, dans l'autre sens.
+
+**Choix** : les textes légaux décrivent **le droit, jamais le mécanisme d'interface**. On écrit « l'ouverture d'un compte est subordonnée à l'autorisation d'un responsable légal, recueillie et conservée avec la fiche du jeune » — vrai avec l'auto-inscription attestée d'aujourd'hui comme avec l'invitation de demain. Les trois paliers (aucun compte sous 15 ans, autorisation parentale de 15 à 18, inscription libre au-delà) sont sortis dans une section dédiée de chaque document plutôt que noyés dans « Compte utilisateur ».
+
+Le même lot aligne la politique de confidentialité sur D-028 : l'effacement n'y était décrit que comme « anonymisation de l'email », alors qu'il efface aussi le corps des messages, avec l'exception des messages signalés. Une exception de conservation non annoncée dans la politique n'est pas opposable — c'est ce qui la rendait obligatoire ici, pas le confort rédactionnel.
+
+**Conséquences** :
+- `PRIVACY_VERSION` et `TERMS_VERSION` passent à `2026-08-23`. Conformément à D-014, **aucun ré-consentement rétroactif** : seuls les consentements postérieurs référencent cette version.
+- La livraison de US-CM-05 (invitation) ne devrait **pas** exiger un nouveau bump de `TERMS_VERSION` : le texte reste vrai. Un bump ne redevient nécessaire que si un *droit* change, pas un écran.
+- Les placeholders `[À COMPLÉTER : …]` (dénomination du groupe, contact RGPD, hébergeur) restent ouverts — cf. D-014, à remplir avant mise en production.

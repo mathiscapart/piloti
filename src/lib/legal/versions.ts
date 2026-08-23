@@ -2,8 +2,12 @@
 // contenu (src/app/(public)/{confidentialite,cgu}) doit s'accompagner d'une
 // mise à jour de la date correspondante ici. `Consent.privacyVersion` /
 // `Consent.termsVersion` figent la version acceptée par l'utilisateur.
-export const PRIVACY_VERSION = "2026-07-16";
-export const TERMS_VERSION = "2026-07-16";
+// LEGAL-02 (2026-08-23) — bump des deux textes : les seuils d'âge publiés
+// décrivaient l'ancienne règle (compte possible sous 15 ans avec autorisation
+// parentale), contredite par US-CM-04 et par l'amendement RGPD-02 du
+// 2026-08-08. Conformément à D-014, les comptes existants ne re-consentent pas.
+export const PRIVACY_VERSION = "2026-08-23";
+export const TERMS_VERSION = "2026-08-23";
 export const LEGAL_VERSION = "2026-08-22";
 
 // US-C08 — droit à l'image. Même convention : à faire évoluer si le texte/la

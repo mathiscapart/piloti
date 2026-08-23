@@ -50,6 +50,18 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # LEGAL-02 / CONF-01 — identité légale publiée dans /mentions-legales,
+      # /cgu et /confidentialite. OBLIGATOIRES : les mentions légales sont une
+      # obligation (LCEN art. 6-III) et une instance qui les publierait vides
+      # serait en infraction — mieux vaut un déploiement qui refuse de démarrer
+      # qu'une page légale incomplète en ligne. Même garde-fou que
+      # BETTER_AUTH_SECRET ci-dessus.
+      ORG_NAME: ${ORG_NAME:?ORG_NAME manquant (dénomination officielle du groupe)}
+      ORG_ADDRESS: ${ORG_ADDRESS:?ORG_ADDRESS manquant (adresse postale du siège)}
+      ORG_EMAIL: ${ORG_EMAIL:?ORG_EMAIL manquant (contact général du groupe)}
+      ORG_PRIVACY_EMAIL: ${ORG_PRIVACY_EMAIL:?ORG_PRIVACY_EMAIL manquant (référent RGPD)}
+      ORG_PUBLICATION_DIRECTOR: ${ORG_PUBLICATION_DIRECTOR:?ORG_PUBLICATION_DIRECTOR manquant (directeur de la publication)}
+      ORG_HOSTING_PROVIDER: ${ORG_HOSTING_PROVIDER:?ORG_HOSTING_PROVIDER manquant (nom et localisation de l'hébergeur)}
     volumes:
       - piloti-data:/data
       - piloti-uploads:/app/var/uploads

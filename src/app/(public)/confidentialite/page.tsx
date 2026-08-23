@@ -1,13 +1,23 @@
 import type { Metadata } from "next";
 
+import {
+  ORG_HOSTING_PROVIDER,
+  ORG_NAME,
+  ORG_PRIVACY_EMAIL,
+} from "@/lib/legal/organization";
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
 
 export const metadata: Metadata = { title: "Politique de confidentialité — Piloti" };
 
+// Les valeurs d'identité légale sont lues dans l'environnement au rendu : cette
+// page ne peut donc pas être pré-rendue statiquement, sinon `next build` figerait
+// dans l'image le placeholder de l'étape `builder` du Dockerfile (cf.
+// src/lib/legal/organization.ts).
+export const dynamic = "force-dynamic";
+
 // RGPD-01 — politique de confidentialité (LEGAL-01). Rédigée pour l'usage réel
-// de l'application (cf. src/lib/auth.ts, docker-compose.yml). Les placeholders
-// [À COMPLÉTER : …] identifient les informations propres au groupe, à
-// compléter avant mise en production.
+// de l'application (cf. src/lib/auth.ts, docker-compose.yml). L'identité du
+// groupe et de l'hébergeur vient de l'environnement (organization.ts).
 export default function ConfidentialitePage() {
   return (
     <article className="prose prose-sm max-w-none space-y-6 text-earth">
@@ -19,13 +29,12 @@ export default function ConfidentialitePage() {
         <p>
           Le responsable du traitement des données personnelles collectées par
           l&apos;application Piloti est le groupe local{" "}
-          <strong>[À COMPLÉTER : dénomination officielle du groupe SGDF]</strong>,
-          représenté par son responsable de groupe.
+          <strong>{ORG_NAME}</strong>, représenté par son responsable de groupe.
         </p>
         <p>
           Pour toute question relative à vos données personnelles, ou pour
           exercer vos droits, contactez le référent RGPD du groupe :{" "}
-          <strong>[À COMPLÉTER : email de contact RGPD du groupe]</strong>.
+          <strong>{ORG_PRIVACY_EMAIL}</strong>.
         </p>
         <p>
           Compte tenu de l&apos;échelle d&apos;un groupe local, la désignation d&apos;un
@@ -133,7 +142,7 @@ export default function ConfidentialitePage() {
             (CDN/WAF), sans exposition directe du serveur sur Internet ;
           </li>
           <li>
-            <strong>[À COMPLÉTER : nom et localisation de l&apos;hébergeur]</strong> —
+            <strong>{ORG_HOSTING_PROVIDER}</strong> —
             hébergement du serveur applicatif et de la base de données.
           </li>
         </ul>
@@ -157,7 +166,7 @@ export default function ConfidentialitePage() {
         </ul>
         <p>
           Pour exercer ces droits, contactez le référent RGPD du groupe :{" "}
-          <strong>[À COMPLÉTER : email de contact RGPD du groupe]</strong>. Vous
+          <strong>{ORG_PRIVACY_EMAIL}</strong>. Vous
           pouvez également introduire une réclamation auprès de la CNIL
           (www.cnil.fr) si vous estimez que vos droits ne sont pas respectés.
         </p>

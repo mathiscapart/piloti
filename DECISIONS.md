@@ -423,3 +423,42 @@ Le même lot aligne la politique de confidentialité sur D-028 : l'effacement n'
 - `PRIVACY_VERSION` et `TERMS_VERSION` passent à `2026-08-23`. Conformément à D-014, **aucun ré-consentement rétroactif** : seuls les consentements postérieurs référencent cette version.
 - La livraison de US-CM-05 (invitation) ne devrait **pas** exiger un nouveau bump de `TERMS_VERSION` : le texte reste vrai. Un bump ne redevient nécessaire que si un *droit* change, pas un écran.
 - Les placeholders `[À COMPLÉTER : …]` (dénomination du groupe, contact RGPD, hébergeur) restent ouverts — cf. D-014, à remplir avant mise en production.
+
+---
+
+
+## D-030 — PROD-02 : sauvegarde chiffrée par conteneur jetable, vérifiée par restauration réelle
+
+**Contexte** : aucune sauvegarde n'existait. Une instance SQLite mono-fichier, auto-hébergée sur une machine unique, contenant l'annuaire d'un groupe scout — mineurs inclus — n'est pas déployable en v1.0 dans cet état. La CI protège déjà une restauration (garde-fou P3018, qui vérifie que l'historique de migrations est rejouable sur base vierge) qu'on n'avait pas les moyens d'exécuter.
+
+**Options écartées** :
+- **`Copy-Item` du fichier `.db`.** Un SQLite copié pendant qu'une transaction est en cours donne une archive corrompue de façon intermittente — et on ne l'apprend qu'à la restauration, c'est-à-dire trop tard. Écarté sans hésitation.
+- **`docker compose stop app` avant la copie.** Cohérent, mais impose une coupure de service à chaque sauvegarde, donc décourage de sauvegarder souvent. `VACUUM INTO` donne la même cohérence sans arrêter l'application.
+- **Installer sqlite3/openssl sur l'hôte.** Crée une dépendance hôte invisible : le jour d'une réinstallation après incident, le script ne tourne plus, exactement quand il compte.
+
+**Choix** : `scripts/backup.ps1`, côté hôte comme `deploy.ps1` (D-018), s'appuyant sur un conteneur Alpine jetable pour tout l'outillage.
+
+- **Cohérence** : `VACUUM INTO` produit un instantané transactionnel pendant que l'app écrit.
+- **Chiffrement** : AES-256 (openssl, PBKDF2, 200 000 itérations) appliqué *dans le tube*, avant écriture — le `.db` en clair n'existe jamais hors du conteneur. La passphrase passe par `docker run -e NOM` sans valeur, forme qui la reprend du shell appelant sans l'inscrire dans la configuration du conteneur (`docker inspect` la révélerait).
+- **Restauration vérifiée** : `-Verify` redéchiffre, réextrait et contrôle (`PRAGMA integrity_check`, comptage `User`/`AuditLog`) l'archive tout juste écrite. C'est l'étape habituellement sautée et la seule qui distingue une sauvegarde d'un fichier opaque.
+- **Rotation après succès seulement** : on ne supprime jamais une ancienne archive avant qu'une nouvelle ait été écrite *et* vérifiée.
+- La restauration écrit dans un **dossier**, jamais directement dans le volume de prod : réinjecter les données reste un acte humain délibéré, jamais l'effet de bord d'une commande de lecture.
+
+**Conséquences** :
+- **La sauvegarde reste locale tant que `PILOTI_BACKUP_REMOTE` n'est pas définie.** En l'état elle protège d'une migration ratée ou d'une fausse manœuvre, pas d'un vol, d'un incendie ni d'un rançongiciel — les trois scénarios pour lesquels on sauvegarde vraiment. Le « off-site » de PROD-02 n'est donc pas encore satisfait ; la destination est une décision d'exploitation, pas de code.
+- **Perdre `BACKUP_PASSPHRASE` rend toutes les archives définitivement illisibles.** Elle doit vivre hors de la machine sauvegardée.
+- Le script n'est pas encore planifié ni appelé par `deploy.ps1` avant `migrate deploy` : la sauvegarde pré-déploiement relève de PROD-03 (procédure de mise à jour et rollback).
+- Convention d'encodage des `.ps1` du repo : **UTF-8 avec BOM et CRLF**, comme `deploy.ps1`. Sans BOM, PowerShell 5.1 lit le fichier en ANSI et les accents cassent l'analyse. Les scripts shell embarqués sont transmis au conteneur en base64 après normalisation en LF : PowerShell découpe un argument natif contenant des sauts de ligne, et `busybox sh` refuse une fin de ligne Windows.
+
+**Amendement 2026-08-23 — chiffrement `age` à clé publique, en remplacement d'`openssl enc`** :
+
+Le choix initial (`openssl enc -aes-256-cbc -pbkdf2 -iter 200000`) assurait la confidentialité mais **pas l'authenticité** : CBC n'a pas de MAC, une archive modifiée n'est pas détectée comme falsifiée. `openssl enc` ne gère pas non plus les modes AEAD (il n'écrit ni ne vérifie le tag GCM) : la lacune n'était pas corrigeable par un réglage. Tant que les archives dorment sur la machine, la confidentialité suffit ; dès qu'elles partent hors-site — c'est-à-dire l'objectif même de PROD-02 — la destination devient un endroit où un tiers peut écrire, et l'intégrité devient le vrai sujet.
+
+Remplacé par `age` (ChaCha20-Poly1305), disponible dans `alpine:3.21`. Deux conséquences, dont la seconde n'était pas recherchée au départ et pèse plus lourd que la première :
+
+- **Chiffrement authentifié** : une archive altérée est rejetée au déchiffrement, jamais restaurée à moitié.
+- **Chiffrement à clé publique** : `age -p` (passphrase) exige un terminal et échoue dans un conteneur non interactif — vérifié, pas supposé. On utilise donc une paire de clés. L'hôte ne détient que la clé publique (`BACKUP_AGE_RECIPIENT`) : il produit des sauvegardes qu'il ne peut pas relire. Une machine compromise ou chiffrée par un rançongiciel n'ouvre pas l'historique — ce qu'aucune passphrase stockée sur cette même machine n'aurait permis.
+
+**Contrepartie assumée** : `-Verify` et la restauration exigent la clé privée (`BACKUP_AGE_IDENTITY`), donc la sauvegarde quotidienne planifiée tourne **sans vérification**. Le régime d'exploitation devient : sauvegarde quotidienne sans clé privée sur l'hôte, vérification périodique à la main avec la clé montée le temps de l'opération. Le script refuse `-Verify` sans clé **avant** de sauvegarder, pour ne jamais laisser croire qu'une archive a été contrôlée, et rejette une valeur `AGE-SECRET-KEY-…` posée par erreur dans `BACKUP_AGE_RECIPIENT` — l'erreur mettrait la clé privée exactement sur la machine dont on cherche à se protéger.
+
+Testé sur staging : sauvegarde avec la seule clé publique, refus de `-Verify` sans clé privée, vérification complète avec clé, restauration, rejet d'une archive dont un octet a été modifié, rejet d'une clé privée en `RECIPIENT`.

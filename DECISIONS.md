@@ -449,3 +449,16 @@ Le même lot aligne la politique de confidentialité sur D-028 : l'effacement n'
 - **Perdre `BACKUP_PASSPHRASE` rend toutes les archives définitivement illisibles.** Elle doit vivre hors de la machine sauvegardée.
 - Le script n'est pas encore planifié ni appelé par `deploy.ps1` avant `migrate deploy` : la sauvegarde pré-déploiement relève de PROD-03 (procédure de mise à jour et rollback).
 - Convention d'encodage des `.ps1` du repo : **UTF-8 avec BOM et CRLF**, comme `deploy.ps1`. Sans BOM, PowerShell 5.1 lit le fichier en ANSI et les accents cassent l'analyse. Les scripts shell embarqués sont transmis au conteneur en base64 après normalisation en LF : PowerShell découpe un argument natif contenant des sauts de ligne, et `busybox sh` refuse une fin de ligne Windows.
+
+**Amendement 2026-08-23 — chiffrement `age` à clé publique, en remplacement d'`openssl enc`** :
+
+Le choix initial (`openssl enc -aes-256-cbc -pbkdf2 -iter 200000`) assurait la confidentialité mais **pas l'authenticité** : CBC n'a pas de MAC, une archive modifiée n'est pas détectée comme falsifiée. `openssl enc` ne gère pas non plus les modes AEAD (il n'écrit ni ne vérifie le tag GCM) : la lacune n'était pas corrigeable par un réglage. Tant que les archives dorment sur la machine, la confidentialité suffit ; dès qu'elles partent hors-site — c'est-à-dire l'objectif même de PROD-02 — la destination devient un endroit où un tiers peut écrire, et l'intégrité devient le vrai sujet.
+
+Remplacé par `age` (ChaCha20-Poly1305), disponible dans `alpine:3.21`. Deux conséquences, dont la seconde n'était pas recherchée au départ et pèse plus lourd que la première :
+
+- **Chiffrement authentifié** : une archive altérée est rejetée au déchiffrement, jamais restaurée à moitié.
+- **Chiffrement à clé publique** : `age -p` (passphrase) exige un terminal et échoue dans un conteneur non interactif — vérifié, pas supposé. On utilise donc une paire de clés. L'hôte ne détient que la clé publique (`BACKUP_AGE_RECIPIENT`) : il produit des sauvegardes qu'il ne peut pas relire. Une machine compromise ou chiffrée par un rançongiciel n'ouvre pas l'historique — ce qu'aucune passphrase stockée sur cette même machine n'aurait permis.
+
+**Contrepartie assumée** : `-Verify` et la restauration exigent la clé privée (`BACKUP_AGE_IDENTITY`), donc la sauvegarde quotidienne planifiée tourne **sans vérification**. Le régime d'exploitation devient : sauvegarde quotidienne sans clé privée sur l'hôte, vérification périodique à la main avec la clé montée le temps de l'opération. Le script refuse `-Verify` sans clé **avant** de sauvegarder, pour ne jamais laisser croire qu'une archive a été contrôlée, et rejette une valeur `AGE-SECRET-KEY-…` posée par erreur dans `BACKUP_AGE_RECIPIENT` — l'erreur mettrait la clé privée exactement sur la machine dont on cherche à se protéger.
+
+Testé sur staging : sauvegarde avec la seule clé publique, refus de `-Verify` sans clé privée, vérification complète avec clé, restauration, rejet d'une archive dont un octet a été modifié, rejet d'une clé privée en `RECIPIENT`.

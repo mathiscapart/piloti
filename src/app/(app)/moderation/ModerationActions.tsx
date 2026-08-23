@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { ReportTargetType } from "@/lib/enums";
 import {
   dismissReport,
   hideMessage,
@@ -18,13 +17,9 @@ import {
 // signalement (résolu ou rejeté), avec un motif facultatif.
 export function ModerationActions({
   reportId,
-  targetType,
-  targetId,
   alreadyHidden,
 }: {
   reportId: string;
-  targetType: ReportTargetType;
-  targetId: string;
   alreadyHidden: boolean;
 }) {
   const [pending, startTransition] = useTransition();
@@ -33,7 +28,7 @@ export function ModerationActions({
 
   function handleHide() {
     startTransition(async () => {
-      const result = await hideMessage(reportId, targetType, targetId);
+      const result = await hideMessage(reportId);
       if (result.error) toast.error(result.error);
       else toast.success("Message masqué.");
     });

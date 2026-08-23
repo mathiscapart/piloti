@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 
+import { csvCell } from "@/lib/csv";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -21,7 +22,6 @@ const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
   timeZone: "UTC",
 });
 const eur = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
-const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -51,12 +51,12 @@ export async function GET(request: Request) {
     lines.push(
       [
         DATE_FMT.format(e.date),
-        esc(`${e.declarant.firstName} ${e.declarant.lastName}`),
+        csvCell(`${e.declarant.firstName} ${e.declarant.lastName}`),
         EXPENSE_CATEGORY_LABEL[e.category as ExpenseCategory] ?? e.category,
         eur(e.amountCents),
         EXPENSE_STATUS_LABEL[e.status as ExpenseStatus] ?? e.status,
-        esc(e.event?.name ?? ""),
-        esc(e.note ?? ""),
+        csvCell(e.event?.name ?? ""),
+        csvCell(e.note ?? ""),
       ].join(";"),
     );
   }

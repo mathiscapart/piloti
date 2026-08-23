@@ -24,21 +24,17 @@ export async function forgotPasswordAction(
   }
 
   try {
-    // auth.api.forgetPassword n'est pas exposé comme méthode typée en v1.6.
-    // On appelle le handler HTTP directement avec une Request synthétique —
-    // ça évite un appel HTTP sortant (impossible sur le réseau Docker internal).
-    const req = new Request(
-      "http://piloti.internal/api/auth/forget-password",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: parsed.data.email,
-          redirectTo: `${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"}/reset-password`,
-        }),
+    // better-auth 1.6 : la route /forget-password n'existe plus, elle a été
+    // renommée /request-password-reset. On appelle la méthode typée plutôt que
+    // de fabriquer une Request — les headers réels donnent aussi son IP au
+    // rate-limiter.
+    await auth.api.requestPasswordReset({
+      body: {
+        email: parsed.data.email,
+        redirectTo: `${process.env.BETTER_AUTH_URL ?? "http://localhost:3000"}/reset-password`,
       },
-    );
-    await auth.handler(req);
+      headers: await headers(),
+    });
   } catch (e) {
     console.error("[forgotPassword]", e);
     return {

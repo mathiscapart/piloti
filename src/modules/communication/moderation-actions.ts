@@ -129,24 +129,26 @@ async function notifyModerators(concernedUnit: string | null, reason?: string): 
 // l'ADMIN ou au CHEF de l'unité concernée par le signalement (routage SAFE-02,
 // cf. `canModerateReport`) — un chef ne doit pas pouvoir masquer un message
 // signalé dans une autre unité. Idempotent : si déjà masqué, ne fait rien.
-export async function hideMessage(
-  reportId: string,
-  targetType: ReportTargetType,
-  targetId: string,
-): Promise<ActionResult> {
+export async function hideMessage(reportId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!can(user, "moderation.review")) {
     return { error: "Réservé aux chefs." };
   }
 
+  // SEC — la cible est DÉRIVÉE du signalement, jamais reçue en argument. Les
+  // recevoir permettait d'autoriser sur un signalement de sa propre unité puis
+  // d'agir sur un tout autre message (IDOR), y compris un DM : le contrôle
+  // d'unité ci-dessous portait sur un objet différent de celui qu'on masquait.
   const report = await db.report.findUnique({
     where: { id: reportId },
-    select: { concernedUnit: true },
+    select: { concernedUnit: true, targetType: true, targetId: true },
   });
   if (!report) return { error: "Signalement introuvable." };
   if (!canModerateReport(user, report)) {
     return { error: "Réservé aux modérateurs de cette unité." };
   }
+  const targetType = report.targetType as ReportTargetType;
+  const targetId = report.targetId;
 
   if (targetType === "CHANNEL_MESSAGE") {
     const message = await db.message.findUnique({

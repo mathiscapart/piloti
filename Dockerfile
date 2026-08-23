@@ -84,8 +84,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Dossier prêt à recevoir les uploads (monté en volume)
-RUN mkdir -p /app/public/uploads && chown -R nextjs:nodejs /app/public/uploads
+# Dossier prêt à recevoir les uploads (monté en volume). HORS de `public/` :
+# un fichier sous `public/` est servi par le serveur statique de Next sans
+# passer par `/uploads/[...path]`, donc sans contrôle de session (cf. lib/upload.ts).
+RUN mkdir -p /app/var/uploads && chown -R nextjs:nodejs /app/var/uploads
 
 USER nextjs
 

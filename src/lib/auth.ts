@@ -51,7 +51,7 @@ export const auth = betterAuth({
       const fromEmail =
         process.env.RESEND_FROM_EMAIL ?? "noreply@piloti.mathiscapart.xyz";
       const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
+      const { error } = await resend.emails.send({
         from: fromEmail,
         to: user.email,
         subject: "Réinitialisation de votre mot de passe Piloti",
@@ -63,6 +63,9 @@ export const auth = betterAuth({
           <p style="color:#888;font-size:12px;">Si vous n'avez pas fait cette demande, ignorez cet email.</p>
         `,
       });
+      // Le SDK Resend ne jette pas sur une erreur d'API : sans ce test, un refus
+      // (domaine non vérifié, quota) passerait pour un envoi réussi.
+      if (error) throw new Error(`Resend: ${error.name} — ${error.message}`);
     },
   },
 

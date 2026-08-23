@@ -265,6 +265,14 @@ Inspection en lecture seule de `_prisma_migrations` en prod (volume `piloti_pilo
 
 **Conséquences (amendement)** : tout tarif 2e enfant / cas social déjà configuré en base continue d'être appliqué silencieusement par `computeTiers` (aucune régression de calcul), mais plus personne ne peut en saisir, modifier ou (dé)marquer un cas social depuis l'UI. `toggleSocialCase` reste exporté par `campaign-actions.ts` (dead code assumé côté UI, cf. `bracket-actions.ts`) au cas où la décision serait inversée. `/finances/tranches` en URL directe renvoie désormais 404 au lieu de rediriger.
 
+**Limite du « masquage présentation » — à connaître (audit vague 2)** : « non rendu » n'est pas « non transmis ». `EventPaymentRow.tsx` est un composant `"use client"` et sa prop `bracketName` — laissée dans l'interface par la décision ci-dessus — est **sérialisée dans le payload RSC envoyé au navigateur**, donc lisible dans le source de la page par toute personne pouvant charger l'écran de budget (`budget.view` = CHEF, TRESORIER, RG, sans périmètre d'unité). Le masquage protège du regard, pas de l'inspection.
+
+Ce n'est pas une contradiction de D-022 : c'est exactement la portée que la décision s'était donnée (« masquage **présentation uniquement**, rien touché côté `budget.ts` »). Mais la conséquence n'avait pas été énoncée. Deux options si le sujet devient bloquant, à trancher par le responsable :
+- **cesser d'émettre** `bracketName` depuis `budget.ts` (et retirer la prop) — la donnée ne quitte plus le serveur, au prix de rendre l'inversion de D-022 un peu moins triviale ;
+- **borner la lecture** du budget au périmètre d'unité, ce qui réduit l'audience sans supprimer l'exposition.
+
+Tant que rien n'est tranché, l'exposition est **assumée et documentée ici**. À noter : `coefficientPermille` n'est transmis à aucun composant client — seul le nom de la tranche l'est.
+
 ---
 
 ## D-023 — SAFE-01 : le verrou de profil incomplet vit dans le proxy, et la date de naissance n'est plus réécrivable
@@ -351,3 +359,106 @@ L'incohérence est devenue visible avec US-P05, qui ajoute le chemin encadré `a
 **Portée volontairement réduite** : la fiche US-CM-04 exige aussi que les 15-17 ans passent par une **invitation** plutôt que par l'auto-inscription. Ce critère dépend d'US-CM-05 (mécanisme d'invitation), qui n'existe pas : l'appliquer maintenant enfermerait dehors tous les 15-17 ans sans fiche. Ce lot livre donc le sous-ensemble déployable — refus sous 15 ans, consentement étendu à 18 — qui ferme la non-conformité **sans bloquer personne**. La fermeture de l'auto-inscription des 15-17 ans viendra avec US-CM-05. Rappel de la fiche : ce lot doit être déployé **avant** US-CM-06, sinon un compte révoqué pourrait se recréer entre les deux déploiements.
 
 **Vérification** : pour la première fois de cette série, le refus **serveur** a été exercé sur un **appel forgé**, en reconstituant l'encodage natif d'une Server Action Next (`$ACTION_REF_1`, `$ACTION_1:0`, `$ACTION_1:1`, `$ACTION_KEY`, extraits du HTML rendu). Un POST direct, interface entièrement contournée, pour un enfant de 10 ans avec **toutes les cases parentales cochées**, reçoit le refus d'âge et ne crée aucun compte (vérifié en base). Un jeune de 16 ans sans autorisation reçoit le refus de consentement — et non le refus d'âge. Ce mode de vérification lève la limite signalée en D-024 et D-025, où seul le masquage des contrôles avait pu être démontré.
+
+---
+
+## D-027 — OSS-01 : licence AGPL-3.0-or-later, copyright personnel
+
+**Contexte** : le dépôt n'avait aucun fichier `LICENSE`. En droit d'auteur, l'absence de licence ne signifie pas « libre » mais **« tous droits réservés »** : aucun autre groupe ne pouvait légalement déployer ni forker Piloti, y compris avec un dépôt public. Bloquant pour l'objectif OSS. La question n'était donc pas *s'il fallait* une licence, mais laquelle — et le choix dépend d'une caractéristique du produit : Piloti est une **application web que des tiers vont héberger**, pas une bibliothèque qu'ils vont importer.
+
+**Choix** : **AGPL-3.0-or-later**, texte verbatim de la FSF dans `LICENSE`, copyright au nom de Mathis Capart.
+- **Pourquoi pas MIT** : un prestataire pourrait héberger Piloti en SaaS pour des groupes scouts, garder ses améliorations fermées, et laisser le projet d'origine à maintenir seul. MIT l'autorise explicitement.
+- **Pourquoi pas GPL-3.0** : la GPL déclenche ses obligations à la **distribution du binaire**. Héberger un service ne distribue rien — c'est le « SaaS loophole », et il rend la GPL inopérante pour une application web. L'article 13 de l'AGPL le ferme en déclenchant l'obligation dès que des utilisateurs **interagissent avec le logiciel à distance**.
+- **Pourquoi pas EUPL-1.2** : candidat sérieux (copyleft réseau, version française juridiquement valide, recommandée par la DINUM), mais mal connue des contributeurs et de l'outillage, pour un bénéfice — la compatibilité institutionnelle — qui n'existera que si la SGDF nationale s'intéresse un jour au projet. L'EUPL étant explicitement compatible avec l'AGPL, commencer par l'AGPL ne ferme pas cette porte.
+- **`-or-later` plutôt que `-only`** : bénéficie automatiquement d'une éventuelle AGPL-4.0 sans avoir à recontacter les contributeurs. Recommandation de la FSF.
+- **Copyright personnel** plutôt qu'associatif : tant qu'aucune contribution externe n'est fusionnée, l'auteur unique peut relicencier. Le mettre au nom du groupe imposerait un accord formel de l'association pour toute évolution.
+- **Compatibilité des dépendances vérifiée** avant le choix : 21 MIT, 4 Apache-2.0, 2 BSD-2-Clause, 1 ISC, 1 MPL-2.0 (`web-push`). Le seul copyleft du lot, MPL-2.0, liste explicitement l'AGPL-3.0 comme *Secondary License* (§3.3). Aucun blocage.
+- `LICENSE` reste **strictement verbatim** : le texte interdit lui-même sa modification, et la détection automatique de GitHub compare au texte canonique. Le copyright vit donc dans le `README`, `package.json` et `src/lib/legal/license.ts`, pas dans `LICENSE`.
+
+**Conséquences** :
+- **L'article 13 est une obligation de code, pas de fichier.** L'accès au code source de la version déployée doit être offert aux utilisateurs du service. Trois points d'exposition : `AppFooter` (monté dans `(app)/layout.tsx`, donc présent sur **toute** page authentifiée), le footer du groupe `(public)` pour les visiteurs non connectés, et une section dédiée des mentions légales. Une entrée dans le `UserMenu` a été implémentée puis **écartée** : « Code source » détonne dans un menu de compte personnel, et le footer couvre déjà chaque page — la redondance ne rachetait pas l'incohérence sémantique. Le lien est visible **pour tous les rôles, sans condition de permission** : c'est une obligation, pas une fonctionnalité.
+- **`AppFooter` corrige au passage un manque antérieur** : un utilisateur connecté n'avait **aucun chemin** vers `/mentions-legales`, `/cgu` ou `/confidentialite`. Ces pages n'étaient liées que depuis le formulaire d'inscription et le footer du groupe `(public)`, inaccessible une fois dans l'app. Le footer porte donc les trois liens légaux en plus du lien source. Contrainte de layout : le `pb-20 md:pb-0` qui dégageait la `BottomNav` (`fixed`, hors flux) a été déplacé de `<main>` vers le conteneur, sans quoi le footer passait sous la barre de navigation mobile.
+- `src/lib/legal/license.ts` centralise `SOURCE_URL` et les métadonnées. **Un déploiement qui modifie Piloti doit y pointer son propre dépôt** : le §13 exige l'accès au code *réellement exécuté*, pas à celui d'amont. Un fork qui laisse l'URL d'origine est en violation sans le savoir.
+- **La relicence se ferme au premier merge d'une PR externe** sans CLA. Ce n'est pas un problème, mais c'est une porte qui se referme silencieusement — à décider avant, pas après.
+- **La licence ne couvre pas les marques.** L'AGPL porte sur le droit d'auteur du code ; « Scouts et Guides de France », « SGDF » et les éléments visuels de l'association nationale restent des marques protégées. Un fork peut réutiliser le code, pas se présenter comme un outil officiel SGDF. Mentionné dans le `README` et les mentions légales.
+- `LEGAL_VERSION` passe à `2026-08-22` : le contenu des mentions légales change, et la convention de `src/lib/legal/versions.ts` l'impose. `PRIVACY_VERSION` et `TERMS_VERSION` sont **inchangées** — elles sont figées dans les enregistrements `Consent`, les bumper redemanderait un consentement à tous les utilisateurs sans raison.
+- `package.json` déclare `"license": "AGPL-3.0-or-later"`. `"private": true` est **conservé** : ce champ empêche un `npm publish` accidentel et n'a aucun rapport avec l'ouverture du code.
+
+---
+
+## D-028 — RGPD-04 : effacement des messages, sauf ceux visés par un signalement
+
+**Contexte** : l'app annonce « suppression = anonymisation », mais `anonymize.ts` ne touchait pas au texte que la personne avait écrit elle-même — `Message.body`, `DirectMessage.body`, `Report.reason`. Ce sont des champs libres, et c'est exactement là qu'on écrit son identité (« c'est Marie Dupont au 06 12 34 56 78 », une adresse, le prénom d'un enfant). Après effacement, l'auteur s'affichait « Compte supprimé » mais son texte restait mot pour mot, et restait attribuable par le contexte de la conversation. Une demande d'effacement RGPD ne l'effaçait donc pas. Contrairement aux autres résidus — supprimables sans dommage parce qu'ils n'appartenaient qu'à la personne — celui-ci met deux droits en conflit.
+
+**Options écartées** :
+- **Ne rien faire et documenter** (comme D-011 pour `PedagogicalNote.content`). Défendable juridiquement si l'intérêt légitime est motivé, mais ici il ne l'est pas : rien ne justifie de conserver un numéro de téléphone écrit dans un salon d'annonces.
+- **Supprimer les messages en dur.** Détruit les preuves de modération : un `Report` pointe vers un message, le supprimer vide les dossiers SAFE-02, y compris ceux qui concernent des mineurs. Laisse aussi des trous muets dans le fil des autres participants.
+- **Scruber tout, sans exception.** Même perte de preuves de modération, pour un gain nul par rapport à l'option retenue.
+
+**Choix** : effacer le **corps** des messages écrits par la personne — le message lui-même est conservé, son contenu est remplacé par `[Contenu effacé à la demande de son auteur]` — **sauf** les messages visés par un `Report`, conservés intacts.
+
+- Le message n'est pas supprimé : le fil des autres participants garde un trou **explicite** plutôt qu'un message disparu sans explication. Ils perdent tout de même le contenu auquel ils répondaient : c'est le coût irréductible d'un effacement réel, et il est assumé.
+- `Message.attachments` est vidé en même temps : ce champ porte des chemins `/uploads`, et laisser une photo jointe en effaçant le texte n'aurait aucun sens — l'image identifie davantage que la phrase.
+- **`Report.reason` est conservé sans condition.** C'est par nature une pièce de modération : le motif est la justification du dossier. Le scruber viderait de son sens le signalement qu'il documente.
+- L'exception est **motivée par la protection des mineurs**, pas par le confort d'exploitation. C'est ce qui la rend opposable : conserver des données malgré une demande d'effacement suppose un intérêt à faire valoir, et la conservation de preuves de modération concernant des mineurs en est un. Une conservation *non documentée* n'en serait pas un.
+
+**Conséquences** :
+- L'exception est calculée sur la table `Report` **au moment de l'anonymisation**. Un signalement créé APRÈS l'effacement d'un compte ne retrouvera pas le contenu déjà remplacé — acceptable : on ne signale pas un message qu'on ne peut plus lire.
+- Le filtre est construit en omettant la clause `id` quand aucun message n'est signalé : `notIn: []` n'est pas un no-op fiable selon les versions de Prisma, et une régression silencieuse ici n'effacerait plus rien.
+- **Résidu connu, non traité par ce lot** : les fichiers joints restent sur le disque après le vidage de `attachments`. Seul l'avatar est réellement supprimé (`deleteUser`, hors transaction). Supprimer des fichiers depuis `anonymizeUserInTx` mêlerait une opération non transactionnelle à une transaction Prisma — à traiter séparément, du côté appelant.
+
+---
+
+## D-029 — LEGAL-02 : les textes légaux énoncent la règle, pas le parcours qui l'applique
+
+**Contexte** : les CGU et la politique de confidentialité publiées affirmaient encore « pour les mineurs de moins de 15 ans, la création d'un compte est subordonnée à l'autorisation d'un responsable légal » — l'inverse de la règle en vigueur depuis US-CM-04 (D-026) et de l'amendement RGPD-02 du 2026-08-08 (`PARENTAL_CONSENT_AGE` passé de 15 à 18). Ce sont les documents que les utilisateurs acceptent à l'inscription : l'écart n'est pas cosmétique, il rend le consentement recueilli sur une base fausse.
+
+Le critère d'origine du ticket demandait d'écrire « entre 15 et 18 ans, le compte est activé par invitation ». Or US-CM-05 (le mécanisme d'invitation) n'est pas livré : aujourd'hui un jeune de 15 à 17 ans s'inscrit lui-même en déclarant son responsable légal (`register/actions.ts`, `Consent.type = "PARENTAL"`). Publier ce texte aurait remplacé une affirmation fausse par une autre, dans l'autre sens.
+
+**Choix** : les textes légaux décrivent **le droit, jamais le mécanisme d'interface**. On écrit « l'ouverture d'un compte est subordonnée à l'autorisation d'un responsable légal, recueillie et conservée avec la fiche du jeune » — vrai avec l'auto-inscription attestée d'aujourd'hui comme avec l'invitation de demain. Les trois paliers (aucun compte sous 15 ans, autorisation parentale de 15 à 18, inscription libre au-delà) sont sortis dans une section dédiée de chaque document plutôt que noyés dans « Compte utilisateur ».
+
+Le même lot aligne la politique de confidentialité sur D-028 : l'effacement n'y était décrit que comme « anonymisation de l'email », alors qu'il efface aussi le corps des messages, avec l'exception des messages signalés. Une exception de conservation non annoncée dans la politique n'est pas opposable — c'est ce qui la rendait obligatoire ici, pas le confort rédactionnel.
+
+**Conséquences** :
+- `PRIVACY_VERSION` et `TERMS_VERSION` passent à `2026-08-23`. Conformément à D-014, **aucun ré-consentement rétroactif** : seuls les consentements postérieurs référencent cette version.
+- La livraison de US-CM-05 (invitation) ne devrait **pas** exiger un nouveau bump de `TERMS_VERSION` : le texte reste vrai. Un bump ne redevient nécessaire que si un *droit* change, pas un écran.
+- Les placeholders `[À COMPLÉTER : …]` (dénomination du groupe, contact RGPD, hébergeur) restent ouverts — cf. D-014, à remplir avant mise en production.
+
+---
+
+
+## D-030 — PROD-02 : sauvegarde chiffrée par conteneur jetable, vérifiée par restauration réelle
+
+**Contexte** : aucune sauvegarde n'existait. Une instance SQLite mono-fichier, auto-hébergée sur une machine unique, contenant l'annuaire d'un groupe scout — mineurs inclus — n'est pas déployable en v1.0 dans cet état. La CI protège déjà une restauration (garde-fou P3018, qui vérifie que l'historique de migrations est rejouable sur base vierge) qu'on n'avait pas les moyens d'exécuter.
+
+**Options écartées** :
+- **`Copy-Item` du fichier `.db`.** Un SQLite copié pendant qu'une transaction est en cours donne une archive corrompue de façon intermittente — et on ne l'apprend qu'à la restauration, c'est-à-dire trop tard. Écarté sans hésitation.
+- **`docker compose stop app` avant la copie.** Cohérent, mais impose une coupure de service à chaque sauvegarde, donc décourage de sauvegarder souvent. `VACUUM INTO` donne la même cohérence sans arrêter l'application.
+- **Installer sqlite3/openssl sur l'hôte.** Crée une dépendance hôte invisible : le jour d'une réinstallation après incident, le script ne tourne plus, exactement quand il compte.
+
+**Choix** : `scripts/backup.ps1`, côté hôte comme `deploy.ps1` (D-018), s'appuyant sur un conteneur Alpine jetable pour tout l'outillage.
+
+- **Cohérence** : `VACUUM INTO` produit un instantané transactionnel pendant que l'app écrit.
+- **Chiffrement** : AES-256 (openssl, PBKDF2, 200 000 itérations) appliqué *dans le tube*, avant écriture — le `.db` en clair n'existe jamais hors du conteneur. La passphrase passe par `docker run -e NOM` sans valeur, forme qui la reprend du shell appelant sans l'inscrire dans la configuration du conteneur (`docker inspect` la révélerait).
+- **Restauration vérifiée** : `-Verify` redéchiffre, réextrait et contrôle (`PRAGMA integrity_check`, comptage `User`/`AuditLog`) l'archive tout juste écrite. C'est l'étape habituellement sautée et la seule qui distingue une sauvegarde d'un fichier opaque.
+- **Rotation après succès seulement** : on ne supprime jamais une ancienne archive avant qu'une nouvelle ait été écrite *et* vérifiée.
+- La restauration écrit dans un **dossier**, jamais directement dans le volume de prod : réinjecter les données reste un acte humain délibéré, jamais l'effet de bord d'une commande de lecture.
+
+**Conséquences** :
+- **La sauvegarde reste locale tant que `PILOTI_BACKUP_REMOTE` n'est pas définie.** En l'état elle protège d'une migration ratée ou d'une fausse manœuvre, pas d'un vol, d'un incendie ni d'un rançongiciel — les trois scénarios pour lesquels on sauvegarde vraiment. Le « off-site » de PROD-02 n'est donc pas encore satisfait ; la destination est une décision d'exploitation, pas de code.
+- **Perdre `BACKUP_PASSPHRASE` rend toutes les archives définitivement illisibles.** Elle doit vivre hors de la machine sauvegardée.
+- Le script n'est pas encore planifié ni appelé par `deploy.ps1` avant `migrate deploy` : la sauvegarde pré-déploiement relève de PROD-03 (procédure de mise à jour et rollback).
+- Convention d'encodage des `.ps1` du repo : **UTF-8 avec BOM et CRLF**, comme `deploy.ps1`. Sans BOM, PowerShell 5.1 lit le fichier en ANSI et les accents cassent l'analyse. Les scripts shell embarqués sont transmis au conteneur en base64 après normalisation en LF : PowerShell découpe un argument natif contenant des sauts de ligne, et `busybox sh` refuse une fin de ligne Windows.
+
+**Amendement 2026-08-23 — chiffrement `age` à clé publique, en remplacement d'`openssl enc`** :
+
+Le choix initial (`openssl enc -aes-256-cbc -pbkdf2 -iter 200000`) assurait la confidentialité mais **pas l'authenticité** : CBC n'a pas de MAC, une archive modifiée n'est pas détectée comme falsifiée. `openssl enc` ne gère pas non plus les modes AEAD (il n'écrit ni ne vérifie le tag GCM) : la lacune n'était pas corrigeable par un réglage. Tant que les archives dorment sur la machine, la confidentialité suffit ; dès qu'elles partent hors-site — c'est-à-dire l'objectif même de PROD-02 — la destination devient un endroit où un tiers peut écrire, et l'intégrité devient le vrai sujet.
+
+Remplacé par `age` (ChaCha20-Poly1305), disponible dans `alpine:3.21`. Deux conséquences, dont la seconde n'était pas recherchée au départ et pèse plus lourd que la première :
+
+- **Chiffrement authentifié** : une archive altérée est rejetée au déchiffrement, jamais restaurée à moitié.
+- **Chiffrement à clé publique** : `age -p` (passphrase) exige un terminal et échoue dans un conteneur non interactif — vérifié, pas supposé. On utilise donc une paire de clés. L'hôte ne détient que la clé publique (`BACKUP_AGE_RECIPIENT`) : il produit des sauvegardes qu'il ne peut pas relire. Une machine compromise ou chiffrée par un rançongiciel n'ouvre pas l'historique — ce qu'aucune passphrase stockée sur cette même machine n'aurait permis.
+
+**Contrepartie assumée** : `-Verify` et la restauration exigent la clé privée (`BACKUP_AGE_IDENTITY`), donc la sauvegarde quotidienne planifiée tourne **sans vérification**. Le régime d'exploitation devient : sauvegarde quotidienne sans clé privée sur l'hôte, vérification périodique à la main avec la clé montée le temps de l'opération. Le script refuse `-Verify` sans clé **avant** de sauvegarder, pour ne jamais laisser croire qu'une archive a été contrôlée, et rejette une valeur `AGE-SECRET-KEY-…` posée par erreur dans `BACKUP_AGE_RECIPIENT` — l'erreur mettrait la clé privée exactement sur la machine dont on cherche à se protéger.
+
+Testé sur staging : sauvegarde avec la seule clé publique, refus de `-Verify` sans clé privée, vérification complète avec clé, restauration, rejet d'une archive dont un octet a été modifié, rejet d'une clé privée en `RECIPIENT`.

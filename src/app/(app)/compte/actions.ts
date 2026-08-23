@@ -42,6 +42,32 @@ export async function ensureCalendarToken(): Promise<{ url: string }> {
   return { url: `${base}/api/calendar/${token}.ics` };
 }
 
+// Régénère le jeton iCal : l'ancien lien cesse immédiatement de fonctionner.
+// Indispensable parce que ce jeton vaut authentification en lecture sur tout le
+// planning et voyage en clair dans des URLs (agendas tiers, historique) : sans
+// révocation possible, une fuite donnait un accès permanent.
+export async function resetCalendarToken(): Promise<{ url: string }> {
+  const user = await getCurrentUser();
+  const token = `${randomUUID()}${randomUUID()}`.replace(/-/g, "");
+
+  await withAudit(
+    (tx) =>
+      tx.user.update({
+        where: { id: user.id },
+        data: { calendarToken: token },
+      }),
+    {
+      action: "USER_PROFILE_UPDATED",
+      userId: user.id,
+      metadata: { self: true, calendarToken: "reset" },
+    },
+  );
+
+  revalidatePath("/compte");
+  const base = process.env.BETTER_AUTH_URL ?? "";
+  return { url: `${base}/api/calendar/${token}.ics` };
+}
+
 // US-32 — auto-gestion : un utilisateur édite ses propres coordonnées.
 const profileSchema = z.object({
   firstName: z.string().trim().min(1, "Prénom requis."),

@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 
+import { csvCell } from "@/lib/csv";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
@@ -16,7 +17,6 @@ import { getEventWithRegistrations } from "@/modules/planning/queries";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
 // US-P05 — export CSV de la liste des inscrits (logistique : effectifs,
 // transport, matériel).
@@ -44,23 +44,23 @@ export async function GET(
   for (const reg of data.registrations) {
     lines.push(
       [
-        esc(reg.user.lastName),
-        esc(reg.user.firstName),
-        esc(reg.user.unit ? (UNIT_LABEL[reg.user.unit as Unit] ?? reg.user.unit) : ""),
-        esc(REGISTRATION_STATUS_LABEL[reg.status as RegistrationStatus] ?? reg.status),
-        esc(RSVP_LABEL[reg.response as RsvpResponse] ?? reg.response),
-        esc(reg.comment ?? ""),
-        esc(reg.withdrawalReason ?? ""),
+        csvCell(reg.user.lastName),
+        csvCell(reg.user.firstName),
+        csvCell(reg.user.unit ? (UNIT_LABEL[reg.user.unit as Unit] ?? reg.user.unit) : ""),
+        csvCell(REGISTRATION_STATUS_LABEL[reg.status as RegistrationStatus] ?? reg.status),
+        csvCell(RSVP_LABEL[reg.response as RsvpResponse] ?? reg.response),
+        csvCell(reg.comment ?? ""),
+        csvCell(reg.withdrawalReason ?? ""),
       ].join(";"),
     );
   }
   for (const u of data.awaiting) {
     lines.push(
       [
-        esc(u.lastName),
-        esc(u.firstName),
-        esc(u.unit ? (UNIT_LABEL[u.unit as Unit] ?? u.unit) : ""),
-        esc("En attente"),
+        csvCell(u.lastName),
+        csvCell(u.firstName),
+        csvCell(u.unit ? (UNIT_LABEL[u.unit as Unit] ?? u.unit) : ""),
+        csvCell("En attente"),
         "",
         "",
         "",

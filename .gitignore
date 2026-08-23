@@ -39,6 +39,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# Exception : le gabarit ne contient que des valeurs d'exemple, et il doit être
+# versionné — sinon personne ne sait quelles variables l'application attend.
+!.env.example
 
 # vercel
 .vercel
@@ -57,5 +60,5 @@ next-env.d.ts
 *.db-wal
 *.db-shm
 
-# uploads (Phase 7)
-/public/uploads/
+# uploads (Phase 7) — stockés hors de public/ (contrôle d'accès, cf. lib/upload.ts)
+/var/uploads/

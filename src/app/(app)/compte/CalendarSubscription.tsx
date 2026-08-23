@@ -1,13 +1,13 @@
 "use client";
 
-import { CalendarPlus, Check, Copy } from "lucide-react";
+import { CalendarPlus, Check, Copy, RotateCcw } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-import { ensureCalendarToken } from "./actions";
+import { ensureCalendarToken, resetCalendarToken } from "./actions";
 
 // US-P02 — abonnement iCal au planning (lien personnel à coller dans Google
 // Agenda / Apple Calendrier).
@@ -20,6 +20,21 @@ export function CalendarSubscription() {
     start(async () => {
       const res = await ensureCalendarToken();
       setUrl(res.url);
+    });
+  }
+
+  function reset() {
+    if (
+      !confirm(
+        "Régénérer le lien ? L'ancien cessera immédiatement de fonctionner : " +
+          "il faudra le remplacer dans chaque agenda déjà abonné.",
+      )
+    )
+      return;
+    start(async () => {
+      const res = await resetCalendarToken();
+      setUrl(res.url);
+      toast.success("Nouveau lien généré. L'ancien ne fonctionne plus.");
     });
   }
 
@@ -63,11 +78,23 @@ export function CalendarSubscription() {
               {copied ? "Copié" : "Copier"}
             </Button>
           </div>
-          {webcal ? (
-            <Button asChild size="sm" variant="info">
-              <a href={webcal}>S&apos;abonner (Apple Calendrier)</a>
+          <div className="flex flex-wrap gap-2">
+            {webcal ? (
+              <Button asChild size="sm" variant="info">
+                <a href={webcal}>S&apos;abonner (Apple Calendrier)</a>
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={reset}
+              disabled={pending}
+            >
+              <RotateCcw className="size-4" />
+              Régénérer le lien
             </Button>
-          ) : null}
+          </div>
           <div className="space-y-1 text-xs text-trail">
             <p>
               <span className="font-bold">Google Agenda</span> : « Autres
@@ -79,6 +106,10 @@ export function CalendarSubscription() {
             </p>
             <p className="font-medium text-brick-ink">
               ⚠️ Ce lien est personnel — ne le partage pas.
+            </p>
+            <p>
+              Partagé par erreur ? Régénère-le : l&apos;ancien lien est
+              immédiatement révoqué.
             </p>
           </div>
         </div>

@@ -36,8 +36,11 @@ coverage
 *.spec.ts
 
 # Uploads dev — montés en volume en prod
-public/uploads
+var/uploads
 
 # CI / Vercel
 .vercel
 .github
+
+# Sauvegardes de la base (données personnelles) : jamais dans le contexte de build
+backups

@@ -33,8 +33,9 @@
 #   1. `migrate`  : `prisma migrate deploy` sur le volume staging (vierge ou déjà seedé).
 #   2. `seed`     : one-shot, attend la fin de `migrate`, lance `pnpm db:seed`
 #                   (données factices uniquement — jamais un export de prod).
-#                   Idempotent côté script de seed : un redéploiement ne doit
-#                   pas dupliquer les données factices (cf. prisma/seed.ts).
+#                   DESTRUCTIF : le script vide la base avant de la recréer
+#                   (pas de doublon au redéploiement, mais rien n'est conservé).
+#                   Il refuse de tourner sans SEED_CONFIRM=1 (cf. prisma/seed.ts).
 #   3. `app`      : démarre seulement une fois `seed` terminé avec succès.
 #
 # Logs :       docker compose -f docker-compose.staging.yml logs -f app
@@ -76,6 +77,13 @@ services:
     environment:
       DATABASE_URL: file:/data/piloti.db
       BETTER_AUTH_SECRET: ${STAGING_BETTER_AUTH_SECRET:?STAGING_BETTER_AUTH_SECRET manquant}
+      # `prisma/seed.ts` EFFACE la base visée et refuse de tourner sans cette
+      # confirmation dès que la cible n'est pas la base de dev locale — prod et
+      # staging partageant le même DATABASE_URL, c'est le seul garde-fou possible.
+      SEED_CONFIRM: "1"
+      # Mot de passe des comptes factices. Jamais dans le code (l'ancien était
+      # committé sur un dépôt public, donc fuité définitivement).
+      SEED_PASSWORD: ${STAGING_SEED_PASSWORD:?STAGING_SEED_PASSWORD manquant}
     volumes:
       - piloti-staging-data:/data
     networks:
@@ -110,9 +118,19 @@ services:
       VAPID_PUBLIC_KEY: ${STAGING_VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${STAGING_VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${STAGING_VAPID_SUBJECT:-}
+      # LEGAL-02 — identité légale. Contrairement à la prod, non obligatoire :
+      # le staging n'est pas un site publié au sens de la LCEN et ne doit pas
+      # afficher l'identité réelle du groupe. Valeurs de test par défaut, pour
+      # que les pages légales restent vérifiables sans rien configurer.
+      ORG_NAME: ${STAGING_ORG_NAME:-Groupe de test (staging)}
+      ORG_ADDRESS: ${STAGING_ORG_ADDRESS:-1 rue de la Recette, 00000 Staging}
+      ORG_EMAIL: ${STAGING_ORG_EMAIL:-contact@example.invalid}
+      ORG_PRIVACY_EMAIL: ${STAGING_ORG_PRIVACY_EMAIL:-rgpd@example.invalid}
+      ORG_PUBLICATION_DIRECTOR: ${STAGING_ORG_PUBLICATION_DIRECTOR:-Responsable de test}
+      ORG_HOSTING_PROVIDER: ${STAGING_ORG_HOSTING_PROVIDER:-Environnement de test, non publié}
     volumes:
       - piloti-staging-data:/data
-      - piloti-staging-uploads:/app/public/uploads
+      - piloti-staging-uploads:/app/var/uploads
     depends_on:
       seed:
         condition: service_completed_successfully
@@ -138,7 +156,7 @@ services:
       - "traefik.docker.network=piloti-staging_internal"
       - "traefik.http.routers.piloti-staging.rule=Host(`${STAGING_DOMAIN:?STAGING_DOMAIN manquant}`)"
       - "traefik.http.routers.piloti-staging.entrypoints=web"
-      - "traefik.http.routers.piloti-staging.middlewares=security-headers@file"
+      - "traefik.http.routers.piloti-staging.middlewares=security-headers@file,rate-limit@file"
       - "traefik.http.services.piloti-staging.loadbalancer.server.port=3000"
 
   # ---------------------------------------------------------------------------

@@ -14,6 +14,12 @@ export interface NotifyInput {
   link?: string | null;
   channelId?: string | null;
   messageId?: string | null;
+  // SAFE-01 — corps de remplacement pour les canaux SORTANTS (email et push).
+  // La cloche in-app garde `body` : elle ne s'affiche qu'à l'intérieur de
+  // l'application authentifiée. Email et push, eux, s'affichent sur un écran
+  // verrouillé ou transitent par un tiers (Resend) — un extrait de message
+  // privé impliquant un mineur n'y a pas sa place.
+  externalBody?: string;
   // US-C05 — diffusion urgente : force l'envoi email + push en contournant les
   // préférences du destinataire.
   force?: boolean;
@@ -107,6 +113,8 @@ export async function notify(input: NotifyInput): Promise<void> {
     const emailEnabled = input.force || (user.notificationPref?.emailEnabled ?? true);
     const pushEnabled = input.force || (user.notificationPref?.pushEnabled ?? true);
     const url = absoluteUrl(input.link);
+    // Canaux sortants : jamais le contenu sensible s'il a été remplacé.
+    const outBody = input.externalBody ?? body;
 
     const tasks: Promise<unknown>[] = [];
     if (emailEnabled) {
@@ -114,7 +122,7 @@ export async function notify(input: NotifyInput): Promise<void> {
         sendEmail({
           to: user.email,
           subject: input.title,
-          html: notificationEmailHtml({ title: input.title, body, url }),
+          html: notificationEmailHtml({ title: input.title, body: outBody, url }),
         }),
       );
     }
@@ -122,7 +130,7 @@ export async function notify(input: NotifyInput): Promise<void> {
       tasks.push(
         sendPushToUser(input.userId, {
           title: input.title,
-          body,
+          body: outBody,
           url: input.link ?? "/",
           tag: input.channelId ?? input.type,
         }),

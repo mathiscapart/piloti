@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { ORG_EMAIL, ORG_NAME } from "@/lib/legal/organization";
+import { ORG_EMAIL, ORG_GROUP } from "@/lib/legal/organization";
 import { TERMS_VERSION } from "@/lib/legal/versions";
 
 export const metadata: Metadata = { title: "Conditions générales d'utilisation — Piloti" };
@@ -22,7 +22,7 @@ export default function CguPage() {
         <h2 className="text-xl font-bold text-earth">Objet</h2>
         <p>
           Piloti est un outil interne de gestion réservé aux membres du groupe
-          local <strong>{ORG_NAME}</strong>
+          local <strong>{ORG_GROUP}</strong>
           {" "}(jeunes, familles, chefs et responsables). Les présentes conditions
           définissent les règles d&apos;utilisation de l&apos;application.
         </p>

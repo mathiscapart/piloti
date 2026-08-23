@@ -462,3 +462,25 @@ Remplacé par `age` (ChaCha20-Poly1305), disponible dans `alpine:3.21`. Deux con
 **Contrepartie assumée** : `-Verify` et la restauration exigent la clé privée (`BACKUP_AGE_IDENTITY`), donc la sauvegarde quotidienne planifiée tourne **sans vérification**. Le régime d'exploitation devient : sauvegarde quotidienne sans clé privée sur l'hôte, vérification périodique à la main avec la clé montée le temps de l'opération. Le script refuse `-Verify` sans clé **avant** de sauvegarder, pour ne jamais laisser croire qu'une archive a été contrôlée, et rejette une valeur `AGE-SECRET-KEY-…` posée par erreur dans `BACKUP_AGE_RECIPIENT` — l'erreur mettrait la clé privée exactement sur la machine dont on cherche à se protéger.
 
 Testé sur staging : sauvegarde avec la seule clé publique, refus de `-Verify` sans clé privée, vérification complète avec clé, restauration, rejet d'une archive dont un octet a été modifié, rejet d'une clé privée en `RECIPIENT`.
+
+---
+
+## D-031 — L'éditeur du site n'est pas le groupe local : `ORG_NAME` et `ORG_GROUP` sont distincts
+
+**Contexte** : les trois pages légales, écrites lors de LEGAL-02/CONF-01 (D-029), supposaient que l'éditeur du site *était* le groupe local — « ce site est édité par le groupe local X, association affiliée à l'association nationale des Scouts et Guides de France ». Deux erreurs superposées.
+
+D'abord une erreur de fait : les Scouts et Guides de France sont **une seule association déclarée** (SIREN 775 682 024, siège 21-37 rue de Stalingrad, 94110 Arcueil), dotée d'une personnalité morale unique. Un groupe local n'est pas une « association affiliée » : ce n'est pas une association du tout. Il ne peut donc être ni éditeur au sens de la LCEN, ni responsable de traitement au sens du RGPD — ces rôles supposent une personne, physique ou morale.
+
+Ensuite une erreur de modèle : la première instance déployée tourne sur le domaine personnel de son développeur, auto-hébergée chez lui, sous son copyright. L'éditeur y est une **personne physique**, distincte du groupe desservi. Une variable unique ne pouvait pas porter les deux rôles ; renseigner le nom de l'éditeur dans `ORG_NAME` produisait littéralement « le groupe local Mathis Capart, association affiliée… ».
+
+**Choix** : séparer les deux rôles.
+
+- `ORG_NAME` — **l'éditeur** au sens LCEN : qui publie l'instance et, dans la politique de confidentialité, qui détermine les finalités et les moyens du traitement.
+- `ORG_GROUP` — **le groupe desservi** : l'usage auquel l'instance est destinée, nommé dans les CGU.
+- Les coordonnées de l'association nationale (nom, forme juridique, SIREN, siège) sont **en dur** dans `organization.ts` : elles sont identiques pour tout déploiement SGDF, donc ce n'est pas de la configuration.
+- Les mentions légales énoncent désormais explicitement que le groupe local n'est pas une association distincte **et** que l'association nationale n'est pas l'éditeur du site. Sans cette phrase, un lecteur pourrait croire que le national engage sa responsabilité sur une instance qu'il n'a ni validée ni hébergée.
+
+**Conséquences** :
+- Un déploiement où l'éditeur *est* l'association (par exemple une instance portée par le national) renseigne simplement la même valeur dans les deux variables. Le modèle couvre les deux cas sans code conditionnel.
+- `ORG_GROUP` est **obligatoire** au même titre que les cinq autres (`${VAR:?}`) : sans elle, les CGU ne nomment plus le groupe auquel l'outil est réservé.
+- **Le responsable de traitement est désormais nommément l'éditeur.** Ce n'est pas une formalité : c'est la personne vers qui se tournent les familles pour l'accès, la rectification et l'effacement des données de leurs enfants, et celle à qui la CNIL s'adresse. Le rôle doit être assumé en connaissance de cause, pas hérité d'un défaut de rédaction. ORG-02 (désignation d'un référent/DPO) devient d'autant plus pertinent.

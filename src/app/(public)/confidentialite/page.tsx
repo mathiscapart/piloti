@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import {
+  ORG_GROUP,
   ORG_HOSTING_PROVIDER,
   ORG_NAME,
   ORG_PRIVACY_EMAIL,
@@ -28,8 +29,10 @@ export default function ConfidentialitePage() {
         <h2 className="text-xl font-bold text-earth">Responsable de traitement</h2>
         <p>
           Le responsable du traitement des données personnelles collectées par
-          l&apos;application Piloti est le groupe local{" "}
-          <strong>{ORG_NAME}</strong>, représenté par son responsable de groupe.
+          l&apos;application Piloti est <strong>{ORG_NAME}</strong>, qui édite et
+          héberge cette instance pour les besoins du groupe{" "}
+          <strong>{ORG_GROUP}</strong> et détermine seul les finalités et les
+          moyens du traitement.
         </p>
         <p>
           Pour toute question relative à vos données personnelles, ou pour

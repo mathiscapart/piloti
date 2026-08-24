@@ -509,3 +509,16 @@ Ensuite une erreur de modèle : la première instance déployée tourne sur le d
 - L'email est envoyé **hors transaction**, à dessein : un envoi est un effet de bord irréversible, il n'a rien à faire dans un `withAudit()`, et son échec ne doit pas annuler la création du lieu. `sendEmail` dégrade proprement si Resend n'est pas configuré ; le contact reste alors simplement en attente.
 - **Limite connue** : `AuditLog.userId` est obligatoire et pointe vers un `User`. La décision du propriétaire ne peut donc pas lui être imputée. L'entrée est attribuée au chef créateur du lieu, avec `metadata.actor = "OWNER_VIA_TOKEN"` qui dit la vérité. Le correctif propre — `userId` nullable, ou un acteur système — touche le socle d'audit et déborde ce lot. Si le créateur a été supprimé, la mise à jour se fait sans entrée d'audit : refuser un effacement RGPD faute de savoir à qui imputer la ligne serait une inversion des priorités.
 - La politique de confidentialité gagne une section « Personnes extérieures au groupe » ; `PRIVACY_VERSION` passe à `2026-08-24`.
+
+**Amendement 2026-08-24 — revue de sécurité de l'envoi** :
+
+Le lot transformait un champ stocké passif (`CampPlace.ownerEmail`) en **destinataire d'un envoi réel**, sans que cette bascule s'accompagne des contrôles correspondants. Cinq correctifs.
+
+- **`ownerEmail` n'était validé nulle part côté serveur** — le `type="email"` du formulaire est purement client. N'importe quel `CHEF` pouvait donc faire émettre un message vers une adresse arbitraire, avec un sujet contenant du texte qu'il contrôle : l'application devenait un relais. Validation Zod (`src/modules/camp/types.ts`), appliquée à la création **et** à la modification — sans quoi la modification serait le chemin de contournement — plus un dernier verrou juste avant l'envoi.
+- **Sujet non filtré** : un sujet est un en-tête, les retours à la ligne y sont structurants. Neutralisation des caractères de contrôle par leur code plutôt que par une classe d'échappements, et longueur bornée.
+- **Aucun anti-rejeu sur la relance** : le bouton permettait d'inonder une boîte mail d'un clic répété. Délai minimal de 15 minutes. Le destinataire n'étant pas utilisateur, il n'a aucun moyen de se désabonner de nos envois — l'auto-limitation est la seule protection dont il dispose.
+- **Le nom du propriétaire ne part plus dans le corps du message.** Sur une faute de frappe du chef, saluer la personne par son nom divulguait son identité à un inconnu. Le lien, lui, n'expose les données qu'à qui détient le jeton — comportement voulu.
+- **La lecture par jeton a été sortie du fichier `"use server"`.** Tout export d'un tel fichier devient un endpoint réseau appelable avec des arguments arbitraires ; cette lecture n'étant appelée que depuis un composant serveur, l'exposer était une surface offerte pour rien.
+
+La relance est par ailleurs gardée par `place.owner_contact.view` plutôt que `.erase` : on ne sollicite pas une personne dont on n'a pas à connaître les coordonnées. `parseOwnerEmail` est couvert par des tests — un contrôle de sécurité non testé se dégrade en silence.
+

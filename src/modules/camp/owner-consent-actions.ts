@@ -21,47 +21,6 @@ import { newOwnerConsentToken, sendOwnerConsentRequest } from "./owner-consent";
 
 const GROUP_NAME = process.env.ORG_GROUP?.trim() || "le groupe scout";
 
-/** Ce que la page publique montre au propriétaire : ses données, rien d'autre. */
-export interface OwnerConsentView {
-  placeName: string;
-  ownerName: string | null;
-  ownerPhone: string | null;
-  ownerEmail: string | null;
-  status: string;
-  decidedAt: Date | null;
-}
-
-/**
- * Lit le dossier d'un propriétaire à partir de son jeton.
- * `null` si le jeton est inconnu — on ne distingue jamais « jeton invalide » de
- * « lieu inexistant » : ce serait un oracle permettant de sonder les jetons.
- */
-export async function getOwnerConsentByToken(
-  token: string,
-): Promise<OwnerConsentView | null> {
-  if (!token || token.length < 20) return null;
-  const place = await db.campPlace.findUnique({
-    where: { ownerConsentToken: token },
-    select: {
-      name: true,
-      ownerName: true,
-      ownerPhone: true,
-      ownerEmail: true,
-      ownerConsentStatus: true,
-      ownerConsentDecidedAt: true,
-    },
-  });
-  if (!place) return null;
-  return {
-    placeName: place.name,
-    ownerName: place.ownerName,
-    ownerPhone: place.ownerPhone,
-    ownerEmail: place.ownerEmail,
-    status: place.ownerConsentStatus,
-    decidedAt: place.ownerConsentDecidedAt,
-  };
-}
-
 /**
  * Le propriétaire accepte, ou refuse et demande l'effacement.
  *
@@ -138,11 +97,21 @@ export async function submitOwnerDecision(
  */
 export async function resendOwnerConsentRequest(placeId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!can(user, "place.owner_contact.erase")) return { error: "Permission refusée." };
+  // Gardé par le droit de VOIR le contact : on ne sollicite pas une personne
+  // dont on n'a pas à connaître les coordonnées. Les deux droits couvrent les
+  // mêmes rôles aujourd'hui, mais celui-ci reste le bon si l'un des deux évolue.
+  if (!can(user, "place.owner_contact.view")) return { error: "Permission refusée." };
 
   const place = await db.campPlace.findUnique({
     where: { id: placeId },
-    select: { id: true, name: true, ownerName: true, ownerEmail: true, ownerConsentStatus: true },
+    select: {
+      id: true,
+      name: true,
+      ownerName: true,
+      ownerEmail: true,
+      ownerConsentStatus: true,
+      ownerConsentRequestedAt: true,
+    },
   });
   if (!place) return { error: "Lieu introuvable." };
   if (!place.ownerEmail) {
@@ -150,6 +119,18 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
   }
   if (place.ownerConsentStatus === "GRANTED") {
     return { error: "Le propriétaire a déjà donné son accord." };
+  }
+
+  // SÉCURITÉ — anti-harcèlement. Sans ce délai, le bouton de relance permet à
+  // un chef d'inonder une boîte mail d'un simple clic répété, et l'application
+  // en porterait la réputation d'expéditeur. Le destinataire n'est pas
+  // utilisateur : il n'a aucun moyen de se désabonner de nos envois.
+  const RELANCE_DELAI_MS = 15 * 60 * 1000;
+  const derniere = place.ownerConsentRequestedAt?.getTime() ?? 0;
+  if (Date.now() - derniere < RELANCE_DELAI_MS) {
+    return {
+      error: "Une demande vient d'être envoyée. Merci de patienter avant de relancer.",
+    };
   }
 
   const token = newOwnerConsentToken();

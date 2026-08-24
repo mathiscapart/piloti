@@ -15,6 +15,7 @@ import {
   newOwnerConsentToken,
   sendOwnerConsentRequest,
 } from "./owner-consent";
+import { parseOwnerEmail } from "./types";
 
 // US-L04/L05/L06 — actions sur les lieux de camp.
 
@@ -69,6 +70,14 @@ export async function createPlace(
   const name = str(fd, "name");
   if (!name) return { error: "Le nom est requis." };
 
+  // RGPD-09 / sécurité — cette adresse devient un destinataire d'envoi réel.
+  // On refuse explicitement plutôt que d'enregistrer une valeur inexploitable :
+  // un email silencieusement ignoré laisserait le chef croire le propriétaire
+  // informé alors qu'aucun message n'est parti.
+  const ownerEmailParsed = parseOwnerEmail(str(fd, "ownerEmail"));
+  if (!ownerEmailParsed.ok) return { error: ownerEmailParsed.error };
+  const ownerEmail = ownerEmailParsed.value;
+
   const address = str(fd, "address");
   let latitude = parseCoord(fd, "latitude");
   let longitude = parseCoord(fd, "longitude");
@@ -94,7 +103,7 @@ export async function createPlace(
           equipmentJson: JSON.stringify(collectEquipment(fd)),
           ownerName: str(fd, "ownerName"),
           ownerPhone: str(fd, "ownerPhone"),
-          ownerEmail: str(fd, "ownerEmail"),
+          ownerEmail,
           // RGPD-09 — jeton posé dès la création : c'est lui qui rend le lien
           // public utilisable. Le statut reste PENDING tant que le propriétaire
           // n'a pas répondu, donc le contact reste invisible dans l'app.
@@ -152,6 +161,14 @@ export async function updatePlace(
   const name = str(fd, "name");
   if (!name) return { error: "Le nom est requis." };
 
+  // RGPD-09 / sécurité — cette adresse devient un destinataire d'envoi réel.
+  // On refuse explicitement plutôt que d'enregistrer une valeur inexploitable :
+  // un email silencieusement ignoré laisserait le chef croire le propriétaire
+  // informé alors qu'aucun message n'est parti.
+  const ownerEmailParsed = parseOwnerEmail(str(fd, "ownerEmail"));
+  if (!ownerEmailParsed.ok) return { error: ownerEmailParsed.error };
+  const ownerEmail = ownerEmailParsed.value;
+
   const address = str(fd, "address");
   let latitude = parseCoord(fd, "latitude");
   let longitude = parseCoord(fd, "longitude");
@@ -185,7 +202,7 @@ export async function updatePlace(
           equipmentJson: JSON.stringify(collectEquipment(fd)),
           ownerName: str(fd, "ownerName"),
           ownerPhone: str(fd, "ownerPhone"),
-          ownerEmail: str(fd, "ownerEmail"),
+          ownerEmail,
           notes: str(fd, "notes"),
           photosJson: JSON.stringify(collectPhotos(fd)),
         },

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { ORG_GROUP, ORG_NAME, ORG_PRIVACY_EMAIL } from "@/lib/legal/organization";
-import { getOwnerConsentByToken } from "@/modules/camp/owner-consent-actions";
+import { getOwnerConsentByToken } from "@/modules/camp/owner-consent";
 
 import { OwnerDecisionForm } from "./OwnerDecisionForm";
 

@@ -122,7 +122,8 @@ services:
       # le staging n'est pas un site publié au sens de la LCEN et ne doit pas
       # afficher l'identité réelle du groupe. Valeurs de test par défaut, pour
       # que les pages légales restent vérifiables sans rien configurer.
-      ORG_NAME: ${STAGING_ORG_NAME:-Groupe de test (staging)}
+      ORG_NAME: ${STAGING_ORG_NAME:-Éditeur de test (staging)}
+      ORG_GROUP: ${STAGING_ORG_GROUP:-Groupe de test (staging)}
       ORG_ADDRESS: ${STAGING_ORG_ADDRESS:-1 rue de la Recette, 00000 Staging}
       ORG_EMAIL: ${STAGING_ORG_EMAIL:-contact@example.invalid}
       ORG_PRIVACY_EMAIL: ${STAGING_ORG_PRIVACY_EMAIL:-rgpd@example.invalid}

@@ -56,7 +56,8 @@ services:
       # serait en infraction — mieux vaut un déploiement qui refuse de démarrer
       # qu'une page légale incomplète en ligne. Même garde-fou que
       # BETTER_AUTH_SECRET ci-dessus.
-      ORG_NAME: ${ORG_NAME:?ORG_NAME manquant (dénomination officielle du groupe)}
+      ORG_NAME: ${ORG_NAME:?ORG_NAME manquant (éditeur du site au sens LCEN)}
+      ORG_GROUP: ${ORG_GROUP:?ORG_GROUP manquant (groupe SGDF desservi par l'instance)}
       ORG_ADDRESS: ${ORG_ADDRESS:?ORG_ADDRESS manquant (adresse postale du siège)}
       ORG_EMAIL: ${ORG_EMAIL:?ORG_EMAIL manquant (contact général du groupe)}
       ORG_PRIVACY_EMAIL: ${ORG_PRIVACY_EMAIL:?ORG_PRIVACY_EMAIL manquant (référent RGPD)}

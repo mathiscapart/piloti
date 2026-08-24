@@ -484,3 +484,28 @@ Ensuite une erreur de modèle : la première instance déployée tourne sur le d
 - Un déploiement où l'éditeur *est* l'association (par exemple une instance portée par le national) renseigne simplement la même valeur dans les deux variables. Le modèle couvre les deux cas sans code conditionnel.
 - `ORG_GROUP` est **obligatoire** au même titre que les cinq autres (`${VAR:?}`) : sans elle, les CGU ne nomment plus le groupe auquel l'outil est réservé.
 - **Le responsable de traitement est désormais nommément l'éditeur.** Ce n'est pas une formalité : c'est la personne vers qui se tournent les familles pour l'accès, la rectification et l'effacement des données de leurs enfants, et celle à qui la CNIL s'adresse. Le rôle doit être assumé en connaissance de cause, pas hérité d'un défaut de rédaction. ORG-02 (désignation d'un référent/DPO) devient d'autant plus pertinent.
+
+---
+
+## D-032 — RGPD-09 : le propriétaire d'un lieu valide, mais son silence ne détruit rien
+
+**Contexte** : la fiche d'un lieu de camp stocke `ownerName`, `ownerPhone`, `ownerEmail` — les données personnelles d'un **tiers** qui n'utilise pas l'application. Tout le dispositif RGPD de Piloti (consentement à l'inscription, effacement du compte, anonymisation) suppose une personne qui a un compte. Le propriétaire d'une prairie n'en a pas et ne peut pas en avoir : il ne peut ni consentir par les voies habituelles, ni se connecter pour demander l'effacement. Il n'était par ailleurs informé de rien, son numéro était visible par six rôles, et l'effacer supposait de supprimer le lieu entier.
+
+**Options écartées** :
+- **Information seule (art. 14) sans validation.** C'est ce que le RGPD exige au minimum pour une collecte indirecte, et c'était le critère d'origine du ticket. Écarté à la demande explicite : on veut que le propriétaire ait la main, pas seulement l'information.
+- **Consentement strict, avec purge après N jours sans réponse.** Le plus protecteur en théorie, mais il fait dépendre la conservation d'un email qui peut finir en indésirables : une boîte morte détruirait le contact d'un propriétaire fidèle. Il supposerait en outre une tâche planifiée fiable (PROD-08, non commencé) — sans elle, la purge ne tourne jamais et la promesse n'est pas tenue.
+- **Restreindre `place.view` en bloc.** Excessif : le trésorier a de bonnes raisons de consulter un lieu pour le budget d'un camp. C'est le **champ** qu'il faut protéger, pas la ressource.
+
+**Choix** : base légale = **intérêt légitime** (organiser un camp), et la validation du propriétaire vient s'y **ajouter comme garantie interne**, non comme base légale.
+
+- Statut `ownerConsentStatus` : `PENDING` → contact stocké mais **invisible dans l'app** ; `GRANTED` → visible pour `CHEF` et `RG` ; `REFUSED` → les trois champs sont vidés dans la même transaction que l'enregistrement de la décision.
+- Le silence ne détruit rien et n'expose rien. C'est ce qui rend le dispositif tenable sans tâche planifiée.
+- Nouvelle permission **`place.owner_contact.view`** (`CHEF`, `RG`), distincte de `place.view` (six rôles) : minimisation au niveau du champ. Le bloc et les boutons « Appeler / Email » sont masqués, pas seulement inertes — cf. la règle d'UI du projet.
+- Lien public porteur d'un jeton (`/proprietaire/<jeton>`), même principe que `calendarToken` : URL non devinable, sans session, invalidée dès la décision prise. Une relance émet un nouveau jeton, ce qui neutralise l'ancien lien.
+- Page générique `/information-tiers` pour les propriétaires dont on n'a que le téléphone.
+
+**Conséquences** :
+- **Les lieux existants passent tous en `PENDING`** : leur contact devient invisible tant que le propriétaire n'a pas été sollicité. Choix conservateur et réversible — un bouton « Envoyer la demande » relance depuis la fiche.
+- L'email est envoyé **hors transaction**, à dessein : un envoi est un effet de bord irréversible, il n'a rien à faire dans un `withAudit()`, et son échec ne doit pas annuler la création du lieu. `sendEmail` dégrade proprement si Resend n'est pas configuré ; le contact reste alors simplement en attente.
+- **Limite connue** : `AuditLog.userId` est obligatoire et pointe vers un `User`. La décision du propriétaire ne peut donc pas lui être imputée. L'entrée est attribuée au chef créateur du lieu, avec `metadata.actor = "OWNER_VIA_TOKEN"` qui dit la vérité. Le correctif propre — `userId` nullable, ou un acteur système — touche le socle d'audit et déborde ce lot. Si le créateur a été supprimé, la mise à jour se fait sans entrée d'audit : refuser un effacement RGPD faute de savoir à qui imputer la ligne serait une inversion des priorités.
+- La politique de confidentialité gagne une section « Personnes extérieures au groupe » ; `PRIVACY_VERSION` passe à `2026-08-24`.

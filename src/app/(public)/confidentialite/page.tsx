@@ -104,6 +104,30 @@ export default function ConfidentialitePage() {
       </section>
 
       <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Personnes extérieures au groupe</h2>
+        <p>
+          L&apos;application conserve les coordonnées de personnes qui n&apos;en
+          sont pas utilisatrices : les propriétaires des terrains et bâtiments où
+          le groupe campe (nom, téléphone, email). La base légale est
+          l&apos;<strong>intérêt légitime</strong> du groupe à organiser ses
+          activités — ces personnes n&apos;ont pas de compte et ne peuvent donc
+          pas consentir par les voies habituelles.
+        </p>
+        <p>
+          Elles en sont informées lors de l&apos;enregistrement et il leur est
+          demandé de valider cette utilisation : tant qu&apos;elles n&apos;ont
+          pas répondu, leurs coordonnées restent enregistrées mais invisibles
+          dans l&apos;application. L&apos;accès est limité aux responsables qui
+          organisent effectivement un camp, et l&apos;effacement est effectué
+          sans condition à leur demande. Le détail figure sur la{" "}
+          <a href="/information-tiers" className="font-bold text-forest underline-offset-4 hover:underline">
+            notice qui leur est destinée
+          </a>
+          .
+        </p>
+      </section>
+
+      <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Durées de conservation</h2>
         <p>
           Les données d&apos;un compte sont conservées tant que la personne est

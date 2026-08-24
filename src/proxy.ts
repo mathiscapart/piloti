@@ -7,6 +7,17 @@ const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset
 // RGPD-01 — pages légales, accessibles à tous sans compte ni base de données
 // (même avant le premier lancement / setup).
 const LEGAL_PATHS = new Set(["/confidentialite", "/mentions-legales", "/cgu"]);
+// RGPD-09 — pages destinées aux TIERS non-utilisateurs (propriétaire d'un lieu
+// de camp). Elles doivent être atteignables sans compte : la personne concernée
+// ne peut pas en avoir un, c'est précisément ce qui fait le problème. L'accès à
+// `/proprietaire/<jeton>` est autorisé par le jeton lui-même, vérifié dans la
+// page — le proxy ne fait que laisser passer.
+const THIRD_PARTY_PREFIX = "/proprietaire/";
+const THIRD_PARTY_PATHS = new Set(["/information-tiers"]);
+
+function isThirdPartyPath(pathname: string): boolean {
+  return THIRD_PARTY_PATHS.has(pathname) || pathname.startsWith(THIRD_PARTY_PREFIX);
+}
 const SETUP_PATH = "/setup";
 const COOKIE_NAME = "piloti.session_token";
 
@@ -20,6 +31,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (LEGAL_PATHS.has(pathname)) return NextResponse.next();
+  if (isThirdPartyPath(pathname)) return NextResponse.next();
 
   const sessionCookie = getSessionCookie(request, { cookiePrefix: "piloti" });
 

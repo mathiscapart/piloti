@@ -23,6 +23,8 @@ import { can, effectiveRoles } from "@/lib/permissions";
 import { getPlaceDetail } from "@/modules/camp/places";
 
 import { ArchivePlaceButton } from "./ArchivePlaceButton";
+import { EraseOwnerContactButton } from "./EraseOwnerContactButton";
+import { ResendOwnerConsentButton } from "./ResendOwnerConsentButton";
 import { ReviewForm } from "./ReviewForm";
 import { ReviewList } from "./ReviewList";
 
@@ -61,6 +63,21 @@ export default async function PlaceDetailPage({ params }: PageProps) {
   const canManage =
     can(user, "place.manage") && (isAdmin || place.createdById === user.id);
   const canReview = can(user, "place.review");
+  // RGPD-09 — minimisation : le contact du propriétaire appartient à un TIERS
+  // qui n'utilise pas l'app. Consulter le lieu reste ouvert à l'encadrement
+  // large ; voir le numéro personnel du propriétaire est réservé à qui organise
+  // réellement le camp.
+  const canSeeOwner = can(user, "place.owner_contact.view");
+  const canEraseOwner = can(user, "place.owner_contact.erase");
+  const hasOwnerContact = Boolean(
+    place.ownerName || place.ownerPhone || place.ownerEmail,
+  );
+  // RGPD-09 — le contact n'est utilisable qu'une fois le propriétaire d'accord.
+  // Sans validation, il reste stocké mais invisible : une boîte mail morte ne
+  // détruit rien, elle rend seulement le contact inexploitable.
+  const ownerValidated = place.ownerConsentStatus === "GRANTED";
+  const showOwner = canSeeOwner && hasOwnerContact && ownerValidated;
+  const ownerPending = canSeeOwner && hasOwnerContact && !ownerValidated;
 
   // US-L07 — camps tenus ici, proposés au dépôt d'un avis pour que celui-ci
   // porte une branche et une année (sans quoi il n'y aurait rien à filtrer).
@@ -168,7 +185,7 @@ export default async function PlaceDetailPage({ params }: PageProps) {
             </a>
           </Button>
         ) : null}
-        {place.ownerPhone ? (
+        {showOwner && place.ownerPhone ? (
           <Button asChild variant="outline" size="sm">
             <a href={`tel:${place.ownerPhone.replace(/\s/g, "")}`}>
               <Phone className="size-4" />
@@ -176,7 +193,7 @@ export default async function PlaceDetailPage({ params }: PageProps) {
             </a>
           </Button>
         ) : null}
-        {place.ownerEmail ? (
+        {showOwner && place.ownerEmail ? (
           <Button asChild variant="outline" size="sm">
             <a href={`mailto:${place.ownerEmail}`}>
               <Mail className="size-4" />
@@ -203,10 +220,48 @@ export default async function PlaceDetailPage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {/* Contact propriétaire */}
-      {place.ownerName || place.ownerPhone || place.ownerEmail ? (
+      {/* RGPD-09 — en attente : on dit qu'un contact existe, sans le montrer. */}
+      {ownerPending ? (
+        <section className="space-y-2 rounded-2xl border border-dashed border-trail/40 bg-snow p-5">
+          <h2 className="font-bold text-earth">Contact propriétaire — en attente</h2>
+          <p className="text-sm text-trail">
+            Un contact est enregistré pour ce lieu, mais le propriétaire
+            n&apos;a pas encore validé son utilisation. Ses coordonnées restent
+            masquées jusque-là.
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {place.ownerEmail ? <ResendOwnerConsentButton placeId={place.id} /> : null}
+            {canEraseOwner ? (
+              <EraseOwnerContactButton placeId={place.id} name={place.name} />
+            ) : null}
+          </div>
+          {!place.ownerEmail ? (
+            <p className="text-xs text-trail">
+              Aucun email n&apos;est renseigné : informez le propriétaire par un
+              autre moyen, en lui transmettant la{" "}
+              <a
+                href="/information-tiers"
+                target="_blank"
+                rel="noreferrer"
+                className="font-bold text-forest underline-offset-4 hover:underline"
+              >
+                notice d&apos;information
+              </a>
+              .
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {/* Contact propriétaire — visible seulement si validé (RGPD-09). */}
+      {showOwner ? (
         <section className="space-y-1 rounded-2xl bg-snow p-5 shadow-card">
-          <h2 className="font-bold text-earth">Contact propriétaire</h2>
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="font-bold text-earth">Contact propriétaire</h2>
+            {canEraseOwner ? (
+              <EraseOwnerContactButton placeId={place.id} name={place.name} />
+            ) : null}
+          </div>
           {place.ownerName ? (
             <p className="text-sm text-earth">{place.ownerName}</p>
           ) : null}
@@ -216,6 +271,11 @@ export default async function PlaceDetailPage({ params }: PageProps) {
           {place.ownerEmail ? (
             <p className="text-sm text-trail">{place.ownerEmail}</p>
           ) : null}
+          <p className="pt-2 text-xs text-trail">
+            Données personnelles d&apos;un tiers, conservées au titre de
+            l&apos;intérêt légitime à organiser un camp. Le propriétaire a validé
+            leur utilisation et peut en demander l&apos;effacement à tout moment.
+          </p>
         </section>
       ) : null}
 

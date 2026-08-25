@@ -25,7 +25,8 @@ export default function InformationTiersPage() {
       <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Pourquoi cette page</h2>
         <p>
-          Le groupe scout <strong>{ORG_GROUP}</strong> utilise une application
+          Le groupe scout <strong>{ORG_GROUP}</strong>{" "}
+          utilise une application
           interne, Piloti, pour organiser ses activités. Certaines personnes y
           figurent sans en être utilisatrices : c&apos;est le cas des
           propriétaires de terrains et de bâtiments où le groupe campe.

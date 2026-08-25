@@ -109,7 +109,8 @@ export default function ConfidentialitePage() {
           L&apos;application conserve les coordonnées de personnes qui n&apos;en
           sont pas utilisatrices : les propriétaires des terrains et bâtiments où
           le groupe campe (nom, téléphone, email). La base légale est
-          l&apos;<strong>intérêt légitime</strong> du groupe à organiser ses
+          l&apos;<strong>intérêt légitime</strong>{" "}
+          du groupe à organiser ses
           activités — ces personnes n&apos;ont pas de compte et ne peuvent donc
           pas consentir par les voies habituelles.
         </p>

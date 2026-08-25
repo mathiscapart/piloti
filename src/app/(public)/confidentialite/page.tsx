@@ -68,16 +68,19 @@ export default function ConfidentialitePage() {
         <p>Selon les traitements, la base légale mobilisée est :</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Le <strong>consentement</strong> de la personne — ou celui de son
+            Le <strong>consentement</strong>{" "}
+            de la personne — ou celui de son
             responsable légal lorsqu&apos;elle est mineure — pour la création du
             compte et l&apos;usage de l&apos;application ;
           </li>
           <li>
-            L&apos;<strong>intérêt légitime</strong> de l&apos;association à organiser ses
+            L&apos;<strong>intérêt légitime</strong>{" "}
+            de l&apos;association à organiser ses
             activités (planning, matériel, pédagogie, communication interne) ;
           </li>
           <li>
-            L&apos;<strong>obligation légale</strong> de tenue d&apos;une comptabilité pour
+            L&apos;<strong>obligation légale</strong>{" "}
+            de tenue d&apos;une comptabilité pour
             les données financières (cotisations, notes de frais).
           </li>
         </ul>

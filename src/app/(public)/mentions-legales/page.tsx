@@ -8,8 +8,12 @@ import {
   SOURCE_URL,
 } from "@/lib/legal/license";
 import {
+  NATIONAL_ORG_ADDRESS,
+  NATIONAL_ORG_LEGAL,
+  NATIONAL_ORG_NAME,
   ORG_ADDRESS,
   ORG_EMAIL,
+  ORG_GROUP,
   ORG_HOSTING_PROVIDER,
   ORG_NAME,
   ORG_PUBLICATION_DIRECTOR,
@@ -37,9 +41,14 @@ export default function MentionsLegalesPage() {
       <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Éditeur du site</h2>
         <p>
-          Ce site est édité par le groupe local <strong>{ORG_NAME}</strong>,
-          association affiliée à l&apos;association
-          nationale des Scouts et Guides de France (reconnue d&apos;utilité publique).
+          Ce site est édité par <strong>{ORG_NAME}</strong>, à titre non
+          commercial, pour les besoins du groupe <strong>{ORG_GROUP}</strong>.
+        </p>
+        <p>
+          Ce groupe est un groupe local de l&apos;{NATIONAL_ORG_NAME} ({NATIONAL_ORG_LEGAL}),
+          dont le siège est situé {NATIONAL_ORG_ADDRESS}. L&apos;association dispose d&apos;une
+          personnalité morale unique : le groupe local n&apos;est pas une association
+          distincte, et l&apos;association nationale n&apos;est pas l&apos;éditeur du présent site.
         </p>
         <p>
           Adresse du siège : <strong>{ORG_ADDRESS}</strong>

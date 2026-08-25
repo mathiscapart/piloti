@@ -186,6 +186,25 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
       {/* Contact propriétaire */}
       <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
         <h2 className="font-bold text-earth">Contact propriétaire</h2>
+        {/* RGPD-09 — la personne saisie ici n'est pas utilisatrice de l'app et
+            ne peut pas s'informer elle-même : c'est au chef qui la saisit de la
+            prévenir. L'avertissement est placé AVANT les champs, pas après. */}
+        <p className="rounded-xl bg-forest-soft/60 p-3 text-xs text-earth">
+          Ce sont les données personnelles d&apos;un tiers. En les enregistrant,
+          vous vous engagez à l&apos;en informer. Si vous renseignez un email, un
+          message lui est envoyé automatiquement pour qu&apos;il valide cette
+          utilisation ; sans validation, ses coordonnées resteront masquées dans
+          l&apos;application. Sans email, transmettez-lui la{" "}
+          <a
+            href="/information-tiers"
+            target="_blank"
+            rel="noreferrer"
+            className="font-bold text-forest underline-offset-4 hover:underline"
+          >
+            notice d&apos;information
+          </a>
+          . Ne saisissez que le strict nécessaire.
+        </p>
         <div className="space-y-1.5">
           <Label htmlFor="ownerName">Nom</Label>
           <Input id="ownerName" name="ownerName" defaultValue={initial?.ownerName} />

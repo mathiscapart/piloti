@@ -462,3 +462,73 @@ Remplacé par `age` (ChaCha20-Poly1305), disponible dans `alpine:3.21`. Deux con
 **Contrepartie assumée** : `-Verify` et la restauration exigent la clé privée (`BACKUP_AGE_IDENTITY`), donc la sauvegarde quotidienne planifiée tourne **sans vérification**. Le régime d'exploitation devient : sauvegarde quotidienne sans clé privée sur l'hôte, vérification périodique à la main avec la clé montée le temps de l'opération. Le script refuse `-Verify` sans clé **avant** de sauvegarder, pour ne jamais laisser croire qu'une archive a été contrôlée, et rejette une valeur `AGE-SECRET-KEY-…` posée par erreur dans `BACKUP_AGE_RECIPIENT` — l'erreur mettrait la clé privée exactement sur la machine dont on cherche à se protéger.
 
 Testé sur staging : sauvegarde avec la seule clé publique, refus de `-Verify` sans clé privée, vérification complète avec clé, restauration, rejet d'une archive dont un octet a été modifié, rejet d'une clé privée en `RECIPIENT`.
+
+---
+
+## D-031 — L'éditeur du site n'est pas le groupe local : `ORG_NAME` et `ORG_GROUP` sont distincts
+
+**Contexte** : les trois pages légales, écrites lors de LEGAL-02/CONF-01 (D-029), supposaient que l'éditeur du site *était* le groupe local — « ce site est édité par le groupe local X, association affiliée à l'association nationale des Scouts et Guides de France ». Deux erreurs superposées.
+
+D'abord une erreur de fait : les Scouts et Guides de France sont **une seule association déclarée** (SIREN 775 682 024, siège 21-37 rue de Stalingrad, 94110 Arcueil), dotée d'une personnalité morale unique. Un groupe local n'est pas une « association affiliée » : ce n'est pas une association du tout. Il ne peut donc être ni éditeur au sens de la LCEN, ni responsable de traitement au sens du RGPD — ces rôles supposent une personne, physique ou morale.
+
+Ensuite une erreur de modèle : la première instance déployée tourne sur le domaine personnel de son développeur, auto-hébergée chez lui, sous son copyright. L'éditeur y est une **personne physique**, distincte du groupe desservi. Une variable unique ne pouvait pas porter les deux rôles ; renseigner le nom de l'éditeur dans `ORG_NAME` produisait littéralement « le groupe local Mathis Capart, association affiliée… ».
+
+**Choix** : séparer les deux rôles.
+
+- `ORG_NAME` — **l'éditeur** au sens LCEN : qui publie l'instance et, dans la politique de confidentialité, qui détermine les finalités et les moyens du traitement.
+- `ORG_GROUP` — **le groupe desservi** : l'usage auquel l'instance est destinée, nommé dans les CGU.
+- Les coordonnées de l'association nationale (nom, forme juridique, SIREN, siège) sont **en dur** dans `organization.ts` : elles sont identiques pour tout déploiement SGDF, donc ce n'est pas de la configuration.
+- Les mentions légales énoncent désormais explicitement que le groupe local n'est pas une association distincte **et** que l'association nationale n'est pas l'éditeur du site. Sans cette phrase, un lecteur pourrait croire que le national engage sa responsabilité sur une instance qu'il n'a ni validée ni hébergée.
+
+**Conséquences** :
+- Un déploiement où l'éditeur *est* l'association (par exemple une instance portée par le national) renseigne simplement la même valeur dans les deux variables. Le modèle couvre les deux cas sans code conditionnel.
+- `ORG_GROUP` est **obligatoire** au même titre que les cinq autres (`${VAR:?}`) : sans elle, les CGU ne nomment plus le groupe auquel l'outil est réservé.
+- **Le responsable de traitement est désormais nommément l'éditeur.** Ce n'est pas une formalité : c'est la personne vers qui se tournent les familles pour l'accès, la rectification et l'effacement des données de leurs enfants, et celle à qui la CNIL s'adresse. Le rôle doit être assumé en connaissance de cause, pas hérité d'un défaut de rédaction. ORG-02 (désignation d'un référent/DPO) devient d'autant plus pertinent.
+
+---
+
+## D-032 — RGPD-09 : le propriétaire d'un lieu valide, mais son silence ne détruit rien
+
+**Contexte** : la fiche d'un lieu de camp stocke `ownerName`, `ownerPhone`, `ownerEmail` — les données personnelles d'un **tiers** qui n'utilise pas l'application. Tout le dispositif RGPD de Piloti (consentement à l'inscription, effacement du compte, anonymisation) suppose une personne qui a un compte. Le propriétaire d'une prairie n'en a pas et ne peut pas en avoir : il ne peut ni consentir par les voies habituelles, ni se connecter pour demander l'effacement. Il n'était par ailleurs informé de rien, son numéro était visible par six rôles, et l'effacer supposait de supprimer le lieu entier.
+
+**Options écartées** :
+- **Information seule (art. 14) sans validation.** C'est ce que le RGPD exige au minimum pour une collecte indirecte, et c'était le critère d'origine du ticket. Écarté à la demande explicite : on veut que le propriétaire ait la main, pas seulement l'information.
+- **Consentement strict, avec purge après N jours sans réponse.** Le plus protecteur en théorie, mais il fait dépendre la conservation d'un email qui peut finir en indésirables : une boîte morte détruirait le contact d'un propriétaire fidèle. Il supposerait en outre une tâche planifiée fiable (PROD-08, non commencé) — sans elle, la purge ne tourne jamais et la promesse n'est pas tenue.
+- **Restreindre `place.view` en bloc.** Excessif : le trésorier a de bonnes raisons de consulter un lieu pour le budget d'un camp. C'est le **champ** qu'il faut protéger, pas la ressource.
+
+**Choix** : base légale = **intérêt légitime** (organiser un camp), et la validation du propriétaire vient s'y **ajouter comme garantie interne**, non comme base légale.
+
+- Statut `ownerConsentStatus` : `PENDING` → contact stocké mais **invisible dans l'app** ; `GRANTED` → visible pour `CHEF` et `RG` ; `REFUSED` → les trois champs sont vidés dans la même transaction que l'enregistrement de la décision.
+- Le silence ne détruit rien et n'expose rien. C'est ce qui rend le dispositif tenable sans tâche planifiée.
+- Nouvelle permission **`place.owner_contact.view`** (`CHEF`, `RG`), distincte de `place.view` (six rôles) : minimisation au niveau du champ. Le bloc et les boutons « Appeler / Email » sont masqués, pas seulement inertes — cf. la règle d'UI du projet.
+- Lien public porteur d'un jeton (`/proprietaire/<jeton>`), même principe que `calendarToken` : URL non devinable, sans session, invalidée dès la décision prise. Une relance émet un nouveau jeton, ce qui neutralise l'ancien lien.
+- Page générique `/information-tiers` pour les propriétaires dont on n'a que le téléphone.
+
+**Conséquences** :
+- **Les lieux existants passent tous en `PENDING`** : leur contact devient invisible tant que le propriétaire n'a pas été sollicité. Choix conservateur et réversible — un bouton « Envoyer la demande » relance depuis la fiche.
+- L'email est envoyé **hors transaction**, à dessein : un envoi est un effet de bord irréversible, il n'a rien à faire dans un `withAudit()`, et son échec ne doit pas annuler la création du lieu. `sendEmail` dégrade proprement si Resend n'est pas configuré ; le contact reste alors simplement en attente.
+- **Limite connue** : `AuditLog.userId` est obligatoire et pointe vers un `User`. La décision du propriétaire ne peut donc pas lui être imputée. L'entrée est attribuée au chef créateur du lieu, avec `metadata.actor = "OWNER_VIA_TOKEN"` qui dit la vérité. Le correctif propre — `userId` nullable, ou un acteur système — touche le socle d'audit et déborde ce lot. Si le créateur a été supprimé, la mise à jour se fait sans entrée d'audit : refuser un effacement RGPD faute de savoir à qui imputer la ligne serait une inversion des priorités.
+- La politique de confidentialité gagne une section « Personnes extérieures au groupe » ; `PRIVACY_VERSION` passe à `2026-08-24`.
+
+**Amendement 2026-08-24 — revue de sécurité de l'envoi** :
+
+Le lot transformait un champ stocké passif (`CampPlace.ownerEmail`) en **destinataire d'un envoi réel**, sans que cette bascule s'accompagne des contrôles correspondants. Cinq correctifs.
+
+- **`ownerEmail` n'était validé nulle part côté serveur** — le `type="email"` du formulaire est purement client. N'importe quel `CHEF` pouvait donc faire émettre un message vers une adresse arbitraire, avec un sujet contenant du texte qu'il contrôle : l'application devenait un relais. Validation Zod (`src/modules/camp/types.ts`), appliquée à la création **et** à la modification — sans quoi la modification serait le chemin de contournement — plus un dernier verrou juste avant l'envoi.
+- **Sujet non filtré** : un sujet est un en-tête, les retours à la ligne y sont structurants. Neutralisation des caractères de contrôle par leur code plutôt que par une classe d'échappements, et longueur bornée.
+- **Aucun anti-rejeu sur la relance** : le bouton permettait d'inonder une boîte mail d'un clic répété. Délai minimal de 15 minutes. Le destinataire n'étant pas utilisateur, il n'a aucun moyen de se désabonner de nos envois — l'auto-limitation est la seule protection dont il dispose.
+- **Le nom du propriétaire ne part plus dans le corps du message.** Sur une faute de frappe du chef, saluer la personne par son nom divulguait son identité à un inconnu. Le lien, lui, n'expose les données qu'à qui détient le jeton — comportement voulu.
+- **La lecture par jeton a été sortie du fichier `"use server"`.** Tout export d'un tel fichier devient un endpoint réseau appelable avec des arguments arbitraires ; cette lecture n'étant appelée que depuis un composant serveur, l'exposer était une surface offerte pour rien.
+
+La relance est par ailleurs gardée par `place.owner_contact.view` plutôt que `.erase` : on ne sollicite pas une personne dont on n'a pas à connaître les coordonnées. `parseOwnerEmail` est couvert par des tests — un contrôle de sécurité non testé se dégrade en silence.
+
+**Amendement 2026-08-25 — contenu générique, confirmation serveur, expiration du lien** :
+
+Trois défauts trouvés après coup, dont deux qu'aucune relecture n'aurait attrapés.
+
+- **Le mail contenait du texte rédigé par un utilisateur.** La validation de l'adresse traitait le canal, pas la charge utile : `placeName` est un champ libre, et partait dans le sujet comme dans le corps. Un lieu nommé « URGENT : votre colis est bloqué » produisait un hameçonnage parfait, signé du domaine du groupe et accompagné d'un lien légitime. Le message est désormais **entièrement générique** — seul le nom du groupe, issu de l'environnement, y varie. Les paramètres correspondants ont été retirés de la signature : la fuite est impossible par construction, pas interdite par convention.
+- **Le jeton n'est plus consommé à la décision.** Il l'était, jusqu'à ce que les captures d'écran montrent « lien expiré » dans la seconde suivant le clic : une Server Action re-rend toujours la route courante, donc le serveur ne retrouvait plus rien. Un état local côté client ne pouvait pas survivre à ce re-rendu — la solution devait être serveur. Le jeton survit, et la page cesse d'exposer quoi que ce soit : ni coordonnées, ni nom de lieu. Le lien devient une preuve consultable de la décision, avec sa date.
+- **Le lien expire à 90 jours** (`OWNER_CONSENT_LINK_TTL_DAYS`). L'entropie du jeton (256 bits) le rend inattaquable ; c'est la **durée d'exposition** qui constitue le risque — email transféré, journal d'accès conservé, historique d'un poste partagé. Rien n'est détruit à l'échéance : seul le lien cesse de fonctionner, la fiche reste en attente donc invisible, et le chef en émet un nouveau d'un clic. Le contrôle vit dans la lecture **et** dans l'action de décision, celle-ci étant appelable sans passer par la page. Une date d'émission absente vaut périmée : le défaut ferme.
+
+Deux bugs de typographie corrigés au passage, invisibles à la lecture du source : JSX supprime l'espace après `</strong>` quand le texte se poursuit à la ligne suivante, ce qui produisait « invisiblesdans » et « viennent-elles ?Elles ». Le motif à risque subsiste ailleurs dans `(public)` — à traiter séparément.
+

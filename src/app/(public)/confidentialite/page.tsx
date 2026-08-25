@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import {
+  ORG_GROUP,
   ORG_HOSTING_PROVIDER,
   ORG_NAME,
   ORG_PRIVACY_EMAIL,
@@ -28,8 +29,10 @@ export default function ConfidentialitePage() {
         <h2 className="text-xl font-bold text-earth">Responsable de traitement</h2>
         <p>
           Le responsable du traitement des données personnelles collectées par
-          l&apos;application Piloti est le groupe local{" "}
-          <strong>{ORG_NAME}</strong>, représenté par son responsable de groupe.
+          l&apos;application Piloti est <strong>{ORG_NAME}</strong>, qui édite et
+          héberge cette instance pour les besoins du groupe{" "}
+          <strong>{ORG_GROUP}</strong> et détermine seul les finalités et les
+          moyens du traitement.
         </p>
         <p>
           Pour toute question relative à vos données personnelles, ou pour
@@ -65,16 +68,19 @@ export default function ConfidentialitePage() {
         <p>Selon les traitements, la base légale mobilisée est :</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            Le <strong>consentement</strong> de la personne — ou celui de son
+            Le <strong>consentement</strong>{" "}
+            de la personne — ou celui de son
             responsable légal lorsqu&apos;elle est mineure — pour la création du
             compte et l&apos;usage de l&apos;application ;
           </li>
           <li>
-            L&apos;<strong>intérêt légitime</strong> de l&apos;association à organiser ses
+            L&apos;<strong>intérêt légitime</strong>{" "}
+            de l&apos;association à organiser ses
             activités (planning, matériel, pédagogie, communication interne) ;
           </li>
           <li>
-            L&apos;<strong>obligation légale</strong> de tenue d&apos;une comptabilité pour
+            L&apos;<strong>obligation légale</strong>{" "}
+            de tenue d&apos;une comptabilité pour
             les données financières (cotisations, notes de frais).
           </li>
         </ul>
@@ -97,6 +103,31 @@ export default function ConfidentialitePage() {
           Les échanges privés sont fermés aux moins de 15 ans ; au-delà et
           jusqu&apos;à leur majorité, ils restent limités aux encadrants de leur
           unité et à leurs responsables légaux.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Personnes extérieures au groupe</h2>
+        <p>
+          L&apos;application conserve les coordonnées de personnes qui n&apos;en
+          sont pas utilisatrices : les propriétaires des terrains et bâtiments où
+          le groupe campe (nom, téléphone, email). La base légale est
+          l&apos;<strong>intérêt légitime</strong>{" "}
+          du groupe à organiser ses
+          activités — ces personnes n&apos;ont pas de compte et ne peuvent donc
+          pas consentir par les voies habituelles.
+        </p>
+        <p>
+          Elles en sont informées lors de l&apos;enregistrement et il leur est
+          demandé de valider cette utilisation : tant qu&apos;elles n&apos;ont
+          pas répondu, leurs coordonnées restent enregistrées mais invisibles
+          dans l&apos;application. L&apos;accès est limité aux responsables qui
+          organisent effectivement un camp, et l&apos;effacement est effectué
+          sans condition à leur demande. Le détail figure sur la{" "}
+          <a href="/information-tiers" className="font-bold text-forest underline-offset-4 hover:underline">
+            notice qui leur est destinée
+          </a>
+          .
         </p>
       </section>
 
@@ -162,6 +193,7 @@ export default function ConfidentialitePage() {
             ci-dessus ;
           </li>
           <li>Droit à la portabilité de vos données ;</li>
+          <li>Droit à la limitation du traitement ;</li>
           <li>Droit d&apos;opposition, pour les traitements fondés sur l&apos;intérêt légitime.</li>
         </ul>
         <p>

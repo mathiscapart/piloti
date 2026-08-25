@@ -11,10 +11,19 @@ import type { ActionResult } from "@/lib/types";
 import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 
 import { geocodeAddress } from "./geocode";
+import {
+  newOwnerConsentToken,
+  sendOwnerConsentRequest,
+} from "./owner-consent";
+import { parseOwnerEmail } from "./types";
 
 // US-L04/L05/L06 — actions sur les lieux de camp.
 
 const VALID_EQUIPMENT = new Set<string>(CAMP_EQUIPMENT);
+
+// RGPD-09 — nom du groupe affiché au propriétaire dans l'email. Vient de
+// l'environnement (CONF-01) : c'est l'identité de l'instance, pas du logiciel.
+const GROUP_NAME = process.env.ORG_GROUP?.trim() || "le groupe scout";
 
 function str(fd: FormData, key: string): string | null {
   const v = fd.get(key);
@@ -61,6 +70,14 @@ export async function createPlace(
   const name = str(fd, "name");
   if (!name) return { error: "Le nom est requis." };
 
+  // RGPD-09 / sécurité — cette adresse devient un destinataire d'envoi réel.
+  // On refuse explicitement plutôt que d'enregistrer une valeur inexploitable :
+  // un email silencieusement ignoré laisserait le chef croire le propriétaire
+  // informé alors qu'aucun message n'est parti.
+  const ownerEmailParsed = parseOwnerEmail(str(fd, "ownerEmail"));
+  if (!ownerEmailParsed.ok) return { error: ownerEmailParsed.error };
+  const ownerEmail = ownerEmailParsed.value;
+
   const address = str(fd, "address");
   let latitude = parseCoord(fd, "latitude");
   let longitude = parseCoord(fd, "longitude");
@@ -86,7 +103,12 @@ export async function createPlace(
           equipmentJson: JSON.stringify(collectEquipment(fd)),
           ownerName: str(fd, "ownerName"),
           ownerPhone: str(fd, "ownerPhone"),
-          ownerEmail: str(fd, "ownerEmail"),
+          ownerEmail,
+          // RGPD-09 — jeton posé dès la création : c'est lui qui rend le lien
+          // public utilisable. Le statut reste PENDING tant que le propriétaire
+          // n'a pas répondu, donc le contact reste invisible dans l'app.
+          ownerConsentToken: newOwnerConsentToken(),
+          ownerConsentRequestedAt: new Date(),
           notes: str(fd, "notes"),
           photosJson: JSON.stringify(collectPhotos(fd)),
           createdById: user.id,
@@ -98,6 +120,17 @@ export async function createPlace(
       metadata: { placeId: created.id, name },
     }),
   );
+
+  // RGPD-09 — le contact d'un tiers vient d'être enregistré : on l'en informe
+  // et on lui demande son accord. L'envoi est hors transaction, à dessein — un
+  // email est un effet de bord irréversible, il n'a rien à faire dans un
+  // `withAudit()`, et son échec ne doit pas annuler la création du lieu.
+  if (place.ownerEmail) {
+    await sendOwnerConsentRequest({
+      to: place.ownerEmail,
+      token: place.ownerConsentToken!,
+    });
+  }
 
   revalidatePath("/lieux");
   return { error: null, id: place.id };
@@ -124,6 +157,14 @@ export async function updatePlace(
 
   const name = str(fd, "name");
   if (!name) return { error: "Le nom est requis." };
+
+  // RGPD-09 / sécurité — cette adresse devient un destinataire d'envoi réel.
+  // On refuse explicitement plutôt que d'enregistrer une valeur inexploitable :
+  // un email silencieusement ignoré laisserait le chef croire le propriétaire
+  // informé alors qu'aucun message n'est parti.
+  const ownerEmailParsed = parseOwnerEmail(str(fd, "ownerEmail"));
+  if (!ownerEmailParsed.ok) return { error: ownerEmailParsed.error };
+  const ownerEmail = ownerEmailParsed.value;
 
   const address = str(fd, "address");
   let latitude = parseCoord(fd, "latitude");
@@ -158,7 +199,7 @@ export async function updatePlace(
           equipmentJson: JSON.stringify(collectEquipment(fd)),
           ownerName: str(fd, "ownerName"),
           ownerPhone: str(fd, "ownerPhone"),
-          ownerEmail: str(fd, "ownerEmail"),
+          ownerEmail,
           notes: str(fd, "notes"),
           photosJson: JSON.stringify(collectPhotos(fd)),
         },
@@ -192,6 +233,58 @@ export async function archivePlace(placeId: string): Promise<ActionResult> {
     { action: "PLACE_ARCHIVED", userId: user.id, metadata: { placeId } },
   );
 
+  revalidatePath("/lieux");
+  return { error: null };
+}
+
+/**
+ * RGPD-09 — efface le contact du propriétaire d'un lieu, à SA demande.
+ *
+ * Le propriétaire n'est pas utilisateur de l'application : il ne peut ni se
+ * connecter pour exercer ses droits, ni voir ce qui est stocké sur lui. Le
+ * chemin d'effacement passe donc nécessairement par un tiers interne, d'où
+ * cette action — et d'où la trace d'audit, seule preuve que la demande a été
+ * honorée si elle est contestée plus tard.
+ *
+ * Le lieu lui-même est conservé : ses caractéristiques (adresse, capacité,
+ * équipements, avis) ne sont pas des données personnelles et gardent leur
+ * utilité pour le groupe. Seules les trois colonnes de contact sont vidées.
+ */
+export async function erasePlaceOwnerContact(placeId: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, "place.owner_contact.erase")) return { error: "Permission refusée." };
+
+  const place = await db.campPlace.findUnique({
+    where: { id: placeId },
+    select: { id: true, name: true, ownerName: true, ownerPhone: true, ownerEmail: true },
+  });
+  if (!place) return { error: "Lieu introuvable." };
+  if (!place.ownerName && !place.ownerPhone && !place.ownerEmail) {
+    return { error: "Ce lieu ne porte aucun contact de propriétaire." };
+  }
+
+  await withAudit(
+    (tx) =>
+      tx.campPlace.update({
+        where: { id: placeId },
+        data: { ownerName: null, ownerPhone: null, ownerEmail: null },
+      }),
+    {
+      action: "PLACE_OWNER_CONTACT_ERASED",
+      userId: user.id,
+      // On journalise QUE des champs présents/absents, jamais les valeurs :
+      // recopier le contact dans l'audit reviendrait à ne pas l'avoir effacé.
+      metadata: {
+        placeId,
+        placeName: place.name,
+        hadName: place.ownerName !== null,
+        hadPhone: place.ownerPhone !== null,
+        hadEmail: place.ownerEmail !== null,
+      },
+    },
+  );
+
+  revalidatePath(`/lieux/${placeId}`);
   revalidatePath("/lieux");
   return { error: null };
 }

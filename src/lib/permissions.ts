@@ -76,6 +76,13 @@ export const ACTIONS = [
   "place.view", // consulter les lieux de camp (encadrement)
   "place.create", // créer un lieu de camp
   "place.manage", // modifier / archiver un lieu (créateur ou admin, cf. action)
+  // RGPD-09 — le contact du propriétaire est la donnée personnelle d'un TIERS
+  // qui n'utilise pas l'app. On protège le CHAMP, pas la ressource : consulter
+  // un lieu (budget d'un camp, équipements) reste légitime pour l'encadrement
+  // large, connaître le numéro personnel du propriétaire ne l'est que pour qui
+  // organise réellement le camp.
+  "place.owner_contact.view",
+  "place.owner_contact.erase", // effacer le contact à la demande du propriétaire
   "place.review", // déposer un avis après un camp
   // Suivi pédagogique (US-S01…S10)
   "pedago.view", // consulter la progression / fiches (encadrement + RG)
@@ -193,6 +200,9 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // et avis par les chefs ; la modification ajoute un contrôle « créateur ou
   // admin » dans l'action (US-L05).
   "place.view": [CHEF, RG, MAT, TRES, SEC, LOCAL],
+  // RGPD-09 — minimisation : deux rôles seulement, ceux qui organisent le camp.
+  "place.owner_contact.view": [CHEF, RG],
+  "place.owner_contact.erase": [CHEF, RG],
   "place.create": [CHEF],
   "place.manage": [CHEF],
   "place.review": [CHEF],

@@ -27,8 +27,26 @@ function orgValue(raw: string | undefined, label: string): string {
   return value ? value : `[À COMPLÉTER : ${label}]`;
 }
 
-/** Dénomination officielle du groupe local SGDF qui édite le site. */
-export const ORG_NAME = orgValue(process.env.ORG_NAME, "dénomination officielle du groupe SGDF");
+/**
+ * Éditeur du site au sens de la LCEN : la personne — physique ou morale — qui
+ * publie cette instance. Distinct de ORG_GROUP, et c'est tout l'objet de la
+ * distinction : les Scouts et Guides de France ont une **personnalité morale
+ * unique** (association déclarée, SIREN 775 682 024). Un groupe local n'est pas
+ * une association et ne peut donc pas être éditeur ; selon les déploiements,
+ * l'éditeur est soit l'association nationale, soit la personne qui héberge
+ * l'instance pour son groupe. Un déploiement où les deux coïncident renseigne
+ * simplement la même valeur dans les deux variables.
+ */
+export const ORG_NAME = orgValue(process.env.ORG_NAME, "éditeur du site");
+
+/** Groupe local desservi par cette instance — l'usage, pas l'éditeur. */
+export const ORG_GROUP = orgValue(process.env.ORG_GROUP, "dénomination du groupe SGDF desservi");
+
+// Association nationale : identique pour tout déploiement SGDF, donc en dur
+// plutôt qu'en configuration. Source : https://sgdf.fr/mentions-legales/
+export const NATIONAL_ORG_NAME = "Association des Scouts et Guides de France";
+export const NATIONAL_ORG_LEGAL = "association déclarée reconnue d'utilité publique, SIREN 775 682 024";
+export const NATIONAL_ORG_ADDRESS = "21-37 rue de Stalingrad, 94110 Arcueil";
 
 /** Adresse postale du siège de l'association (mention obligatoire, LCEN). */
 export const ORG_ADDRESS = orgValue(process.env.ORG_ADDRESS, "adresse postale du groupe");

@@ -14,11 +14,41 @@ export function isEmailConfigured(): boolean {
   return Boolean(process.env.RESEND_API_KEY);
 }
 
+/**
+ * Domaines de premier niveau réservés par la RFC 6761 : ils ne sont résolus par
+ * aucun DNS public et ne peuvent donc JAMAIS recevoir de courrier.
+ *
+ * Le jeu de données de démonstration en est plein — 33 des 42 comptes seedés
+ * sur staging portent une adresse en `.invalid`. Sans ce filtre, activer une
+ * clé d'envoi sur staging produirait autant de REBONDS DURS sur le domaine
+ * d'expédition. Or c'est le même domaine qu'en production : un taux de rebond
+ * élevé y dégrade la délivrabilité, voire suspend le compte — et c'est la
+ * réinitialisation de mot de passe de vraies familles qui cesse d'arriver.
+ *
+ * Le filtre vit ici, au point d'envoi, et pas dans l'appelant : il doit valoir
+ * pour tous les flux, y compris ceux qui n'existent pas encore.
+ */
+const RESERVED_TLDS = ["invalid", "test", "example", "localhost"];
+
+function isUndeliverable(address: string): boolean {
+  // On isole le DOMAINE plutôt que de tester la fin de l'adresse : `localhost`
+  // s'écrit sans point (`admin@localhost`), et une comparaison sur la chaîne
+  // entière le laissait passer. Défaut trouvé par le test, pas par relecture.
+  const domain = address.trim().toLowerCase().split("@").pop() ?? "";
+  return RESERVED_TLDS.some((tld) => domain === tld || domain.endsWith(`.${tld}`));
+}
+
 export async function sendEmail({
   to,
   subject,
   html,
 }: SendEmailInput): Promise<void> {
+  if (isUndeliverable(to)) {
+    // Adresse de jeu d'essai : l'envoyer ne ferait que produire un rebond dur,
+    // au détriment de la réputation du domaine — donc de la production.
+    console.warn(`[email] adresse non délivrable (TLD réservé) — "${subject}" non envoyé à ${to}.`);
+    return;
+  }
   if (!isEmailConfigured()) {
     console.warn(`[email] RESEND_API_KEY absent — email "${subject}" non envoyé à ${to}.`);
     return;

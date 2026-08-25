@@ -37,6 +37,30 @@ function headerSafe(value: string, max = 120): string {
   return cleaned.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+/**
+ * Durée de validité d'un lien de validation, en jours.
+ *
+ * SÉCURITÉ — l'entropie du jeton (256 bits) le rend inattaquable ; c'est la
+ * DURÉE D'EXPOSITION qui constitue le risque réel. Un lien éternel finit par
+ * fuiter autrement que par la cryptographie : email transféré, boîte revendue
+ * avec un nom de domaine, journal d'accès conservé, historique de navigateur
+ * d'un poste partagé. Même raison qui fait expirer un lien de réinitialisation
+ * de mot de passe alors que son entropie est identique.
+ *
+ * 90 jours : assez large pour un propriétaire qui relève peu sa boîte, assez
+ * court pour qu'un lien oublié cesse d'être une porte ouverte. Passé ce délai,
+ * RIEN n'est détruit — seul le lien cesse de fonctionner, et le chef en émet un
+ * nouveau d'un clic. C'est le lien qui expire, jamais la fiche.
+ */
+export const OWNER_CONSENT_LINK_TTL_DAYS = 90;
+
+/** Le lien émis à cette date est-il périmé ? Une date absente vaut périmée. */
+export function isConsentLinkExpired(requestedAt: Date | null | undefined): boolean {
+  if (!requestedAt) return true;
+  const ageMs = Date.now() - requestedAt.getTime();
+  return ageMs > OWNER_CONSENT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000;
+}
+
 /** Jeton d'URL publique : 32 octets, base64url — non devinable, non séquentiel. */
 export function newOwnerConsentToken(): string {
   return randomBytes(32).toString("base64url");
@@ -87,9 +111,17 @@ export async function getOwnerConsentByToken(
       ownerEmail: true,
       ownerConsentStatus: true,
       ownerConsentDecidedAt: true,
+      ownerConsentRequestedAt: true,
     },
   });
   if (!place) return null;
+
+  // L'expiration ne s'applique qu'à un lien ENCORE EN ATTENTE. Une fois la
+  // décision prise, la page n'expose plus aucune donnée : elle ne sert qu'à
+  // rappeler ce qui a été décidé, et cette preuve n'a pas à se périmer.
+  if (place.ownerConsentStatus === "PENDING" && isConsentLinkExpired(place.ownerConsentRequestedAt)) {
+    return null;
+  }
   return {
     placeName: place.name,
     ownerName: place.ownerName,
@@ -102,14 +134,25 @@ export async function getOwnerConsentByToken(
 
 interface RequestInput {
   to: string;
-  ownerName: string | null;
-  placeName: string;
-  groupName: string;
   token: string;
 }
 
 /**
- * Envoie la demande de validation. Ne lève jamais : `sendEmail` dégrade
+ * Envoie la demande de validation.
+ *
+ * SÉCURITÉ — le message est **entièrement générique**. Aucune valeur rédigée
+ * par un utilisateur n'y figure : ni le nom du lieu, ni celui du propriétaire.
+ * Un chef pourrait sinon nommer un lieu « URGENT : votre colis est bloqué » et
+ * l'application émettrait ce texte vers une adresse arbitraire, signé de son
+ * domaine et accompagné d'un lien légitime — un hameçonnage parfait, servi par
+ * nous. Valider l'adresse du destinataire ne suffisait pas : le contenu compte
+ * autant. La signature de la fonction ne reçoit d'ailleurs plus ces valeurs,
+ * ce qui rend la fuite impossible plutôt qu'interdite.
+ *
+ * Le contexte (quel lieu, quelles coordonnées) est délivré derrière le jeton,
+ * sur une page que nous contrôlons.
+ *
+ * Ne lève jamais : `sendEmail` dégrade
  * proprement quand Resend n'est pas configuré (dev local, prod sans domaine
  * vérifié). Un envoi raté ne doit pas faire échouer la création du lieu —
  * le contact reste alors simplement en attente, donc invisible, et le chef
@@ -117,26 +160,20 @@ interface RequestInput {
  */
 export async function sendOwnerConsentRequest({
   to,
-  ownerName,
-  placeName,
-  groupName,
   token,
 }: RequestInput): Promise<void> {
   const url = escapeHtml(ownerConsentUrl(token));
-  const place = escapeHtml(headerSafe(placeName));
-  const groupe = escapeHtml(headerSafe(groupName));
-  // `ownerName` n'est volontairement PAS repris : si l'adresse est erronée —
-  // faute de frappe d'un chef —, saluer la personne par son nom divulgue son
-  // identité à un inconnu. Le lien, lui, montre les données à qui détient le
-  // jeton, ce qui est le comportement voulu et assumé.
-  void ownerName;
+  // Seule variable du message, et elle vient de l'ENVIRONNEMENT (CONF-01) :
+  // identique pour tous les envois de cette instance, hors de portée d'un
+  // utilisateur. Tout le reste est figé.
+  const groupe = escapeHtml(headerSafe(process.env.ORG_GROUP?.trim() || "un groupe scout"));
 
   const html = `
     <p>Bonjour,</p>
     <p>
       Le groupe scout <strong>${groupe}</strong> utilise une application interne
       pour organiser ses camps. Vos coordonnées y sont enregistrées comme
-      contact du lieu « <strong>${place}</strong> ».
+      contact d'un lieu où il campe.
     </p>
     <p>
       Nous vous en informons et vous demandons votre accord avant de les rendre
@@ -166,7 +203,7 @@ export async function sendOwnerConsentRequest({
 
   await sendEmail({
     to: recipient.value,
-    subject: headerSafe(`Vos coordonnées pour le lieu « ${placeName} »`),
+    subject: headerSafe(`Vos coordonnées enregistrées par ${process.env.ORG_GROUP?.trim() || "un groupe scout"}`),
     html,
   });
 }

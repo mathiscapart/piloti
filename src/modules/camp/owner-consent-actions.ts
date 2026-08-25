@@ -8,7 +8,11 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
-import { newOwnerConsentToken, sendOwnerConsentRequest } from "./owner-consent";
+import {
+  isConsentLinkExpired,
+  newOwnerConsentToken,
+  sendOwnerConsentRequest,
+} from "./owner-consent";
 
 // RGPD-09 — actions liées à la validation par le propriétaire d'un lieu.
 //
@@ -29,9 +33,17 @@ const GROUP_NAME = process.env.ORG_GROUP?.trim() || "le groupe scout";
  * effacement effectif serait une promesse non tenue, et l'inverse une donnée
  * effacée sans trace de pourquoi.
  *
- * Le jeton est consommé (`null`) dans les deux cas : il n'a plus d'objet une
- * fois la décision prise, et le laisser vivant offrirait une URL permanente
- * exposant des données personnelles.
+ * Le jeton SURVIT à la décision, mais la page cesse d'afficher les données.
+ *
+ * Le réflexe était de le consommer (`null`) pour ne pas laisser vivre une URL
+ * exposant des données personnelles. Sauf qu'une Server Action déclenche
+ * toujours un re-rendu de la route courante : le propriétaire voyait donc
+ * « lien expiré » dans la seconde suivant son clic — un message d'échec juste
+ * après une action réussie. Trouvé en capturant les écrans, pas en relisant.
+ *
+ * On garde donc le jeton et on retire l'exposition : après décision, la page
+ * n'affiche plus ni les coordonnées ni le nom du lieu, seulement l'état et sa
+ * date. Le lien devient une preuve consultable, plus un canal d'accès.
  */
 export async function submitOwnerDecision(
   token: string,
@@ -41,18 +53,29 @@ export async function submitOwnerDecision(
 
   const place = await db.campPlace.findUnique({
     where: { ownerConsentToken: token },
-    select: { id: true, name: true, createdById: true, ownerConsentStatus: true },
+    select: {
+      id: true,
+      name: true,
+      createdById: true,
+      ownerConsentStatus: true,
+      ownerConsentRequestedAt: true,
+    },
   });
   if (!place) return { error: "Lien invalide ou expiré." };
   if (place.ownerConsentStatus !== "PENDING") {
     return { error: "Votre choix a déjà été enregistré." };
+  }
+  // Le contrôle vit AUSSI ici, et pas seulement à l'affichage : cette action est
+  // appelable directement, sans passer par la page. Une expiration qui ne
+  // masquerait que le rendu se contournerait d'une requête.
+  if (isConsentLinkExpired(place.ownerConsentRequestedAt)) {
+    return { error: "Ce lien a expiré. Demandez au groupe de vous en envoyer un nouveau." };
   }
 
   const erased = decision === "REFUSED";
   const data = {
     ownerConsentStatus: decision,
     ownerConsentDecidedAt: new Date(),
-    ownerConsentToken: null,
     ...(erased ? { ownerName: null, ownerPhone: null, ownerEmail: null } : {}),
   };
 
@@ -144,11 +167,8 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
   });
 
   await sendOwnerConsentRequest({
-    to: place.ownerEmail,
-    ownerName: place.ownerName,
-    placeName: place.name,
-    groupName: GROUP_NAME,
-    token,
+      to: place.ownerEmail,
+      token,
   });
 
   revalidatePath(`/lieux/${placeId}`);

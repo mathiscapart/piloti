@@ -43,6 +43,14 @@ export default function InformationTiersPage() {
           <li>Rien d&apos;autre : aucune donnée bancaire, aucune information sur votre famille.</li>
         </ul>
         <p>
+          <strong>D&apos;où viennent-elles ?</strong>{" "}
+          Elles ont été saisies par un responsable du groupe, à partir de ce que
+          vous lui avez communiqué lors
+          d&apos;un contact au sujet du lieu, ou de ce qu&apos;un autre groupe
+          scout lui a transmis. Elles ne proviennent d&apos;aucun fichier acheté
+          ni d&apos;aucune collecte automatisée.
+        </p>
+        <p>
           Ces données servent uniquement à vous joindre pour organiser un camp.
           La base légale est l&apos;<strong>intérêt légitime</strong> du groupe à
           organiser ses activités. Elles ne sont ni vendues, ni transmises à des
@@ -51,7 +59,8 @@ export default function InformationTiersPage() {
         <p>
           Le groupe vous demande par ailleurs votre accord avant de les rendre
           utilisables : tant que vous n&apos;avez pas répondu, elles restent
-          enregistrées mais <strong>invisibles</strong> dans l&apos;application.
+          enregistrées mais <strong>invisibles</strong>{" "}
+          dans l&apos;application.
         </p>
       </section>
 
@@ -78,8 +87,8 @@ export default function InformationTiersPage() {
         <h2 className="text-xl font-bold text-earth">Vos droits</h2>
         <p>
           Vous disposez d&apos;un droit d&apos;accès, de rectification,
-          d&apos;effacement et d&apos;opposition. Le responsable du traitement
-          est <strong>{ORG_NAME}</strong>. Pour exercer ces droits, une seule
+          d&apos;effacement, de limitation du traitement et d&apos;opposition.
+          Le responsable du traitement est <strong>{ORG_NAME}</strong>. Pour exercer ces droits, une seule
           adresse suffit : <strong>{ORG_PRIVACY_EMAIL}</strong>.
         </p>
         <p>

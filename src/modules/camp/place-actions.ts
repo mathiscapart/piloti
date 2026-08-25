@@ -128,9 +128,6 @@ export async function createPlace(
   if (place.ownerEmail) {
     await sendOwnerConsentRequest({
       to: place.ownerEmail,
-      ownerName: place.ownerName,
-      placeName: place.name,
-      groupName: GROUP_NAME,
       token: place.ownerConsentToken!,
     });
   }

@@ -20,6 +20,10 @@ import {
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
+import {
+  isConsentLinkExpired,
+  OWNER_CONSENT_LINK_TTL_DAYS,
+} from "@/modules/camp/owner-consent";
 import { getPlaceDetail } from "@/modules/camp/places";
 
 import { ArchivePlaceButton } from "./ArchivePlaceButton";
@@ -78,6 +82,10 @@ export default async function PlaceDetailPage({ params }: PageProps) {
   const ownerValidated = place.ownerConsentStatus === "GRANTED";
   const showOwner = canSeeOwner && hasOwnerContact && ownerValidated;
   const ownerPending = canSeeOwner && hasOwnerContact && !ownerValidated;
+  // Sans cette indication, un lien mort ne se voit nulle part : le chef croit le
+  // propriétaire simplement silencieux, et la relance n'arrive jamais.
+  const ownerLinkExpired =
+    ownerPending && isConsentLinkExpired(place.ownerConsentRequestedAt);
 
   // US-L07 — camps tenus ici, proposés au dépôt d'un avis pour que celui-ci
   // porte une branche et une année (sans quoi il n'y aurait rien à filtrer).
@@ -229,6 +237,13 @@ export default async function PlaceDetailPage({ params }: PageProps) {
             n&apos;a pas encore validé son utilisation. Ses coordonnées restent
             masquées jusque-là.
           </p>
+          {ownerLinkExpired ? (
+            <p className="text-sm font-bold text-brick">
+              Le lien envoyé au propriétaire a expiré (
+              {OWNER_CONSENT_LINK_TTL_DAYS} jours). Renvoyez-lui-en un nouveau
+              pour qu&apos;il puisse répondre.
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2 pt-1">
             {place.ownerEmail ? <ResendOwnerConsentButton placeId={place.id} /> : null}
             {canEraseOwner ? (

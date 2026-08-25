@@ -189,6 +189,7 @@ export default function ConfidentialitePage() {
             ci-dessus ;
           </li>
           <li>Droit à la portabilité de vos données ;</li>
+          <li>Droit à la limitation du traitement ;</li>
           <li>Droit d&apos;opposition, pour les traitements fondés sur l&apos;intérêt légitime.</li>
         </ul>
         <p>

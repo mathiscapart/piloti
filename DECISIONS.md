@@ -522,3 +522,13 @@ Le lot transformait un champ stocké passif (`CampPlace.ownerEmail`) en **destin
 
 La relance est par ailleurs gardée par `place.owner_contact.view` plutôt que `.erase` : on ne sollicite pas une personne dont on n'a pas à connaître les coordonnées. `parseOwnerEmail` est couvert par des tests — un contrôle de sécurité non testé se dégrade en silence.
 
+**Amendement 2026-08-25 — contenu générique, confirmation serveur, expiration du lien** :
+
+Trois défauts trouvés après coup, dont deux qu'aucune relecture n'aurait attrapés.
+
+- **Le mail contenait du texte rédigé par un utilisateur.** La validation de l'adresse traitait le canal, pas la charge utile : `placeName` est un champ libre, et partait dans le sujet comme dans le corps. Un lieu nommé « URGENT : votre colis est bloqué » produisait un hameçonnage parfait, signé du domaine du groupe et accompagné d'un lien légitime. Le message est désormais **entièrement générique** — seul le nom du groupe, issu de l'environnement, y varie. Les paramètres correspondants ont été retirés de la signature : la fuite est impossible par construction, pas interdite par convention.
+- **Le jeton n'est plus consommé à la décision.** Il l'était, jusqu'à ce que les captures d'écran montrent « lien expiré » dans la seconde suivant le clic : une Server Action re-rend toujours la route courante, donc le serveur ne retrouvait plus rien. Un état local côté client ne pouvait pas survivre à ce re-rendu — la solution devait être serveur. Le jeton survit, et la page cesse d'exposer quoi que ce soit : ni coordonnées, ni nom de lieu. Le lien devient une preuve consultable de la décision, avec sa date.
+- **Le lien expire à 90 jours** (`OWNER_CONSENT_LINK_TTL_DAYS`). L'entropie du jeton (256 bits) le rend inattaquable ; c'est la **durée d'exposition** qui constitue le risque — email transféré, journal d'accès conservé, historique d'un poste partagé. Rien n'est détruit à l'échéance : seul le lien cesse de fonctionner, la fiche reste en attente donc invisible, et le chef en émet un nouveau d'un clic. Le contrôle vit dans la lecture **et** dans l'action de décision, celle-ci étant appelable sans passer par la page. Une date d'émission absente vaut périmée : le défaut ferme.
+
+Deux bugs de typographie corrigés au passage, invisibles à la lecture du source : JSX supprime l'espace après `</strong>` quand le texte se poursuit à la ligne suivante, ce qui produisait « invisiblesdans » et « viennent-elles ?Elles ». Le motif à risque subsiste ailleurs dans `(public)` — à traiter séparément.
+

@@ -441,6 +441,18 @@ model CampPlace {
   ownerName     String?
   ownerPhone    String?
   ownerEmail    String?
+
+  // RGPD-09 — le contact ci-dessus appartient à un TIERS qui n'utilise pas
+  // l'application : il ne peut ni se connecter, ni voir ce qui est stocké sur
+  // lui. La base légale reste l'intérêt légitime (organiser un camp), mais on
+  // ajoute une garantie interne : tant que le propriétaire n'a pas validé, le
+  // contact est stocké et INVISIBLE dans l'app. Une boîte mail morte ne détruit
+  // donc rien — elle laisse simplement le contact inutilisable.
+  ownerConsentStatus String @default("PENDING") // OwnerConsentStatus
+  // Jeton d'un lien public, sans compte — même principe que `calendarToken`.
+  ownerConsentToken String? @unique
+  ownerConsentRequestedAt DateTime?
+  ownerConsentDecidedAt DateTime?
   notes         String? // notes pratiques
   photosJson    String   @default("[]") // string[] (URLs /uploads/…)
   createdById   String? // chef créateur (US-L05 : lui seul ou admin modifie)

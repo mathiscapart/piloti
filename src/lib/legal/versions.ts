@@ -6,7 +6,7 @@
 // décrivaient l'ancienne règle (compte possible sous 15 ans avec autorisation
 // parentale), contredite par US-CM-04 et par l'amendement RGPD-02 du
 // 2026-08-08. Conformément à D-014, les comptes existants ne re-consentent pas.
-export const PRIVACY_VERSION = "2026-08-23";
+export const PRIVACY_VERSION = "2026-08-24";
 export const TERMS_VERSION = "2026-08-23";
 export const LEGAL_VERSION = "2026-08-22";
 

@@ -49,6 +49,19 @@ export const EXTRA_ROLES = [
 // = droit à l'image (cf. src/modules/consent), append-only comme le reste de
 // `Consent` : porte sa valeur dans `Consent.value` (cf. IMAGE_RIGHTS_STATUSES).
 export const CONSENT_TYPES = ["SELF", "PARENTAL", "IMAGE_RIGHTS"] as const;
+
+// RGPD-09 — validation par le propriétaire d'un lieu de camp. Ce n'est PAS la
+// base légale du traitement (qui reste l'intérêt légitime, cf. schema.prisma) :
+// c'est une garantie interne — tant que la validation manque, le contact reste
+// invisible dans l'application.
+export const OWNER_CONSENT_STATUSES = ["PENDING", "GRANTED", "REFUSED"] as const;
+export type OwnerConsentStatus = (typeof OWNER_CONSENT_STATUSES)[number];
+
+export const OWNER_CONSENT_LABEL: Record<OwnerConsentStatus, string> = {
+  PENDING: "En attente de validation du propriétaire",
+  GRANTED: "Validé par le propriétaire",
+  REFUSED: "Refusé — contact effacé",
+};
 export type ConsentType = (typeof CONSENT_TYPES)[number];
 
 // US-C08 — droit à l'image. RESTREINT_INTERNE = usage réservé à la
@@ -422,5 +435,7 @@ export const AUDIT_ACTIONS = [
   "USER_ACCOUNT_UPDATED",
   // US-C08 — droit à l'image.
   "IMAGE_RIGHTS_STATUS_SET",
+  // RGPD-09 — effacement du contact d'un propriétaire de lieu, à sa demande.
+  "PLACE_OWNER_CONTACT_ERASED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

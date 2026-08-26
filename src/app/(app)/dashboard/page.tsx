@@ -11,7 +11,6 @@ import {
 import Link from "next/link";
 
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { WaterFootprint } from "@/components/dashboard/WaterFootprint";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABEL, type Role } from "@/lib/enums";
@@ -72,10 +71,18 @@ export default async function DashboardPage() {
             ? "Voici l'état du matériel aujourd'hui."
             : "Ravi de te voir !"}
         </p>
+        {/* Le bandeau « empreinte IA » a laissé place à une page dédiée : le
+            sujet demande des nuances et des sources qu'un widget ne peut pas
+            porter. Un lien discret plutôt qu'un bloc au milieu du tableau. */}
+        <p className="mt-1 text-xs text-trail">
+          <Link
+            href="/empreinte-ia"
+            className="underline-offset-4 hover:underline"
+          >
+            Empreinte écologique de l&apos;IA utilisée pour développer Piloti
+          </Link>
+        </p>
       </header>
-
-      {/* Empreinte eau IA */}
-      <WaterFootprint />
 
       {/* Actions rapides — filtrées par rôle ; « Faire un don » ouvert à tous. */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

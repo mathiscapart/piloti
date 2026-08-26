@@ -6,7 +6,14 @@ import { auth } from "@/lib/auth";
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password"]);
 // RGPD-01 — pages légales, accessibles à tous sans compte ni base de données
 // (même avant le premier lancement / setup).
-const LEGAL_PATHS = new Set(["/confidentialite", "/mentions-legales", "/cgu"]);
+const LEGAL_PATHS = new Set([
+  "/confidentialite",
+  "/mentions-legales",
+  "/cgu",
+  // Empreinte écologique de l'IA : page de transparence, publique au même titre
+  // que les mentions légales — elle n'a pas à exiger un compte pour être lue.
+  "/empreinte-ia",
+]);
 // RGPD-09 — pages destinées aux TIERS non-utilisateurs (propriétaire d'un lieu
 // de camp). Elles doivent être atteignables sans compte : la personne concernée
 // ne peut pas en avoir un, c'est précisément ce qui fait le problème. L'accès à

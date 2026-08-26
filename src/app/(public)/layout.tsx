@@ -31,6 +31,9 @@ export default function PublicLayout({
         <Link href="/cgu" className="underline-offset-4 hover:underline">
           CGU
         </Link>
+        <Link href="/empreinte-ia" className="underline-offset-4 hover:underline">
+          Empreinte IA
+        </Link>
         <a
           href={SOURCE_URL}
           target="_blank"

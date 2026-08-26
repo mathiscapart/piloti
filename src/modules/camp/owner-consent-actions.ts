@@ -23,8 +23,6 @@ import {
 // isolé pour que cette frontière soit visible d'un coup d'œil — ne pas y
 // ajouter d'action qui suppose une session.
 
-const GROUP_NAME = process.env.ORG_GROUP?.trim() || "le groupe scout";
-
 /**
  * Le propriétaire accepte, ou refuse et demande l'effacement.
  *

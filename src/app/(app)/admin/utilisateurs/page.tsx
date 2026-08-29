@@ -1,13 +1,25 @@
-import { Lock, Pencil, UserPlus, Users } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Lock,
+  Pencil,
+  Search,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ROLE_LABEL, type Role } from "@/lib/enums";
+import { Input } from "@/components/ui/input";
+import { ROLE_LABEL, ROLES, UNIT_LABEL, UNITS, type Role } from "@/lib/enums";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import { listManageableUsers } from "@/modules/admin/queries";
+
+import { UserFiltersForm } from "./user-filters-form";
 
 // US-29 — parse le JSON des rôles additionnels de façon défensive.
 function parseRoles(raw: unknown): string[] {
@@ -22,15 +34,105 @@ function parseRoles(raw: unknown): string[] {
 
 const PRIVILEGED_ROLES = new Set<string>(["ADMIN", "RESPONSABLE_GROUPE"]);
 
+const SORT_LABEL: Record<string, string> = {
+  status: "Statut, puis A→Z",
+  name: "Nom A→Z",
+  name_desc: "Nom Z→A",
+  unit: "Unité",
+  recent: "Inscription la plus récente",
+  oldest: "Inscription la plus ancienne",
+};
+
+// En-tête de colonne cliquable. `direction` = null quand la colonne n'est pas
+// celle qui trie actuellement.
+function SortLink({
+  href,
+  label,
+  direction,
+}: {
+  href: string;
+  label: string;
+  direction: "asc" | "desc" | null;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-earth"
+      aria-sort={
+        direction === "asc"
+          ? "ascending"
+          : direction === "desc"
+            ? "descending"
+            : "none"
+      }
+    >
+      {label}
+      {direction === "asc" ? (
+        <ArrowUp className="size-3" aria-hidden />
+      ) : direction === "desc" ? (
+        <ArrowDown className="size-3" aria-hidden />
+      ) : (
+        <ArrowUpDown className="size-3 opacity-40" aria-hidden />
+      )}
+    </Link>
+  );
+}
+
 function roleLabels(roles: string[]): string {
   if (roles.length === 0) return "Aucun rôle";
   return roles.map((r) => ROLE_LABEL[r as Role] ?? r).join(", ");
 }
 
-export default async function AdminUtilisateursPage() {
+interface PageProps {
+  searchParams: Promise<{
+    q?: string;
+    role?: string;
+    unit?: string;
+    status?: string;
+    sort?: string;
+  }>;
+}
+
+export default async function AdminUtilisateursPage({ searchParams }: PageProps) {
   // US-32 — gestion des comptes & rôles : ADMIN + SECRÉTAIRE.
   const currentUser = await requireCan("user.manage");
-  const users = await listManageableUsers();
+  const params = await searchParams;
+  const q = params.q?.trim() ?? "";
+  const sort = params.sort ?? "status";
+  const users = await listManageableUsers({
+    search: q,
+    role: params.role || undefined,
+    unit: params.unit || undefined,
+    status: params.status || undefined,
+    sort,
+  });
+  const isFiltered = Boolean(q || params.role || params.unit || params.status);
+
+  // Lien conservant les filtres et ne changeant que le tri (en-têtes cliquables).
+  const sortHref = (next: string) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (params.role) sp.set("role", params.role);
+    if (params.unit) sp.set("unit", params.unit);
+    if (params.status) sp.set("status", params.status);
+    if (next !== "status") sp.set("sort", next);
+    const qs = sp.toString();
+    return qs ? `/admin/utilisateurs?${qs}` : "/admin/utilisateurs";
+  };
+
+  // Les champs du formulaire ne sont pas contrôlés : en navigation douce React
+  // réutilise les mêmes noeuds et ne les resynchronise pas sur `defaultValue`.
+  // Cette clé les remonte quand l'URL change — sans quoi « Reset » viderait
+  // l'URL en laissant les filtres affichés à l'écran.
+  const filtersKey = `${q}|${params.role ?? ""}|${params.unit ?? ""}|${params.status ?? ""}|${sort}`;
+
+  // Colonne triable : un clic trie en ascendant, un second bascule en descendant.
+  const sortColumn = (key: "name" | "unit" | "status") => {
+    const desc = `${key}_desc`;
+    const direction: "asc" | "desc" | null =
+      sort === key ? "asc" : sort === desc ? "desc" : null;
+    return { href: sortHref(direction === "asc" ? desc : key), direction };
+  };
   // Les opérations destructrices (suspendre / réactiver / supprimer / mot de
   // passe) restent réservées à l'ADMIN ; la SECRÉTAIRE n'attribue que les rôles
   // (sauf ADMIN/RG, cf. canAssignRole).
@@ -47,7 +149,8 @@ export default async function AdminUtilisateursPage() {
             Utilisateurs
           </h1>
           <p className="text-trail">
-            {users.length} compte{users.length > 1 ? "s" : ""} actif ou suspendu
+            {users.length} compte{users.length > 1 ? "s" : ""}
+            {isFiltered ? " correspondant aux filtres" : " actif ou suspendu"}
           </p>
         </div>
         {can(currentUser, "user.approve") ? (
@@ -60,11 +163,117 @@ export default async function AdminUtilisateursPage() {
         ) : null}
       </header>
 
+      {/* Recherche + filtres : formulaire GET, l'état vit dans l'URL (partageable,
+          rechargeable) et la page reste un Server Component. */}
+      <UserFiltersForm
+        key={filtersKey}
+        className="grid gap-3 rounded-2xl bg-snow p-4 shadow-card md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_auto]"
+      >
+        <label className="space-y-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-trail">
+            Recherche
+          </span>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-trail" />
+            <Input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder="Nom, prénom, e-mail…"
+              className="pl-9"
+            />
+          </div>
+        </label>
+        <label className="space-y-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-trail">
+            Rôle
+          </span>
+          <select
+            name="role"
+            defaultValue={params.role ?? ""}
+            className="h-10 w-full rounded-md border border-input bg-snow px-3 text-sm"
+          >
+            <option value="">Tous</option>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABEL[r]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-trail">
+            Unité
+          </span>
+          <select
+            name="unit"
+            defaultValue={params.unit ?? ""}
+            className="h-10 w-full rounded-md border border-input bg-snow px-3 text-sm"
+          >
+            <option value="">Toutes</option>
+            {UNITS.map((u) => (
+              <option key={u} value={u}>
+                {UNIT_LABEL[u]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-trail">
+            Statut
+          </span>
+          <select
+            name="status"
+            defaultValue={params.status ?? ""}
+            className="h-10 w-full rounded-md border border-input bg-snow px-3 text-sm"
+          >
+            <option value="">Actifs et suspendus</option>
+            <option value="ACTIVE">Actifs</option>
+            <option value="SUSPENDED">Suspendus</option>
+          </select>
+        </label>
+        <div className="flex items-end gap-2">
+          {/* Les listes déroulantes filtrent au changement ; ce bouton reste
+              l'affordance du champ de recherche (équivalent d'Entrée). */}
+          <Button type="submit" className="flex-1">
+            Rechercher
+          </Button>
+          {isFiltered || sort !== "status" ? (
+            <Button asChild variant="outline">
+              <Link href="/admin/utilisateurs">Reset</Link>
+            </Button>
+          ) : null}
+        </div>
+        {/* Sur desktop le tri se pilote par les en-têtes du tableau ; ce select
+            reste masqué mais soumis, ce qui conserve le tri courant au filtrage
+            (un champ caché en plus enverrait « sort » deux fois). */}
+        <label className="space-y-1.5 md:hidden">
+          <span className="text-xs font-bold uppercase tracking-wider text-trail">
+            Trier par
+          </span>
+          <select
+            name="sort"
+            defaultValue={sort}
+            className="h-10 w-full rounded-md border border-input bg-snow px-3 text-sm"
+          >
+            {Object.entries(SORT_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </UserFiltersForm>
+
       {users.length === 0 ? (
         <EmptyState
           icon={Users}
           title="Aucun utilisateur"
-          description="Aucun compte ACTIVE ni SUSPENDED."
+          description={
+            isFiltered
+              ? "Aucun compte ne correspond à cette recherche."
+              : "Aucun compte ACTIVE ni SUSPENDED."
+          }
         />
       ) : (
         <>
@@ -139,10 +348,16 @@ export default async function AdminUtilisateursPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-stone bg-sand text-left text-xs font-bold uppercase tracking-wider text-trail">
                 <tr>
-                  <th className="px-4 py-3">Membre</th>
-                  <th className="px-4 py-3">Unité</th>
+                  <th className="px-4 py-3">
+                    <SortLink label="Membre" {...sortColumn("name")} />
+                  </th>
+                  <th className="px-4 py-3">
+                    <SortLink label="Unité" {...sortColumn("unit")} />
+                  </th>
                   <th className="px-4 py-3">Rôle</th>
-                  <th className="px-4 py-3">Statut</th>
+                  <th className="px-4 py-3">
+                    <SortLink label="Statut" {...sortColumn("status")} />
+                  </th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
               </thead>

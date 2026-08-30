@@ -10,13 +10,20 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+import { ActionCenter } from "@/components/dashboard/ActionCenter";
 import { KpiCard } from "@/components/dashboard/KpiCard";
-import { WaterFootprint } from "@/components/dashboard/WaterFootprint";
+import { MyChildren } from "@/components/dashboard/MyChildren";
+import { NextEventCard } from "@/components/dashboard/NextEventCard";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABEL, type Role } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
+import {
+  getActionItems,
+  getMyChildren,
+  getNextEvent,
+} from "@/modules/dashboard/queries";
 import { getDashboardData } from "@/modules/inventory/queries";
 import { listOpenGroupTasks } from "@/modules/planning/tasks";
 import { buildTaskVMs } from "@/modules/planning/task-vm";
@@ -44,6 +51,15 @@ export default async function DashboardPage() {
   const canIncidents = can(user, "incident.view");
   const isStaff = canStock || canLoans || canIncidents;
   const data = isStaff ? await getDashboardData() : null;
+
+  // Les trois blocs transverses. Chacun se filtre lui-même par permission, et
+  // renvoie du vide plutôt que d'être conditionné ici : la règle d'accès vit
+  // dans le module, pas dispersée dans le rendu.
+  const [actionItems, nextEvent, children] = await Promise.all([
+    getActionItems(user),
+    getNextEvent(user),
+    getMyChildren(user),
+  ]);
   const lateLoans = canLoans ? (data?.lateLoans ?? []) : [];
 
   const roles = effectiveRoles(user);
@@ -68,14 +84,29 @@ export default async function DashboardPage() {
           Salut, {user.firstName} !
         </h1>
         <p className="text-trail">
+          {/* Cette phrase datait d'un Piloti qui ne gérait que l'inventaire.
+              L'écran couvre désormais le planning, les finances, la modération
+              et la conformité : le texte suivait mal. */}
           {isStaff
-            ? "Voici l'état du matériel aujourd'hui."
+            ? "Voici ce qui se passe dans le groupe aujourd'hui."
             : "Ravi de te voir !"}
+        </p>
+        {/* Le bandeau « empreinte IA » a laissé place à une page dédiée : le
+            sujet demande des nuances et des sources qu'un widget ne peut pas
+            porter. Un lien discret plutôt qu'un bloc au milieu du tableau. */}
+        <p className="mt-1 text-xs text-trail">
+          <Link
+            href="/empreinte-ia"
+            className="underline-offset-4 hover:underline"
+          >
+            Empreinte écologique de l&apos;IA utilisée pour développer Piloti
+          </Link>
         </p>
       </header>
 
-      {/* Empreinte eau IA */}
-      <WaterFootprint />
+      {/* Ce qui attend une action — en tête, avant tout ce qui décrit un état.
+          C'est la seule question à laquelle un tableau de bord doit répondre. */}
+      <ActionCenter items={actionItems} />
 
       {/* Actions rapides — filtrées par rôle ; « Faire un don » ouvert à tous. */}
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -110,6 +141,12 @@ export default async function DashboardPage() {
           </Link>
         </Button>
       </section>
+
+      {/* Le prochain rendez-vous concernant l'utilisateur (D-025). */}
+      {nextEvent ? <NextEventCard event={nextEvent} /> : null}
+
+      {/* Les enfants rattachés, pour un parent. */}
+      <MyChildren enfants={children} />
 
       {/* KPIs — chacun selon la permission de sa page. */}
       {canStock || canLoans ? (
@@ -248,8 +285,9 @@ export default async function DashboardPage() {
         </section>
       ) : null}
 
-      {/* Utilisateur sans rôle métier (parent / jeune / membre du local). */}
-      {!isStaff ? (
+      {/* Utilisateur sans rôle métier ET sans rien à afficher : on ne laisse
+          pas un écran vide, mais on ne l'affiche plus par-dessus du contenu. */}
+      {!isStaff && !nextEvent && children.length === 0 && actionItems.length === 0 ? (
         <section className="rounded-2xl bg-snow p-6 shadow-card">
           <h2 className="font-bold text-earth">Bienvenue sur Piloti</h2>
           <p className="mt-1 text-sm text-trail">

@@ -48,6 +48,18 @@ ENV BETTER_AUTH_SECRET=build-placeholder-not-used-at-runtime
 RUN pnpm prisma generate
 RUN pnpm build
 
+# sharp : le file-tracing de Next ne suit que les `require()` JavaScript. Il
+# embarque donc le binding `sharp-linuxmusl-x64.node` mais PAS la bibliothèque
+# native `libvips-cpp.so` que celui-ci charge par `dlopen` — le module échoue au
+# chargement dans l'image finale ("ERR_DLOPEN_FAILED: libvips-cpp.so.8.18.3"),
+# et TOUS les uploads d'images échouent (lieux, annonces, incidents, frais).
+# On met les paquets natifs de côté ici pour les recopier dans le runner ; le
+# glob reste versionless afin de survivre à une montée de version de sharp.
+RUN mkdir -p /sharp-native \
+ && cp -r /app/node_modules/.pnpm/@img+sharp-libvips-linuxmusl-x64@* /sharp-native/ \
+ && cp -r /app/node_modules/.pnpm/@img+sharp-linuxmusl-x64@* /sharp-native/ \
+ && test -n "$(find /sharp-native -name 'libvips-cpp.so*' -print -quit)"
+
 # -----------------------------------------------------------------------------
 # Migrate : conteneur léger qui applique `prisma migrate deploy` au démarrage,
 # puis exit 0. compose le lance avant l'app (depends_on + service_completed_*).
@@ -83,6 +95,9 @@ RUN addgroup --system --gid 1001 nodejs \
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Remet la lib native de sharp que le tracing a laissée de côté (cf. builder).
+COPY --from=builder --chown=nextjs:nodejs /sharp-native/ ./node_modules/.pnpm/
 
 # Dossier prêt à recevoir les uploads (monté en volume). HORS de `public/` :
 # un fichier sous `public/` est servi par le serveur statique de Next sans

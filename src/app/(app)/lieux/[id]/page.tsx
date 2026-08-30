@@ -3,7 +3,6 @@ import {
   CalendarDays,
   Mail,
   MapPin,
-  Navigation,
   Pencil,
   Phone,
   Tent,
@@ -28,6 +27,7 @@ import { getPlaceDetail } from "@/modules/camp/places";
 
 import { ArchivePlaceButton } from "./ArchivePlaceButton";
 import { EraseOwnerContactButton } from "./EraseOwnerContactButton";
+import { PlaceNavActions } from "./PlaceNavActions";
 import { ResendOwnerConsentButton } from "./ResendOwnerConsentButton";
 import { ReviewForm } from "./ReviewForm";
 import { ReviewList } from "./ReviewList";
@@ -97,9 +97,6 @@ export default async function PlaceDetailPage({ params }: PageProps) {
   }));
 
   const hasCoords = place.latitude != null && place.longitude != null;
-  const osmLink = hasCoords
-    ? `https://www.openstreetmap.org/?mlat=${place.latitude}&mlon=${place.longitude}#map=15/${place.latitude}/${place.longitude}`
-    : null;
   const embedSrc = hasCoords
     ? `https://www.openstreetmap.org/export/embed.html?bbox=${place.longitude! - 0.02},${place.latitude! - 0.012},${place.longitude! + 0.02},${place.latitude! + 0.012}&layer=mapnik&marker=${place.latitude},${place.longitude}`
     : null;
@@ -185,14 +182,12 @@ export default async function PlaceDetailPage({ params }: PageProps) {
 
       {/* Actions rapides */}
       <div className="flex flex-wrap gap-2">
-        {osmLink ? (
-          <Button asChild variant="outline" size="sm">
-            <a href={osmLink} target="_blank" rel="noopener noreferrer">
-              <Navigation className="size-4" />
-              Itinéraire
-            </a>
-          </Button>
-        ) : null}
+        <PlaceNavActions
+          name={place.name}
+          address={place.address}
+          latitude={place.latitude}
+          longitude={place.longitude}
+        />
         {showOwner && place.ownerPhone ? (
           <Button asChild variant="outline" size="sm">
             <a href={`tel:${place.ownerPhone.replace(/\s/g, "")}`}>

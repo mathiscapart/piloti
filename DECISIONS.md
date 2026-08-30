@@ -532,3 +532,18 @@ Trois défauts trouvés après coup, dont deux qu'aucune relecture n'aurait attr
 
 Deux bugs de typographie corrigés au passage, invisibles à la lecture du source : JSX supprime l'espace après `</strong>` quand le texte se poursuit à la ligne suivante, ce qui produisait « invisiblesdans » et « viennent-elles ?Elles ». Le motif à risque subsiste ailleurs dans `(public)` — à traiter séparément.
 
+
+**Amendement 2026-08-25 — PROD-02 complété : hors-site et automatisation** :
+
+Les deux exigences restées ouvertes sont livrées, et le ticket est clos.
+
+- **Hors-site** : `PILOTI_BACKUP_REMOTE` pointe vers un dossier iCloud Drive, donc répliqué hors de la machine. Ce choix n'est possible que parce que l'archive est chiffrée **et authentifiée** : la destination n'a besoin d'être ni de confiance — Apple ne peut pas lire l'archive — ni protégée en écriture, une altération étant rejetée à la restauration. C'est ce qui rend le « off-site » atteignable sans monter d'infrastructure.
+- **Automatisation** : `scripts/register-backup-task.ps1` enregistre une tâche Windows quotidienne. `StartWhenAvailable` est actif — si la machine dormait à l'heure dite, la sauvegarde se rattrape au réveil plutôt que d'être sautée.
+
+**La tâche tourne sans la clé privée**, donc sans `-Verify`. Ce n'est pas une omission : c'est ce qui donne son sens au chiffrement à clé publique. L'hôte fabrique des archives qu'il ne peut pas relire, et un rançongiciel qui l'atteint n'ouvre pas l'historique. La vérification reste un geste manuel et périodique, clé montée le temps de l'opération.
+
+La tâche relit le `.env.production` du répertoire de **déploiement** à chaque exécution : changer de clé ou de destination ne demande pas de la réenregistrer.
+
+Elle journalise chaque passage dans `piloti-backups/journal-<env>.log`, succès comme échec. Ce détail compte autant que la sauvegarde : une tâche planifiée qui cesse de fonctionner ne prévient personne, et c'est la panne la plus dangereuse — on continue de se croire protégé. Une ligne datée par jour rend le silence détectable.
+
+**Résidu connu** : la clé privée reste sur la machine sauvegardée tant que son propriétaire ne l'a pas déplacée. Tant qu'elle y est, la protection contre un rançongiciel est théorique — l'attaquant obtient la base ET de quoi déchiffrer les archives, y compris celles répliquées hors-site.

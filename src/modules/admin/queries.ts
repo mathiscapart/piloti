@@ -2,6 +2,15 @@ import type { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 
+import {
+  buildManageableUserWhere,
+  resolveUserSort,
+  type ManageableUserFilters,
+  type UserSort,
+} from "./user-filters";
+
+export * from "./user-filters";
+
 // ----------------------------------------------------------------------------
 // Users
 // ----------------------------------------------------------------------------
@@ -23,12 +32,24 @@ export async function listPendingUsers() {
   });
 }
 
+const USER_ORDER_BY: Record<UserSort, Prisma.UserOrderByWithRelationInput[]> = {
+  status: [{ status: "asc" }, { firstName: "asc" }, { lastName: "asc" }],
+  status_desc: [{ status: "desc" }, { firstName: "asc" }, { lastName: "asc" }],
+  name: [{ firstName: "asc" }, { lastName: "asc" }],
+  name_desc: [{ firstName: "desc" }, { lastName: "desc" }],
+  unit: [{ unit: "asc" }, { firstName: "asc" }, { lastName: "asc" }],
+  unit_desc: [{ unit: "desc" }, { firstName: "asc" }, { lastName: "asc" }],
+  recent: [{ createdAt: "desc" }],
+  oldest: [{ createdAt: "asc" }],
+};
+
+
 // Utilisateurs gérables (tout sauf PENDING/REJECTED — ces deux états sont gérés
 // via /admin/inscriptions). On expose ACTIVE et SUSPENDED ici.
-export async function listManageableUsers() {
+export async function listManageableUsers(filters: ManageableUserFilters = {}) {
   return db.user.findMany({
-    where: { status: { in: ["ACTIVE", "SUSPENDED"] } },
-    orderBy: [{ status: "asc" }, { firstName: "asc" }, { lastName: "asc" }],
+    where: buildManageableUserWhere(filters),
+    orderBy: USER_ORDER_BY[resolveUserSort(filters.sort)],
     select: {
       id: true,
       email: true,

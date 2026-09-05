@@ -22,7 +22,13 @@ http:
 
         # CSP minimaliste — adapter quand on ajoutera des CDN externes.
         # img-src : tuiles de carte (US-L02) — Esri (satellite), Carto (plan),
-        #   OSM. frame-src : carte OSM embarquée de la fiche lieu (US-L03).
+        #   OSM. frame-src : carte OSM embarquée de la fiche lieu (US-L03) et
+        #   lecteur vidéo de /empreinte-ia.
+        #
+        # youtube-nocookie.com et NON youtube.com : le domaine sans cookie ne
+        # dépose pas de traceur publicitaire. La page ne charge d'ailleurs le
+        # lecteur qu'après un clic (cf. VideoEmbed) — aucune requête ne part
+        # vers Google tant que le visiteur n'a rien demandé.
         contentSecurityPolicy: >-
           default-src 'self';
           img-src 'self' data: blob: https://*.arcgisonline.com https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org;
@@ -30,7 +36,7 @@ http:
           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
           script-src 'self' 'unsafe-inline';
           connect-src 'self';
-          frame-src https://www.openstreetmap.org;
+          frame-src https://www.openstreetmap.org https://www.youtube-nocookie.com;
           frame-ancestors 'none';
           base-uri 'self';
           form-action 'self';

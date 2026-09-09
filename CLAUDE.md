@@ -31,8 +31,33 @@ Gestionnaire de paquets : **pnpm**.
 
 **Vitest** (`pnpm test`, `pnpm test:watch`) couvre la logique pure : `src/lib/` (âge, permissions…)
 et les modules de calcul de `src/modules/*` (montants, tarifs…). Les Server Actions, les
-composants React et les accès Prisma **ne sont pas testés** : la vérification de ces couches
-reste `pnpm lint` + `pnpm typecheck` + exécution réelle du parcours dans l'app.
+composants React et les accès Prisma **ne sont pas testés** unitairement.
+
+### Boucle de vérification obligatoire
+
+| Couche | Preuve exigée avant de dire « fini » |
+|---|---|
+| `src/lib/`, calculs de `src/modules/*` | **TDD** : test Vitest rouge écrit **avant** le code, puis vert. |
+| Server Actions, composants, Prisma | `pnpm lint` + `pnpm typecheck`, **puis** parcours réel exécuté et observé — skill `webapp-testing` ou MCP `playwright`. |
+
+Ports et réseaux à viser (le principe hôte/conteneur est dans le CLAUDE.md global) :
+
+| Ce qui tourne | Depuis l'hôte | Depuis le conteneur MCP |
+|---|---|---|
+| `pnpm dev` | `localhost:3000` | `host.docker.internal:3000` |
+| `docker-compose.dev.yml` | `localhost:4000` (publie `4000:3000`, le 3000 hôte est exclu par Windows) | `host.docker.internal:4000` |
+| stack prod locale | `https://piloti.mathiscapart.xyz` — aucun port publié | `--network piloti_internal` puis `http://piloti-app-1:3000` |
+
+Le nom de service est `app` : depuis un navigateur c'est **inutilisable**, `app`
+est un TLD préchargé HSTS et Chromium force le HTTPS (`ERR_SSL_PROTOCOL_ERROR`).
+Viser le nom de conteneur `piloti-app-1`. `curl` et `fetch` ne sont pas concernés.
+
+Un `pnpm typecheck` vert ne prouve rien sur le comportement. Aucune Server Action
+n'est « finie » sans qu'un parcours l'ait traversée pour de vrai.
+
+**Next 16, Prisma 7, Tailwind v4 sont plus récents que mes données d'entraînement** :
+avant d'écrire contre une de leurs API, lis `node_modules/next/dist/docs/` ou
+interroge `context7`. Ne devine jamais une signature.
 
 ## 5. Invariants non négociables
 

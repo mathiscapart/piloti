@@ -46,14 +46,23 @@ pnpm dev           # http://localhost:3000
 
 **Premier lancement sans seed :** l'application redirige automatiquement vers `/setup` pour créer le compte administrateur (comme n8n). Pas besoin de seed en production.
 
-**Avec seed** — comptes de test disponibles :
+**Avec seed** — tous les comptes factices partagent le même mot de passe : celui de la variable d'environnement `SEED_PASSWORD` (sinon un mot de passe aléatoire, affiché en fin de `pnpm db:seed`). Comptes de test disponibles (liste non exhaustive — un chef par branche et douze familles supplémentaires sont aussi générés) :
 
-| Email | Mot de passe | Rôle | Statut |
+| Email | Rôle(s) | Statut | Connexion |
 |---|---|---|---|
-| `admin@piloti.fr` | `PilotiAdmin2024!` | Admin | Actif |
-| `thomas.martin@sgdf.fr` | `PilotiChef2024!` | Chef (Pios) | Actif |
-| `julie.bernard@sgdf.fr` | `PilotiChef2024!` | Chef (Bleus) | Actif |
-| `paul.durand@sgdf.fr` | `PilotiScout2024!` | Chef (Verts) | En attente |
+| `admin@piloti.fr` | Admin | Actif | Oui |
+| `thomas.martin@example.invalid` | Chef (Pionniers) | Actif | Oui |
+| `julie.bernard@example.invalid` | Chef (Scouts) | Actif | Oui |
+| `paul.durand@example.invalid` | Chef (Compagnons) | En attente | Non (compte non actif) |
+| `chef.farfadets@piloti.fr` | Chef (Farfadets) + Trésorier | Actif | Oui |
+| `rg@example.invalid` | Responsable de groupe | Actif | Oui |
+| `materiel@example.invalid` | Responsable matériel | Actif | Oui |
+| `secretaire@example.invalid` | Secrétaire | Actif | Oui |
+| `membre.local@example.invalid` | Membre du local | Actif | Oui |
+| `parent1@example.invalid`, `parent.test@example.invalid`… | Parent | Actif | Oui |
+| `jeune.pionnier@example.invalid` | Jeune (Pionniers, 16 ans) | Actif | Oui |
+| `jeune.compagnon@example.invalid` | Jeune (Compagnons, 19 ans) | Actif | Oui |
+| enfants `@piloti.invalid` (Farfadets/Louveteaux, < 15 ans) | Jeune | Actif | Non (US-CM-01 : géré par un parent) |
 
 ---
 

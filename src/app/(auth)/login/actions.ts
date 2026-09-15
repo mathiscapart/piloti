@@ -57,20 +57,5 @@ export async function signInAction(
 
   if (!user) return { error: "Erreur de connexion." };
 
-  // SAFE-01 — profil incomplet (pas de date de naissance). Les quatre chemins
-  // de création l'imposent (register, setup, createChildAccount, seed) : un
-  // compte ACTIVE sans date est une anomalie de données, pas une étape
-  // utilisateur. On refuse ici plutôt que de proposer un écran de complétion :
-  // cette date gouverne la protection des mineurs, elle ne se déclare pas en
-  // libre-service. Le message part avant tout redirect, donc l'utilisateur sait
-  // quoi faire ; le cookie de session posé par signInEmail sera balayé par le
-  // proxy à la première navigation (même branche que les comptes non-ACTIVE).
-  if (!user.birthDate) {
-    return {
-      error:
-        "Ce compte est incomplet (date de naissance manquante). Contacte un responsable pour la renseigner.",
-    };
-  }
-
   redirect("/dashboard");
 }

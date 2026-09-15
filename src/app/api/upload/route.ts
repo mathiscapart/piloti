@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canEnableLogin } from "@/lib/legal/age";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 
 export async function POST(request: Request) {
@@ -29,9 +30,14 @@ export async function POST(request: Request) {
   }
   const user = await db.user.findUnique({
     where: { id: session.user.id },
-    select: { status: true },
+    select: { status: true, canLogin: true, birthDate: true },
   });
-  if (!user || user.status !== "ACTIVE") {
+  if (
+    !user ||
+    user.status !== "ACTIVE" ||
+    user.canLogin === false ||
+    !canEnableLogin(user.birthDate)
+  ) {
     return NextResponse.json({ error: "Compte non actif." }, { status: 403 });
   }
 

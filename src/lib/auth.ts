@@ -154,9 +154,22 @@ export const auth = betterAuth({
                 "Ce compte est un compte enfant, géré par un parent. Un parent doit se connecter avec son propre compte pour agir en son nom.",
             });
           }
+          // SAFE-01 — profil incomplet (pas de date de naissance). Les quatre
+          // chemins de création l'imposent (register, setup,
+          // createChildAccount, seed) : un compte ACTIVE sans date est une
+          // anomalie de données, à traiter ici plutôt que de laisser une
+          // session s'ouvrir sur un profil que `canEnableLogin` refuserait
+          // de toute façon (fail-closed, date absente).
+          if (!user.birthDate) {
+            throw new APIError("FORBIDDEN", {
+              code: ACCOUNT_NOT_ACTIVE_CODE,
+              message:
+                "Ce compte est incomplet (date de naissance manquante). Contacte un responsable pour la renseigner.",
+            });
+          }
           // #122 — défense de dernier recours : un compte de moins de 15 ans
           // ne doit jamais obtenir de session, même si `canLogin` a été
-          // désynchronisé. Date absente refusée (fail-closed), cohérent avec proxy.ts.
+          // désynchronisé.
           if (!canEnableLogin(user.birthDate)) {
             throw new APIError("FORBIDDEN", {
               code: ACCOUNT_NOT_ACTIVE_CODE,

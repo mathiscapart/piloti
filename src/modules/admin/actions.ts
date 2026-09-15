@@ -16,7 +16,7 @@ import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
 import { can, canAssignRole, type Action } from "@/lib/permissions";
-import { ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
+import { ROLE_LABEL, ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -212,7 +212,11 @@ export async function approveUser(
   // d'encadrement, quand bien même l'acteur aurait le droit de l'attribuer.
   const assignable = assignableRolesForBirthDate(target.birthDate);
   if (roles.some((r) => !assignable.includes(r))) {
-    return { error: "Cette personne est mineure : seul le rôle Jeune peut lui être attribué." };
+    return {
+      error: target.birthDate
+        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
+        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
+    };
   }
 
   await withAudit(
@@ -358,7 +362,11 @@ export async function setUserRoles(
   // #122 — un mineur ne peut recevoir que le rôle Jeune.
   const assignable = assignableRolesForBirthDate(target?.birthDate);
   if (roles.some((r) => !assignable.includes(r))) {
-    return { error: "Cette personne est mineure : seul le rôle Jeune peut lui être attribué." };
+    return {
+      error: target?.birthDate
+        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
+        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
+    };
   }
 
   await withAudit(
@@ -458,10 +466,11 @@ export async function setUserBirthDate(
   // (assignableRolesForBirthDate le masquerait avant même de l'afficher).
   const currentRoles = parseRoles(target.roles);
   const newAssignable: string[] = assignableRolesForBirthDate(parsed.data.birthDate);
-  if (currentRoles.some((r) => !newAssignable.includes(r))) {
+  const toRemove = currentRoles.filter((r) => !newAssignable.includes(r));
+  if (toRemove.length > 0) {
+    const labels = toRemove.map((r) => ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r);
     return {
-      error:
-        "Cette date rend la personne mineure : retire d'abord ses rôles autres que Jeune.",
+      error: `Cette date rend la personne mineure : retire d'abord ses rôles autres que Jeune (${labels.join(", ")}).`,
     };
   }
 

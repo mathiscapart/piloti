@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { canEnableLogin } from "@/lib/legal/age";
 
 // US-P02 — flux iCal d'abonnement au calendrier. URL protégée par un jeton
 // (pas de cookie : les apps calendrier récupèrent l'URL sans session).
@@ -77,9 +78,14 @@ export async function GET(
 
   const user = await db.user.findUnique({
     where: { calendarToken: clean },
-    select: { id: true, status: true, unit: true },
+    select: { id: true, status: true, unit: true, canLogin: true, birthDate: true },
   });
-  if (!user || user.status !== "ACTIVE") {
+  if (
+    !user ||
+    user.status !== "ACTIVE" ||
+    user.canLogin === false ||
+    !canEnableLogin(user.birthDate)
+  ) {
     return new Response("Not found", { status: 404 });
   }
 

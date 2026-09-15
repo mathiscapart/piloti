@@ -1,5 +1,7 @@
 import "dotenv/config";
 
+import { randomBytes } from "node:crypto";
+
 import { auth } from "../src/lib/auth";
 import { db } from "../src/lib/db";
 import type { Unit } from "../src/lib/enums";
@@ -24,7 +26,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const now = Date.now();
 const daysFromNow = (d: number) => new Date(now + d * DAY_MS);
 
-const MOT_DE_PASSE = "PilotiJeune2024!";
+// Mot de passe des comptes factices. Un ancien mot de passe en clair a été
+// committé sur ce dépôt public (fuité définitivement) : comme `seed.ts`, on
+// passe par `SEED_PASSWORD`, sinon un mot de passe aléatoire affiché en fin
+// d'exécution.
+const MOT_DE_PASSE =
+  process.env.SEED_PASSWORD ?? `${randomBytes(12).toString("base64url")}aA1!`;
 
 interface JeuneInput {
   firstName: string;
@@ -65,8 +72,8 @@ const JEUNES: JeuneInput[] = [
 // de « refusé parce que le même chef ». Avec Marc, les deux chemins sont
 // exerçables : il confirme ce que Julie a proposé, Thomas (Pionniers) non.
 const CHEF_RENFORT = {
-  email: "marc.lambert@sgdf.fr",
-  password: "PilotiChef2024!",
+  email: "marc.lambert@example.invalid",
+  password: MOT_DE_PASSE,
   firstName: "Marc",
   lastName: "Lambert",
   unit: "SCOUTS" as Unit,
@@ -79,7 +86,7 @@ const CHEF_RENFORT = {
 // (US-S10), recevoir les notifications qui lui sont destinées.
 const PARENT = {
   email: "sophie.petit@parent.piloti.fr",
-  password: "PilotiParent2024!",
+  password: MOT_DE_PASSE,
   firstName: "Sophie",
   lastName: "Petit",
   birthDate: new Date("1986-04-03"),
@@ -206,8 +213,8 @@ async function main() {
 
   // ── Chefs déjà présents : ils signent les pointages et les propositions ────
   const [thomas, julie, admin] = await Promise.all([
-    db.user.findUnique({ where: { email: "thomas.martin@sgdf.fr" } }),
-    db.user.findUnique({ where: { email: "julie.bernard@sgdf.fr" } }),
+    db.user.findUnique({ where: { email: "thomas.martin@example.invalid" } }),
+    db.user.findUnique({ where: { email: "julie.bernard@example.invalid" } }),
     db.user.findUnique({ where: { email: "admin@piloti.fr" } }),
   ]);
   if (!thomas || !julie || !admin) {
@@ -506,8 +513,11 @@ async function main() {
   }
   console.log(`  ${validations} validations d'étape (dont 3 en attente de confirmation)`);
 
-  console.log("\n✓ Terminé. Comptes jeunes : mot de passe commun");
-  console.log(`  ${MOT_DE_PASSE} — ex. ${emailDe(JEUNES[0])}`);
+  console.log("\n✓ Terminé.");
+  if (!process.env.SEED_PASSWORD) {
+    console.log(`  Mot de passe des comptes jeunes : ${MOT_DE_PASSE} — ex. ${emailDe(JEUNES[0])}`);
+    console.log("  (généré aléatoirement — fixez SEED_PASSWORD pour le choisir)");
+  }
 }
 
 main()

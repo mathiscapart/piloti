@@ -62,6 +62,50 @@ describe("redactAuditMetadata", () => {
     expect(result).toBeNull();
   });
 
+  it("conserve montants, booléens et codes métier : l'historique comptable survit à l'effacement", () => {
+    // CAMPAIGN_PAYMENT — un parent supprimé ne doit pas faire disparaître le
+    // montant ni le mode de paiement : l'obligation comptable prime, et aucun
+    // de ces champs n'identifie la personne.
+    const payment = JSON.stringify({
+      campaignId: "c1",
+      userId: USER_ID,
+      amountCents: 4500,
+      method: "CHEQUE",
+    });
+    expect(redactAuditMetadata(payment, USER_ID)).toBeNull();
+
+    for (const flags of [
+      { eventId: "e1", userId: USER_ID, present: false },
+      { campaignId: "c1", userId: USER_ID, social: true },
+      { campaignId: "c1", userId: USER_ID, exempt: true },
+      { loanId: "l1", userId: USER_ID, quantity: 3 },
+    ]) {
+      expect(redactAuditMetadata(JSON.stringify(flags), USER_ID)).toBeNull();
+    }
+  });
+
+  it("conserve la trace de la purge automatique", () => {
+    const raw = JSON.stringify({
+      targetUserId: USER_ID,
+      mode: "anonymized",
+      trigger: "retention",
+    });
+    expect(redactAuditMetadata(raw, USER_ID)).toBeNull();
+  });
+
+  it("expurge une chaîne hors liste blanche mais garde les nombres voisins", () => {
+    const raw = JSON.stringify({
+      userId: USER_ID,
+      amountCents: 1200,
+      reason: "Marie ne peut pas payer ce mois-ci",
+    });
+    expect(JSON.parse(redactAuditMetadata(raw, USER_ID)!)).toEqual({
+      userId: USER_ID,
+      amountCents: 1200,
+      redacted: true,
+    });
+  });
+
   it("retourne null si aucune valeur de premier niveau ne référence l'utilisateur", () => {
     const raw = JSON.stringify({ placeId: "place_1", name: "Le Local" });
     expect(redactAuditMetadata(raw, USER_ID)).toBeNull();

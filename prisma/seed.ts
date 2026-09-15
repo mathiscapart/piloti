@@ -320,6 +320,31 @@ async function main() {
     phone: "06 11 22 33 44",
   });
 
+  // RGPD-05 (D-033) — deux inscriptions refusées pour recetter la rétention :
+  // l'une au-delà des 30 jours, anonymisée au premier passage du scheduler,
+  // l'autre récente, visible dans le filtre « Refusés ».
+  for (const rejected of [
+    { email: "hugo.leroy@example.invalid", firstName: "Hugo", lastName: "Leroy", daysAgo: 35 },
+    { email: "lea.fontaine@example.invalid", firstName: "Léa", lastName: "Fontaine", daysAgo: 5 },
+  ]) {
+    await seedUser({
+      email: rejected.email,
+      password: SEED_PASSWORD,
+      firstName: rejected.firstName,
+      lastName: rejected.lastName,
+      birthDate: new Date("1998-03-12"),
+      role: "CHEF",
+      status: "REJECTED",
+    });
+    await db.user.update({
+      where: { email: rejected.email },
+      data: {
+        rejectedAt: daysFromNow(-rejected.daysAgo),
+        rejectedReason: "Demande en doublon.",
+      },
+    });
+  }
+
   console.log("→ Création du matériel…");
   const canadienne1 = await db.equipment.create({
     data: {

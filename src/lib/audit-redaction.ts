@@ -13,7 +13,12 @@
 //     `mode` (ex. "anonymized"), `unit`/`assignedRoles`/`roles` (codes de
 //     branche/rôle, pas des noms), `fields` (noms de champs modifiés, pas leur
 //     valeur), `profileUpdated`/`canLoginEnabled` (booléens), `value` (statut
-//     de consentement), `response` (réponse RSVP).
+//     de consentement), `response` (réponse RSVP), et les codes métier issus
+//     d'enums (`method`, `category`, `kind`, `type`, `targetType`, `severity`,
+//     `condition`, `trigger`).
+//   - nombres et booléens (`amountCents`, `quantity`, `present`, `social`,
+//     `exempt`…) : toujours conservés. Ils portent l'historique comptable et
+//     de présence, qui doit survivre à l'effacement, et n'identifient personne.
 //   - tout le reste (`reason`, `from`, `to`, `name`…) est du texte libre ou une
 //     valeur personnelle (motif de refus, date de naissance…) et est retiré.
 const STRUCTURAL_KEYS = new Set([
@@ -26,10 +31,23 @@ const STRUCTURAL_KEYS = new Set([
   "canLoginEnabled",
   "value",
   "response",
+  "method",
+  "category",
+  "kind",
+  "type",
+  "targetType",
+  "severity",
+  "condition",
+  "trigger",
 ]);
 
-function isKeptKey(key: string): boolean {
-  return /Ids?$/.test(key) || STRUCTURAL_KEYS.has(key);
+function isKept(key: string, value: unknown): boolean {
+  return (
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    /Ids?$/.test(key) ||
+    STRUCTURAL_KEYS.has(key)
+  );
 }
 
 /**
@@ -57,7 +75,7 @@ export function redactAuditMetadata(rawMetadata: string, userId: string): string
   const kept: Record<string, unknown> = {};
   let changed = false;
   for (const [key, value] of entries) {
-    if (isKeptKey(key)) {
+    if (isKept(key, value)) {
       kept[key] = value;
     } else {
       changed = true;

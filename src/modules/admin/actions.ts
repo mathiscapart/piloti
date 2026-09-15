@@ -605,9 +605,14 @@ export async function deleteUser(
 
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { image: true },
+    select: { image: true, status: true },
   });
   if (!target) return { error: "Utilisateur introuvable." };
+  // Un second effacement réécrirait l'audit d'un compte déjà anonymisé (ex. un
+  // clic sur « Supprimer maintenant » juste après la purge automatique).
+  if (target.status === "DELETED") {
+    return { error: "Ce compte a déjà été supprimé." };
+  }
 
   // RGPD-04 — effacement réel : anonymise toute la PII (email, identité,
   // profil parent enrichi) et scrube le Consent lié, dans une même

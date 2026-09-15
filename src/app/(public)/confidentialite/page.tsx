@@ -153,6 +153,11 @@ export default function ConfidentialitePage() {
           mineurs : la preuve d&apos;un dossier de modération doit survivre à
           l&apos;effacement de son auteur.
         </p>
+        <p>
+          Une demande d&apos;inscription refusée est conservée 30 jours (le
+          temps d&apos;un recours ou d&apos;une nouvelle demande), puis
+          anonymisée automatiquement selon les mêmes principes.
+        </p>
       </section>
 
       <section className="space-y-2">

@@ -269,6 +269,7 @@ export async function rejectUser(
         data: {
           status: "REJECTED",
           rejectedReason: parsed.data.reason,
+          rejectedAt: new Date(),
         },
       }),
     {
@@ -508,6 +509,13 @@ export async function suspendUser(
   }
   const guard = await assertCanManageTarget(actor, parsed.data.userId);
   if (guard) return guard;
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { status: true },
+  });
+  if (target?.status !== "ACTIVE") {
+    return { error: "Seul un compte actif peut être suspendu." };
+  }
 
   await withAudit(
     (tx) =>
@@ -543,6 +551,13 @@ export async function reactivateUser(
   }
   const guard = await assertCanManageTarget(actor, parsed.data.userId);
   if (guard) return guard;
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { status: true },
+  });
+  if (target?.status !== "SUSPENDED") {
+    return { error: "Seul un compte suspendu peut être réactivé." };
+  }
 
   await withAudit(
     (tx) =>

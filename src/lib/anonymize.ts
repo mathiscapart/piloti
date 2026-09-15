@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { redactAuditMetadata } from "@/lib/audit-redaction";
 
 type Tx = Prisma.TransactionClient; // shorthand, cf. src/lib/audit.ts
 
@@ -13,7 +14,9 @@ const ERASED_BODY = "[Contenu effacé à la demande de son auteur]";
  * identifiants du consentement associé, tout en conservant la preuve de
  * consentement (type/version/date). Les prêts/incidents/audit historiques
  * restent intacts (cf. D-011) — seul le lien vers une personne identifiable
- * disparaît.
+ * disparaît. L'`AuditLog` lui-même n'est pas réécrit à la ligne près : seule
+ * sa `metadata` est expurgée de la PII qu'elle referme (cf. issue #94), sans
+ * jamais toucher l'action, la date ou l'auteur de l'entrée.
  *
  * Hors périmètre V1 : les notes pédagogiques (`PedagogicalNote.content`) ne
  * sont pas nettoyées, ni le texte libre `Equipment.notes` recopiant un nom de
@@ -136,4 +139,21 @@ export async function anonymizeUserInTx(tx: Tx, userId: string): Promise<void> {
     },
     data: { body: ERASED_BODY },
   });
+
+  // Issue #94 — l'entrée d'audit (action, date, auteur) reste : c'est la
+  // preuve qu'un effacement a eu lieu. Seule sa `metadata` peut porter de la
+  // PII en clair (ex. USER_REJECTED.reason, USER_BIRTHDATE_CHANGED.from/to).
+  // Présélection SQL large (juste un `contains`), tri fin dans la fonction
+  // pure `redactAuditMetadata` — qui décide vraiment si l'userId est référencé
+  // et ce qui doit rester lisible.
+  const candidateLogs = await tx.auditLog.findMany({
+    where: { metadata: { contains: userId } },
+    select: { id: true, metadata: true },
+  });
+  for (const log of candidateLogs) {
+    const redacted = redactAuditMetadata(log.metadata, userId);
+    if (redacted !== null) {
+      await tx.auditLog.update({ where: { id: log.id }, data: { metadata: redacted } });
+    }
+  }
 }

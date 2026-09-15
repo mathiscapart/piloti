@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
@@ -241,6 +242,11 @@ export default async function AdminAuditPage({ searchParams }: PageProps) {
                     <details className="mt-2 text-xs">
                       <summary className="cursor-pointer text-trail">
                         Détails
+                        {isRedacted(it.metadata) ? (
+                          <Badge variant="secondary" className="ml-2 align-middle">
+                            Expurgé (RGPD)
+                          </Badge>
+                        ) : null}
                       </summary>
                       <pre className="mt-1 overflow-x-auto rounded-lg bg-sand p-2 font-mono text-[11px] text-earth">
                         {prettyJson(it.metadata)}
@@ -285,5 +291,16 @@ function prettyJson(raw: string): string {
     return JSON.stringify(JSON.parse(raw), null, 2);
   } catch {
     return raw;
+  }
+}
+
+// Issue #94 — `anonymize.ts` marque `redacted: true` dès qu'il retire de la
+// PII de cette metadata (cf. src/lib/audit-redaction.ts).
+function isRedacted(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null && parsed.redacted === true;
+  } catch {
+    return false;
   }
 }

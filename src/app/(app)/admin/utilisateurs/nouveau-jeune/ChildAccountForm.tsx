@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NO_LOGIN_UNITS, UNIT_LABEL, type Unit } from "@/lib/enums";
+import { YOUTH_UNITS, UNIT_LABEL, type Unit } from "@/lib/enums";
 import { createChildAccount } from "@/modules/admin/actions";
 import type { listActiveParents } from "@/modules/family/queries";
 import type { ActionResult } from "@/lib/types";
@@ -17,7 +17,7 @@ interface ChildAccountFormProps {
   parents: Awaited<ReturnType<typeof listActiveParents>>;
 }
 
-// US-CM-01 — création d'un compte enfant (Farfadets/Louveteaux), sans
+// US-CM-01 — création d'un compte enfant (toutes branches jeunes), sans
 // connexion propre : géré par un parent, sélectionné parmi les comptes
 // PARENT actifs (jamais saisi en texte libre — élimine les fautes de frappe
 // sur l'enregistrement légal). D'autres parents restent rattachables ensuite
@@ -71,15 +71,15 @@ export function ChildAccountForm({ parents }: ChildAccountFormProps) {
             <option value="" disabled>
               Choisir une branche…
             </option>
-            {NO_LOGIN_UNITS.map((u) => (
+            {YOUTH_UNITS.map((u) => (
               <option key={u} value={u}>
                 {UNIT_LABEL[u as Unit]}
               </option>
             ))}
           </select>
           <p className="text-xs text-trail">
-            Réservé aux Farfadets et Louveteaux-Jeannettes : les autres
-            branches passent par l&apos;inscription habituelle.
+            Toutes branches jeunes, pour les moins de 15 ans : au-delà,
+            l&apos;inscription habituelle s&apos;applique.
           </p>
         </div>
         <div className="space-y-1.5">

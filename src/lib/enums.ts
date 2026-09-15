@@ -103,15 +103,17 @@ export const UNIT_LABEL: Record<Unit, string> = {
   ADULTES: "Adultes (responsables, local)",
 };
 
-// US-CM-01 — branches trop jeunes pour un compte autonome : le compte existe
-// (pour être rattaché à un matériel, une progression…) mais ne se connecte
-// jamais lui-même — un parent agit pour lui via son propre compte (FamilyLink).
-export const NO_LOGIN_UNITS = ["FARFADETS", "LOUVETEAUX"] as const;
-
-export function unitAllowsLogin(unit: Unit | string | null | undefined): boolean {
-  if (!unit) return true;
-  return !(NO_LOGIN_UNITS as readonly string[]).includes(unit);
-}
+// #114 — branches jeunes (toutes sauf ADULTES). Sert à proposer/valider les
+// branches d'un compte enfant : la règle « pas de connexion sous 15 ans » ne
+// dépend plus de la branche mais uniquement de l'âge (cf. src/lib/legal/age.ts,
+// canEnableLogin / canCreateChildAccount).
+export const YOUTH_UNITS = [
+  "FARFADETS",
+  "LOUVETEAUX",
+  "SCOUTS",
+  "PIONNIERS",
+  "COMPAGNONS",
+] as const;
 
 export const EQUIPMENT_CONDITIONS = [
   "NEUF",

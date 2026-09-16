@@ -41,6 +41,9 @@ model User {
   unit           String? // Unit: FARFADETS | LOUVETEAUX | SCOUTS | PIONNIERS | COMPAGNONS | ADULTES
   phone          String?
   rejectedReason String?
+  // RGPD — date de refus, sert de point de départ à la conservation de 30 j
+  // avant anonymisation automatique (cf. src/modules/admin/rejected-purge.ts).
+  rejectedAt     DateTime?
   // US-26 — profil demandé à l'inscription (ex. "PARENT") : simple indication
   // pour aider l'admin à attribuer le bon rôle à la validation. Non privilégié.
   requestedRole  String?

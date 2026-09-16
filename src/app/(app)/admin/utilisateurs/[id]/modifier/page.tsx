@@ -72,6 +72,7 @@ export default async function EditUserAccountPage({ params }: PageProps) {
   const isAdmin = can(currentUser, "admin.access");
   const isSelf = target.id === currentUser.id;
   const suspended = target.status === "SUSPENDED";
+  const active = target.status === "ACTIVE";
   const fullName = `${target.firstName} ${target.lastName}`;
 
   return (
@@ -129,12 +130,11 @@ export default async function EditUserAccountPage({ params }: PageProps) {
             allowPrivileged={isAdmin}
             allowedRoles={assignableRolesForBirthDate(target.birthDate)}
           />
-          {!isSelf && (
-            suspended ? (
-              <ReactivateButton userId={target.id} fullName={fullName} />
-            ) : (
-              <SuspendButton userId={target.id} fullName={fullName} />
-            )
+          {!isSelf && suspended && (
+            <ReactivateButton userId={target.id} fullName={fullName} />
+          )}
+          {!isSelf && active && (
+            <SuspendButton userId={target.id} fullName={fullName} />
           )}
           {!isSelf && <ChangePasswordDialog userId={target.id} fullName={fullName} />}
           {!isSelf && (

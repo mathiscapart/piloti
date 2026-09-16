@@ -547,3 +547,26 @@ La tâche relit le `.env.production` du répertoire de **déploiement** à chaqu
 Elle journalise chaque passage dans `piloti-backups/journal-<env>.log`, succès comme échec. Ce détail compte autant que la sauvegarde : une tâche planifiée qui cesse de fonctionner ne prévient personne, et c'est la panne la plus dangereuse — on continue de se croire protégé. Une ligne datée par jour rend le silence détectable.
 
 **Résidu connu** : la clé privée reste sur la machine sauvegardée tant que son propriétaire ne l'a pas déplacée. Tant qu'elle y est, la protection contre un rançongiciel est théorique — l'attaquant obtient la base ET de quoi déchiffrer les archives, y compris celles répliquées hors-site.
+
+## D-033 — RGPD-05 : un compte refusé est anonymisé après 30 jours, et l'anonymisation expurge l'audit
+
+**Contexte** : refuser une inscription passait le compte en `REJECTED` sans rien effacer (#124). Nom, email, date de naissance, IP et navigateur du consentement restaient en base sans finalité ni durée, parfois pour des mineurs de 15 à 17 ans. Le compte n'apparaissait dans aucune liste, et seule une URL tapée à la main permettait de le supprimer. Par ailleurs, l'anonymisation d'un compte laissait des données personnelles en clair dans `AuditLog.metadata` (#94) : la date de naissance avant et après correction (`USER_BIRTHDATE_CHANGED`) et le motif de refus (`USER_REJECTED`).
+
+**Options écartées** :
+- **Anonymiser dès le refus.** C'est l'option la plus simple, mais elle efface le motif que la personne lit à sa tentative de connexion, et elle ne laisse aucun délai pour un recours ou pour corriger un refus par erreur.
+- **90 jours.** Aucun besoin identifié ne justifie une fenêtre aussi longue.
+- **Liste noire des clés d'audit à expurger** (`from`, `to`, `reason`). Chaque nouvelle action qui écrirait une donnée personnelle sous un autre nom passerait au travers sans que personne s'en aperçoive.
+
+**Choix** :
+- `User.rejectedAt` date le refus. Un compte refusé depuis **30 jours** est anonymisé par le scheduler interne (`src/lib/scheduler.ts`) avec `anonymizeUserInTx`. L'`AuditLog` `USER_DELETED` porte `trigger: "retention"`. Aucun utilisateur système n'existe, donc l'auteur de l'entrée est le compte lui-même.
+- `/admin/utilisateurs` ajoute un filtre « Refusés », avec la date d'anonymisation prévue et un bouton « Supprimer maintenant ». `/confidentialite` indique la durée.
+- `anonymizeUserInTx` repasse, dans la même transaction, sur les entrées d'audit qui référencent la personne. Il ne garde que les clés d'une **liste blanche** (identifiants et valeurs structurelles), puis marque l'entrée `redacted: true`. L'entrée elle-même (action, date, auteur) est conservée : la trace « date corrigée par X le J » suffit comme preuve.
+
+**Conséquences** :
+- Le scheduler tourne dans le process Node : la purge a lieu au premier passage après un redémarrage. Si l'app reste arrêtée, la durée de 30 jours est dépassée d'autant.
+- **Au déploiement**, la migration remplit `rejectedAt` avec `updatedAt` pour les refus existants. Un compte refusé il y a plus de 30 jours est donc anonymisé au premier passage, sans délai de grâce. C'est voulu : ces données n'avaient déjà plus de raison d'être conservées.
+- Un compte refusé ne sort de `REJECTED` que par l'effacement. `suspendUser` n'accepte qu'un compte `ACTIVE`, et `reactivateUser` qu'un compte `SUSPENDED`. Sans ces verrous, le passage « Suspendre » puis « Réactiver » faisait entrer un inscrit refusé sans `user.approve`, et le soustrayait à la purge.
+- Toute nouvelle clé de `metadata` d'audit dont la valeur est une **chaîne** non personnelle doit être ajoutée à la liste blanche, sinon elle disparaît à l'anonymisation. Le défaut est donc protecteur. Les nombres et les booléens sont toujours conservés : montants, quantités, présences et exonérations relèvent de l'historique comptable et n'identifient personne.
+- **Limite connue** : seules les entrées d'audit dont une valeur de premier niveau vaut l'id de la personne sont expurgées. Un texte libre qui la nomme sans porter son id (note d'incident, `Equipment.notes`…) n'est pas nettoyé, dans la continuité des résidus déjà consignés en D-011.
+- `deleteUser` refuse un compte déjà `DELETED` : un second effacement réécrirait l'audit et ferait disparaître la mention de la purge automatique.
+- Les actions continuent d'écrire des données personnelles brutes dans l'audit tant que la personne existe. Ne plus les écrire du tout est une piste distincte, non traitée ici.

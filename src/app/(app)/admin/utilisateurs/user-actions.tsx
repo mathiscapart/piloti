@@ -395,6 +395,7 @@ export function DeleteUserButton({
   userId,
   fullName,
   redirectTo,
+  label = "Supprimer",
 }: {
   userId: string;
   fullName: string;
@@ -402,6 +403,9 @@ export function DeleteUserButton({
   // le compte supprimé, cette page n'a plus de cible, on redirige plutôt que
   // de laisser un simple router.refresh() sur une route désormais invalide.
   redirectTo?: string;
+  // Libellé du bouton (ex. « Supprimer maintenant » pour un compte REJECTED
+  // déjà voué à l'anonymisation automatique).
+  label?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -436,7 +440,7 @@ export function DeleteUserButton({
       className="text-brick hover:bg-brick-soft hover:text-brick-ink"
     >
       <Trash2 className="size-4" />
-      {pending ? "…" : "Supprimer"}
+      {pending ? "…" : label}
     </Button>
   );
 }

@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 // titulaire du compte : ce gabarit-ci vit hors de `notificationEmailHtml()`,
 // il doit donc échapper lui-même.
 import { escapeHtml } from "@/lib/email";
+import { canEnableLogin } from "@/lib/legal/age";
 
 // SEC-08 (Vuln 4) — code d'erreur porté par l'APIError du hook
 // `session.create.before` ci-dessous, repris tel quel par
@@ -134,7 +135,7 @@ export const auth = betterAuth({
         before: async (session) => {
           const user = await db.user.findUnique({
             where: { id: session.userId },
-            select: { status: true, canLogin: true, rejectedReason: true },
+            select: { status: true, canLogin: true, rejectedReason: true, birthDate: true },
           });
           if (!user || user.status !== "ACTIVE") {
             const message =
@@ -151,6 +152,29 @@ export const auth = betterAuth({
               code: ACCOUNT_NOT_ACTIVE_CODE,
               message:
                 "Ce compte est un compte enfant, géré par un parent. Un parent doit se connecter avec son propre compte pour agir en son nom.",
+            });
+          }
+          // SAFE-01 — profil incomplet (pas de date de naissance). Les quatre
+          // chemins de création l'imposent (register, setup,
+          // createChildAccount, seed) : un compte ACTIVE sans date est une
+          // anomalie de données, à traiter ici plutôt que de laisser une
+          // session s'ouvrir sur un profil que `canEnableLogin` refuserait
+          // de toute façon (fail-closed, date absente).
+          if (!user.birthDate) {
+            throw new APIError("FORBIDDEN", {
+              code: ACCOUNT_NOT_ACTIVE_CODE,
+              message:
+                "Ce compte est incomplet (date de naissance manquante). Contacte un responsable pour la renseigner.",
+            });
+          }
+          // #122 — défense de dernier recours : un compte de moins de 15 ans
+          // ne doit jamais obtenir de session, même si `canLogin` a été
+          // désynchronisé.
+          if (!canEnableLogin(user.birthDate)) {
+            throw new APIError("FORBIDDEN", {
+              code: ACCOUNT_NOT_ACTIVE_CODE,
+              message:
+                "Ce compte appartient à un jeune de moins de 15 ans : un parent doit se connecter avec son propre compte pour agir en son nom.",
             });
           }
         },

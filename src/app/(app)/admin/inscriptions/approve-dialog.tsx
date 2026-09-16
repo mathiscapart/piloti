@@ -30,6 +30,9 @@ interface Props {
   allowPrivileged?: boolean;
   // US-26 — rôle demandé à l'inscription (ex. "PARENT") : pré-sélectionné.
   requestedRole?: string | null;
+  // #122 — personne mineure : seul le rôle Jeune est attribuable (cf.
+  // assignableRolesForBirthDate).
+  minor?: boolean;
 }
 
 export function ApproveDialog({
@@ -37,18 +40,24 @@ export function ApproveDialog({
   fullName,
   allowPrivileged = true,
   requestedRole = null,
+  minor = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const preselected = minor
+    ? ["SCOUT"]
+    : requestedRole
+      ? [requestedRole]
+      : [];
   const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(requestedRole ? [requestedRole] : []),
+    () => new Set(preselected),
   );
   const [unit, setUnit] = useState<string>("");
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
   const visibleRoles = ROLES.filter(
-    (r) => allowPrivileged || !PRIVILEGED_ROLES.has(r),
+    (r) => (allowPrivileged || !PRIVILEGED_ROLES.has(r)) && (!minor || r === "SCOUT"),
   );
 
   function toggle(role: string) {
@@ -90,7 +99,7 @@ export function ApproveDialog({
       onOpenChange={(next) => {
         if (!next) {
           setError(null);
-          setSelected(new Set(requestedRole ? [requestedRole] : []));
+          setSelected(new Set(preselected));
           setUnit("");
         }
         setOpen(next);
@@ -109,7 +118,11 @@ export function ApproveDialog({
             {fullName} pourra se connecter avec le(s) rôle(s) choisi(s).
           </DialogDescription>
         </DialogHeader>
-        {requestedRole ? (
+        {minor ? (
+          <p className="rounded-lg bg-brick-soft px-3 py-2 text-xs font-medium text-brick-ink">
+            Personne mineure : seul le rôle Jeune est attribuable.
+          </p>
+        ) : requestedRole ? (
           <p className="rounded-lg bg-sky-soft px-3 py-2 text-xs font-medium text-sky-ink">
             Inscrit comme <strong>{ROLE_LABEL[requestedRole as Role] ?? requestedRole}</strong> — rôle pré-sélectionné.
           </p>

@@ -28,6 +28,14 @@ export async function listPendingUsers() {
       phone: true,
       requestedRole: true,
       createdAt: true,
+      // #122 — âge et responsable légal affichés à la validation.
+      birthDate: true,
+      consents: {
+        where: { type: "PARENTAL" },
+        orderBy: { acceptedAt: "desc" },
+        take: 1,
+        select: { guardianName: true },
+      },
     },
   });
 }

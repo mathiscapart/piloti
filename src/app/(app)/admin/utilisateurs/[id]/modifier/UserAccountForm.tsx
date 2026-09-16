@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { canEnableLogin } from "@/lib/legal/age";
 import { updateUserAccount } from "@/modules/admin/actions";
 import type { ActionResult } from "@/lib/types";
 
@@ -20,6 +21,7 @@ interface UserAccountFormProps {
     email: string;
     phone: string | null;
     canLogin: boolean;
+    birthDate: string | null;
   };
 }
 
@@ -77,8 +79,10 @@ export function UserAccountForm({ user }: UserAccountFormProps) {
       {user.canLogin === false ? (
         <p className="rounded-md border border-forest/30 bg-forest-soft px-3 py-2 text-sm text-forest-ink">
           Ce compte n&apos;a pas de connexion propre (compte enfant, cf.
-          US-CM-01). Renseigner une vraie adresse email ici rendra ce compte
-          connectable.
+          US-CM-01).{" "}
+          {canEnableLogin(user.birthDate)
+            ? "Renseigner une vraie adresse email ici rendra ce compte connectable."
+            : "Ce jeune a moins de 15 ans : son compte reste géré par un parent, il ne peut pas devenir connectable."}
         </p>
       ) : null}
 

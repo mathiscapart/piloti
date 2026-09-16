@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { db } from "@/lib/db";
+import { assignableRolesForBirthDate } from "@/lib/legal/age";
 import { can, canAssignRole } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import {
@@ -105,6 +106,7 @@ export default async function EditUserAccountPage({ params }: PageProps) {
           email: target.email,
           phone: target.phone,
           canLogin: target.canLogin,
+          birthDate: toDateInput(target.birthDate),
         }}
       />
 
@@ -125,6 +127,7 @@ export default async function EditUserAccountPage({ params }: PageProps) {
             userId={target.id}
             currentRoles={roles}
             allowPrivileged={isAdmin}
+            allowedRoles={assignableRolesForBirthDate(target.birthDate)}
           />
           {!isSelf && (
             suspended ? (

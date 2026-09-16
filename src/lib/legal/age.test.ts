@@ -4,13 +4,17 @@
 // ou invalide : c'est la garantie anti-contournement du module.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ROLES } from "../enums";
 import {
   DIRECT_MESSAGE_MIN_AGE,
   MAJORITY_AGE,
   MAX_PLAUSIBLE_AGE,
   MIN_PLAUSIBLE_AGE,
   PARENTAL_CONSENT_AGE,
+  assignableRolesForBirthDate,
   birthDateSchema,
+  canCreateChildAccount,
+  canEnableLogin,
   canUseDirectMessages,
   computeAge,
   isAdult,
@@ -269,5 +273,101 @@ describe("canSelfRegister (US-CM-04)", () => {
     expect(canSelfRegister(undefined)).toBe(false);
     expect(canSelfRegister("")).toBe(false);
     expect(canSelfRegister("pas-une-date")).toBe(false);
+  });
+});
+
+// #122/#114 — un compte de moins de 15 ans ne doit jamais pouvoir se connecter,
+// quelle que soit sa branche. La règle qui l'autorisait dépendait auparavant de
+// l'unité (NO_LOGIN_UNITS) : elle dépend désormais uniquement de l'âge.
+describe("canEnableLogin (#122)", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  it("refuse en dessous de 15 ans", () => {
+    setToday(2024, 6, 15);
+    expect(canEnableLogin(d(2014, 6, 15))).toBe(false); // 10 ans
+    expect(canEnableLogin(d(2009, 6, 16))).toBe(false); // 14 ans, veille des 15 ans
+  });
+
+  it("autorise à partir de 15 ans pile", () => {
+    setToday(2024, 6, 15);
+    expect(canEnableLogin(d(2009, 6, 15))).toBe(true); // 15 ans jour J
+    expect(canEnableLogin(d(2008, 6, 15))).toBe(true); // 16 ans
+  });
+
+  it("fail-closed sur date inconnue ou invalide", () => {
+    expect(canEnableLogin(null)).toBe(false);
+    expect(canEnableLogin(undefined)).toBe(false);
+    expect(canEnableLogin("")).toBe(false);
+    expect(canEnableLogin("pas-une-date")).toBe(false);
+  });
+});
+
+// #122/#96 — un compte enfant (créé par un parent/chef) n'est proposé que pour
+// une branche jeune et un âge sous MIN_LOGIN_AGE : au-delà, c'est un compte
+// autonome (canEnableLogin), pas un compte enfant.
+describe("canCreateChildAccount (#114)", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  it("autorise pour une branche jeune, âge sous 15 ans", () => {
+    setToday(2024, 6, 15);
+    expect(canCreateChildAccount(d(2012, 6, 15), "SCOUTS")).toBe(true); // 12 ans
+    expect(canCreateChildAccount(d(2010, 6, 15), "PIONNIERS")).toBe(true); // 14 ans
+    expect(canCreateChildAccount(d(2016, 6, 15), "LOUVETEAUX")).toBe(true); // 8 ans
+    expect(canCreateChildAccount(d(2017, 6, 15), "FARFADETS")).toBe(true); // 7 ans
+  });
+
+  it("refuse dès 15 ans, même en branche jeune", () => {
+    setToday(2024, 6, 15);
+    expect(canCreateChildAccount(d(2009, 6, 15), "PIONNIERS")).toBe(false); // 15 ans jour J
+    expect(canCreateChildAccount(d(2008, 6, 15), "PIONNIERS")).toBe(false); // 16 ans
+  });
+
+  it("refuse pour une branche adulte, quel que soit l'âge", () => {
+    setToday(2024, 6, 15);
+    expect(canCreateChildAccount(d(2012, 6, 15), "ADULTES")).toBe(false); // 12 ans
+  });
+
+  it("refuse si l'unité est absente ou inconnue", () => {
+    setToday(2024, 6, 15);
+    expect(canCreateChildAccount(d(2012, 6, 15), null)).toBe(false);
+    expect(canCreateChildAccount(d(2012, 6, 15), undefined)).toBe(false);
+    expect(canCreateChildAccount(d(2012, 6, 15), "")).toBe(false);
+    expect(canCreateChildAccount(d(2012, 6, 15), "INCONNUE")).toBe(false);
+  });
+
+  it("refuse sur date de naissance inconnue", () => {
+    expect(canCreateChildAccount(null, "SCOUTS")).toBe(false);
+  });
+});
+
+// #122 — les rôles proposables à la création/modification d'un compte suivent
+// la majorité légale : un mineur ne peut se voir attribuer que SCOUT, jamais
+// un rôle d'encadrement (CHEF, TRESORIER…) ni ADMIN.
+describe("assignableRolesForBirthDate (#122)", () => {
+  beforeEach(() => vi.useFakeTimers());
+
+  it("ne propose que SCOUT en dessous de 18 ans", () => {
+    setToday(2024, 6, 15);
+    const roles16 = assignableRolesForBirthDate(d(2008, 6, 15)); // 16 ans
+    expect(roles16).toEqual(["SCOUT"]);
+    expect(roles16).not.toContain("CHEF");
+    expect(roles16).not.toContain("TRESORIER");
+
+    const rolesVeille18 = assignableRolesForBirthDate(d(2006, 6, 16)); // 17 ans, veille des 18 ans
+    expect(rolesVeille18).toEqual(["SCOUT"]);
+  });
+
+  it("propose tous les rôles à partir de 18 ans pile", () => {
+    setToday(2024, 6, 15);
+    const roles = assignableRolesForBirthDate(d(2006, 6, 15)); // 18 ans jour J
+    expect(roles).toContain("CHEF");
+    expect(roles).toContain("TRESORIER");
+    expect(roles).toContain("SECRETAIRE");
+    expect(roles).toContain("ADMIN");
+    expect(roles).toEqual(ROLES);
+  });
+
+  it("fail-closed sur date inconnue — seul SCOUT reste proposable", () => {
+    expect(assignableRolesForBirthDate(null)).toEqual(["SCOUT"]);
   });
 });

@@ -11,12 +11,12 @@ import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { birthDateSchema } from "@/lib/legal/age";
+import { assignableRolesForBirthDate, birthDateSchema, canCreateChildAccount, canEnableLogin } from "@/lib/legal/age";
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
 import { can, canAssignRole, type Action } from "@/lib/permissions";
-import { NO_LOGIN_UNITS, ROLES, UNITS } from "@/lib/enums";
+import { ROLE_LABEL, ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -80,13 +80,15 @@ const userIdSchema = z.object({
   userId: z.string().min(1),
 });
 
-// US-CM-01 — création d'un compte enfant (Farfadets/Louveteaux) sans
+// US-CM-01/#96 — création d'un compte enfant (toute branche jeune) sans
 // connexion propre, avec attestation de consentement parental reçue hors
-// ligne (formulaire papier existant, non tracé jusqu'ici pour ce flux).
+// ligne (formulaire papier existant, non tracé jusqu'ici pour ce flux). La
+// branche seule ne suffit plus à décider : #114/#96 exigent aussi l'âge
+// (canCreateChildAccount, vérifié après le parse ci-dessous).
 const childAccountSchema = z.object({
   firstName: z.string().trim().min(1, "Prénom requis."),
   lastName: z.string().trim().min(1, "Nom requis."),
-  unit: z.enum(NO_LOGIN_UNITS, "Branche invalide : Farfadets ou Louveteaux uniquement."),
+  unit: z.enum(YOUTH_UNITS, "Branche invalide."),
   birthDate: birthDateSchema,
   // US-CM-01 (correctif PO) — sélectionné parmi les comptes PARENT existants,
   // jamais saisi en texte libre : élimine les fautes de frappe sur un
@@ -196,7 +198,7 @@ export async function approveUser(
   if (guard) return guard;
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { status: true },
+    select: { status: true, birthDate: true },
   });
   if (target?.status !== "PENDING") {
     return { error: "Cette inscription n'est plus en attente de validation." };
@@ -205,6 +207,17 @@ export async function approveUser(
   const roles = [...new Set(parsed.data.roles)];
   const escalation = assertAssignable(actor, roles);
   if (escalation) return escalation;
+
+  // #122 — un mineur ne peut recevoir que le rôle Jeune, jamais un rôle
+  // d'encadrement, quand bien même l'acteur aurait le droit de l'attribuer.
+  const assignable = assignableRolesForBirthDate(target.birthDate);
+  if (roles.some((r) => !assignable.includes(r))) {
+    return {
+      error: target.birthDate
+        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
+        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
+    };
+  }
 
   await withAudit(
     (tx) =>
@@ -326,11 +339,11 @@ export async function setUserRoles(
 
   // …ni retirer un rôle sensible existant (sinon il pourrait rétrograder un
   // ADMIN/RG). On vérifie l'état actuel de la cible.
+  const target = await db.user.findUnique({
+    where: { id: parsed.data.userId },
+    select: { roles: true, birthDate: true },
+  });
   if (!can(actor, "admin.access")) {
-    const target = await db.user.findUnique({
-      where: { id: parsed.data.userId },
-      select: { roles: true },
-    });
     let current: string[] = [];
     try {
       const p = JSON.parse(target?.roles ?? "[]");
@@ -344,6 +357,16 @@ export async function setUserRoles(
           "Tu ne peux pas modifier les rôles d'un compte ADMIN ou Responsable de groupe.",
       };
     }
+  }
+
+  // #122 — un mineur ne peut recevoir que le rôle Jeune.
+  const assignable = assignableRolesForBirthDate(target?.birthDate);
+  if (roles.some((r) => !assignable.includes(r))) {
+    return {
+      error: target?.birthDate
+        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
+        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
+    };
   }
 
   await withAudit(
@@ -410,10 +433,14 @@ export async function setUserUnit(
 // titulaire, donc une faute de frappe à l'inscription exige une intervention
 // d'administrateur. Les métadonnées conservent l'ancienne ET la nouvelle
 // valeur, sans quoi la trace ne dirait pas ce qui a changé.
+// #122 — si la nouvelle date fait passer le compte sous 15 ans, la connexion
+// est désactivée dans la même transaction (comme un compte enfant) : sessions
+// et credential révoqués, sans quoi un compte resterait connectable alors que
+// sa date de naissance dit le contraire.
 export async function setUserBirthDate(
   _prev: ActionResult,
   formData: FormData,
-): Promise<ActionResult> {
+): Promise<ActionResult & { notice?: string }> {
   const actor = await ensureCan("user.manage");
   if ("error" in actor) return actor;
 
@@ -429,16 +456,42 @@ export async function setUserBirthDate(
 
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { birthDate: true },
+    select: { birthDate: true, canLogin: true, roles: true },
   });
   if (!target) return { error: "Compte introuvable." };
 
+  // #122 — une date qui rend la personne mineure ne doit jamais être posée
+  // tant qu'elle porte encore un rôle d'encadrement : sinon un mineur se
+  // retrouve avec un rôle que plus aucun formulaire ne peut lui retirer
+  // (assignableRolesForBirthDate le masquerait avant même de l'afficher).
+  const currentRoles = parseRoles(target.roles);
+  const newAssignable: string[] = assignableRolesForBirthDate(parsed.data.birthDate);
+  const toRemove = currentRoles.filter((r) => !newAssignable.includes(r));
+  if (toRemove.length > 0) {
+    const labels = toRemove.map((r) => ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r);
+    return {
+      error: `Cette date rend la personne mineure : retire d'abord ses rôles autres que Jeune (${labels.join(", ")}).`,
+    };
+  }
+
+  const loginDisabled = target.canLogin !== false && !canEnableLogin(parsed.data.birthDate);
+
   await withAudit(
-    (tx) =>
-      tx.user.update({
+    async (tx) => {
+      await tx.user.update({
         where: { id: parsed.data.userId },
-        data: { birthDate: parsed.data.birthDate },
-      }),
+        data: {
+          birthDate: parsed.data.birthDate,
+          ...(loginDisabled ? { canLogin: false } : {}),
+        },
+      });
+      if (loginDisabled) {
+        await tx.session.deleteMany({ where: { userId: parsed.data.userId } });
+        await tx.account.deleteMany({
+          where: { userId: parsed.data.userId, providerId: "credential" },
+        });
+      }
+    },
     {
       action: "USER_BIRTHDATE_CHANGED",
       userId: actor.id,
@@ -446,13 +499,22 @@ export async function setUserBirthDate(
         targetUserId: parsed.data.userId,
         from: target.birthDate?.toISOString() ?? null,
         to: parsed.data.birthDate.toISOString(),
+        ...(loginDisabled ? { loginDisabled: true } : {}),
       },
     },
   );
 
   revalidatePath("/admin/utilisateurs");
   revalidatePath(`/membres/${parsed.data.userId}`);
-  return { error: null };
+  return {
+    error: null,
+    ...(loginDisabled
+      ? {
+          notice:
+            "Ce jeune a moins de 15 ans : sa connexion est désactivée et son compte est désormais géré par un parent.",
+        }
+      : {}),
+  };
 }
 
 // US-26 — met à jour le profil parent enrichi (profession, compétences,
@@ -665,6 +727,19 @@ export async function changeUserPassword(
     };
   }
 
+  // #122 — sans credential existant, `updateMany` ci-dessous ne modifierait
+  // aucune ligne mais renverrait quand même { error: null } : un faux succès.
+  const credential = await db.account.findFirst({
+    where: { userId: parsed.data.userId, providerId: "credential" },
+    select: { id: true },
+  });
+  if (!credential) {
+    return {
+      error:
+        "Ce compte n'a pas encore d'identifiant de connexion : la personne doit passer par « Mot de passe oublié ».",
+    };
+  }
+
   const hashed = await hashWithBetterAuth(parsed.data.password);
 
   await withAudit(
@@ -692,11 +767,12 @@ export async function changeUserPassword(
 
 const PLACEHOLDER_EMAIL_SUFFIX = "@piloti.invalid";
 
-// US-CM-01 (évolution) — édition complète d'un compte par l'admin/secrétaire.
-// Cas d'usage clé : un compte enfant (canLogin: false) grandit et passe en
-// branche Scouts-Guides ou au-dessus → on lui renseigne une vraie adresse
-// email ici, ce qui bascule AUTOMATIQUEMENT canLogin à true (pas de case à
-// cocher séparée : c'est le renseignement d'une vraie adresse qui décide).
+// US-CM-01 (évolution) / #122 — édition complète d'un compte par
+// l'admin/secrétaire. Cas d'usage clé : un compte enfant (canLogin: false)
+// grandit → on lui renseigne une vraie adresse email ici, ce qui bascule
+// AUTOMATIQUEMENT canLogin à true (pas de case à cocher séparée : c'est le
+// renseignement d'une vraie adresse qui décide) — mais seulement si la
+// personne a désormais l'âge de se connecter (#122) : sinon, refus.
 const updateAccountSchema = z.object({
   userId: z.string().min(1),
   firstName: z.string().trim().min(1, "Prénom requis."),
@@ -731,21 +807,50 @@ export async function updateUserAccount(
 
   const { userId, firstName, lastName, email, phone } = parsed.data;
 
+  // #122 — un compte enfant (canLogin: false) ne peut recevoir une NOUVELLE
+  // adresse email réelle que si la personne a désormais l'âge de se
+  // connecter : sinon la fiche reste gérée par un parent. Ne se déclenche que
+  // si l'email CHANGE vers une adresse réelle, sinon un compte rajeuni dont
+  // l'email réel est déjà en place (donc inchangé) ne serait plus jamais
+  // éditable. Contrôle avant toute écriture ; revérifié en transaction (b) car
+  // relu ici avant le verrou, donc sujet à TOCTOU sur canLogin/birthDate.
+  const targetBeforeUpdate = await db.user.findUnique({
+    where: { id: userId },
+    select: { canLogin: true, birthDate: true, email: true },
+  });
+  if (
+    targetBeforeUpdate?.canLogin === false &&
+    targetBeforeUpdate.email !== email &&
+    !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
+    !canEnableLogin(targetBeforeUpdate.birthDate)
+  ) {
+    return {
+      error:
+        "Ce jeune a moins de 15 ans : son compte reste géré par un parent et ne peut pas recevoir d'adresse email de connexion.",
+    };
+  }
+
   try {
     await withAudit(
       async (tx) => {
         const target = await tx.user.findUnique({
           where: { id: userId },
-          select: { canLogin: true, email: true },
+          select: { canLogin: true, email: true, birthDate: true },
         });
         if (!target) throw new Error("Utilisateur introuvable.");
 
         const emailChanged = target.email !== email;
         // US-CM-01 — un compte enfant devient connectable dès qu'on lui
         // renseigne une vraie adresse (qui ne correspond plus au pattern
-        // placeholder), sans case à cocher séparée.
+        // placeholder), sans case à cocher séparée — mais seulement si l'âge
+        // de connexion est atteint (#122) : relu ici en transaction plutôt
+        // qu'à partir de la lecture préalable, sinon une simple édition du
+        // téléphone (avec l'email réel déjà en place) réactiverait la
+        // connexion d'un compte rajeuni entre-temps (TOCTOU).
         const canLoginEnabled =
-          target.canLogin === false && !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX);
+          target.canLogin === false &&
+          !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
+          canEnableLogin(target.birthDate);
 
         return {
           user: await tx.user.update({
@@ -790,8 +895,9 @@ export async function updateUserAccount(
 // /admin/utilisateurs/nouveau-jeune (US-CM-01)
 // ----------------------------------------------------------------------------
 
-// US-CM-01 — crée un compte « enfant » (Farfadets/Louveteaux) sans connexion
-// propre, rattaché dans la foulée au compte PARENT sélectionné (FamilyLink) :
+// US-CM-01/#96 — crée un compte « enfant » (branche jeune, moins de 15 ans)
+// sans connexion propre, rattaché dans la foulée au compte PARENT sélectionné
+// (FamilyLink) :
 // d'autres parents restent rattachables ensuite depuis la fiche membre.
 // Réplique le pattern de register/actions.ts (User + Consent + FamilyLink
 // dans la même transaction withAudit), mais sans passer par
@@ -817,6 +923,15 @@ export async function createChildAccount(
 
   const { firstName, lastName, unit, birthDate, guardianUserId, attestationDate } =
     parsed.data;
+
+  // #96 — le compte sans connexion est réservé aux moins de 15 ans : au-delà,
+  // même en branche jeune, la personne s'inscrit elle-même (canSelfRegister).
+  if (!canCreateChildAccount(birthDate, unit)) {
+    return {
+      error:
+        "Le compte sans connexion est réservé aux jeunes de moins de 15 ans : au-delà, la personne s'inscrit elle-même.",
+    };
+  }
   // Email placeholder, jamais utilisé pour l'authentification (le compte n'a
   // pas de credential : canLogin: false + aucun Account créé).
   const placeholderEmail = `enfant-${crypto.randomUUID()}${PLACEHOLDER_EMAIL_SUFFIX}`;

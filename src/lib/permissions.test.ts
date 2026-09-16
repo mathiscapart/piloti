@@ -422,3 +422,36 @@ describe("can — member.family.manage", () => {
     ).toBe(false);
   });
 });
+
+describe("canActOnUnit — rattachement familial borné à la branche du jeune (#83)", () => {
+  const chef = (unit: string | null) =>
+    ({ role: "CHEF", roles: ["CHEF"], unit, status: "ACTIVE" as const });
+  const active = (roles: string[]) =>
+    ({ role: roles[0], roles, unit: null, status: "ACTIVE" as const });
+
+  it("autorise un chef sur un jeune de sa branche", () => {
+    expect(canActOnUnit(chef("PIONNIERS"), "member.family.manage", "PIONNIERS")).toBe(true);
+  });
+
+  it("refuse un chef sur un jeune d'une autre branche", () => {
+    expect(canActOnUnit(chef("PIONNIERS"), "member.family.manage", "COMPAGNONS")).toBe(false);
+  });
+
+  it("fail-closed : chef sans branche, ou jeune sans branche", () => {
+    expect(canActOnUnit(chef(null), "member.family.manage", "PIONNIERS")).toBe(false);
+    expect(canActOnUnit(chef("PIONNIERS"), "member.family.manage", null)).toBe(false);
+  });
+
+  it.each([["SECRETAIRE"], ["RESPONSABLE_GROUPE"], ["ADMIN"]])(
+    "ne borne pas %s, quelle que soit la branche",
+    (role) => {
+      expect(canActOnUnit(active([role]), "member.family.manage", "COMPAGNONS")).toBe(true);
+      expect(canActOnUnit(active([role]), "member.family.manage", null)).toBe(true);
+    },
+  );
+
+  it("ne borne pas un compte CHEF + SECRÉTAIRE", () => {
+    const chefSec = { role: "CHEF", roles: ["CHEF", "SECRETAIRE"], unit: "PIONNIERS", status: "ACTIVE" as const };
+    expect(canActOnUnit(chefSec, "member.family.manage", "COMPAGNONS")).toBe(true);
+  });
+});

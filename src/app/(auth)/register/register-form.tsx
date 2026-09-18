@@ -19,6 +19,7 @@ import { UNITS } from "@/lib/enums";
 // RGPD-02 / US-CM-04 — le bloc parental et le refus d'âge suivent exactement les
 // mêmes seuils que la Server Action, depuis la source unique `src/lib/legal/age`.
 import {
+  birthDateSchema,
   canSelfRegister,
   MIN_LOGIN_AGE,
   requiresParentalConsent,
@@ -47,8 +48,14 @@ export function RegisterForm() {
   // US-CM-04 — en dessous de MIN_LOGIN_AGE, aucune inscription en ligne : on
   // l'annonce dès la saisie de la date plutôt que de laisser remplir tout le
   // formulaire pour un refus final. Tant que le champ est vide, on ne juge rien.
-  const tropJeune = birthDate !== "" && !canSelfRegister(birthDate);
-  const minor = !tropJeune && requiresParentalConsent(birthDate);
+  // Une date invalide (future, invraisemblable) prime sur la règle d'âge, comme
+  // côté serveur : un âge négatif n'est pas « trop jeune », c'est une erreur de saisie.
+  const dateError =
+    birthDate === ""
+      ? null
+      : (birthDateSchema.safeParse(birthDate).error?.issues[0]?.message ?? null);
+  const tropJeune = birthDate !== "" && !dateError && !canSelfRegister(birthDate);
+  const minor = !dateError && !tropJeune && requiresParentalConsent(birthDate);
 
   if (state.success) {
     return (
@@ -58,8 +65,19 @@ export function RegisterForm() {
       >
         <p className="font-medium text-forest">{state.success}</p>
         <p className="text-sm text-trail">
-          Vous recevrez un message dès qu&apos;un administrateur l&apos;aura
+          Vous recevrez un email dès qu&apos;un administrateur l&apos;aura
           validée.
+        </p>
+        <p className="text-sm text-trail">
+          Si un compte existe déjà avec cet email, aucune nouvelle demande
+          n&apos;est créée : utilisez{" "}
+          <Link
+            href="/forgot-password"
+            className="font-bold text-forest underline-offset-4 hover:underline"
+          >
+            Mot de passe oublié
+          </Link>
+          .
         </p>
       </div>
     );
@@ -128,6 +146,11 @@ export function RegisterForm() {
           value={birthDate}
           onChange={(e) => setBirthDate(e.target.value)}
         />
+        {dateError ? (
+          <p role="alert" className="text-xs font-medium text-brick-ink">
+            {dateError}
+          </p>
+        ) : null}
       </div>
 
       {/* US-26 — type de profil : parent (sans unité) ou membre d'une unité. */}
@@ -257,7 +280,7 @@ export function RegisterForm() {
         </p>
       ) : null}
 
-      <Button type="submit" className="w-full" disabled={pending || tropJeune}>
+      <Button type="submit" className="w-full" disabled={pending || tropJeune || dateError !== null}>
         {pending ? "Création…" : "Demander un accès"}
       </Button>
     </form>

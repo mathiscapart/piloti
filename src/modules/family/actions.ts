@@ -31,9 +31,13 @@ export async function linkFamily(
     return { error: "Un compte ne peut pas être son propre parent." };
   }
   // SAFE-01 : un encadrant ne se déclare pas parent d'un jeune — le lien lui
-  // ouvrirait la messagerie privée avec l'enfant.
+  // ouvrirait la messagerie privée avec l'enfant. Le cas légitime (un chef
+  // parent d'un jeune du groupe) passe par un autre gestionnaire.
   if (parentId === actor.id) {
-    return { error: "Tu ne peux pas te rattacher toi-même à un jeune." };
+    return {
+      error:
+        "Tu ne peux pas te rattacher toi-même à un jeune. S'il s'agit de ton enfant, demande à la secrétaire ou au responsable de groupe de faire le rattachement.",
+    };
   }
 
   const [parent, child] = await Promise.all([

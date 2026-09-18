@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ANNOUNCEMENT_AUDIENCES, ANNOUNCEMENT_AUDIENCE_LABEL } from "@/lib/enums";
+import { ANNOUNCEMENT_AUDIENCE_LABEL } from "@/lib/enums";
 import type { ActionResult } from "@/lib/types";
 import { createAnnouncement } from "@/modules/communication/announcement-actions";
 
-export function ComposeForm() {
+export function ComposeForm({ audiences }: { audiences: readonly string[] }) {
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
     createAnnouncement,
     { error: null },
@@ -67,10 +67,10 @@ export function ComposeForm() {
         <select
           id="audience"
           name="audience"
-          defaultValue="ALL"
+          defaultValue={audiences[0]}
           className="h-10 w-full rounded-xl border border-stone bg-snow px-3 text-sm text-earth focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {ANNOUNCEMENT_AUDIENCES.map((a) => (
+          {audiences.map((a) => (
             <option key={a} value={a}>
               {ANNOUNCEMENT_AUDIENCE_LABEL[a] ?? a}
             </option>

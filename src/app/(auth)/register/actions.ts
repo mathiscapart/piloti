@@ -102,6 +102,12 @@ export async function signUpAction(
   const minor = requiresParentalConsent(parsed.data.birthDate);
   const requestHeaders = await headers();
 
+  // Même réponse que l'email soit libre ou déjà inscrit : dire « un compte
+  // existe déjà » révélerait qu'une adresse est inscrite (énumération). L'écran
+  // de succès renvoie vers « Mot de passe oublié » pour le second cas.
+  const success =
+    "Demande enregistrée ! Elle est en attente de validation par un administrateur.";
+
   let createdUserId: string | null = null;
 
   try {
@@ -116,7 +122,16 @@ export async function signUpAction(
       },
       headers: requestHeaders,
     });
-    createdUserId = result.user.id;
+
+    // Email déjà inscrit : avec `autoSignIn: false`, better-auth ne lève pas
+    // d'erreur mais renvoie un utilisateur synthétique, jamais écrit en base
+    // (anti-énumération). Rien à compléter : même réponse qu'un succès.
+    const created = await db.user.findUnique({
+      where: { id: result.user.id },
+      select: { id: true },
+    });
+    if (!created) return { error: null, success };
+    createdUserId = created.id;
 
     // SEC-08 (Vuln 2) — `unit` et `birthDate` sont `input: false` côté
     // better-auth (déterminent l'accès aux salons par branche et SAFE-01) :
@@ -158,7 +173,7 @@ export async function signUpAction(
         },
       }),
     );
-  } catch (e) {
+  } catch {
     // R1 — si le consentement n'a pas pu être tracé après la création du
     // compte, on ne laisse jamais un compte exister sans preuve de
     // consentement : suppression immédiate (hard-delete) du compte créé.
@@ -172,22 +187,11 @@ export async function signUpAction(
         );
       });
     }
-    const msg = e instanceof Error ? e.message.toLowerCase() : "";
-    if (msg.includes("already") || msg.includes("exist")) {
-      return {
-        error: "Un compte existe déjà avec cet email.",
-        success: null,
-      };
-    }
     return {
       error: "Erreur lors de l'inscription. Réessayez dans un instant.",
       success: null,
     };
   }
 
-  return {
-    error: null,
-    success:
-      "Compte créé ! Votre inscription est en attente de validation par un administrateur.",
-  };
+  return { error: null, success };
 }

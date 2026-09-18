@@ -4,6 +4,7 @@ import { unlink } from "fs/promises";
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { anonymizeUserInTx } from "@/lib/anonymize";
@@ -16,6 +17,7 @@ import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
 import { can, canAssignRole, type Action } from "@/lib/permissions";
+import { notify } from "@/modules/notifications/notify";
 import { ROLE_LABEL, ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
@@ -242,6 +244,18 @@ export async function approveUser(
     },
   );
 
+  // L'écran de fin d'inscription promet un message à la validation.
+  const approvedId = parsed.data.userId;
+  after(() =>
+    notify({
+      userId: approvedId,
+      type: "ACCOUNT_UPDATE",
+      title: "Ton compte a été validé",
+      body: "Un administrateur a validé ton inscription : tu peux maintenant te connecter à Piloti.",
+      link: "/login",
+    }),
+  );
+
   revalidatePath("/admin/inscriptions");
   revalidatePath("/admin/utilisateurs");
   return { error: null };
@@ -298,6 +312,16 @@ export async function rejectUser(
   // SEC-08 (Vuln 4) — même geste que suspendUser : révoque toute session
   // active immédiatement plutôt que d'attendre son expiration naturelle.
   await db.session.deleteMany({ where: { userId: parsed.data.userId } });
+
+  const { userId: rejectedId, reason } = parsed.data;
+  after(() =>
+    notify({
+      userId: rejectedId,
+      type: "ACCOUNT_UPDATE",
+      title: "Ton inscription a été refusée",
+      body: `Un administrateur a refusé ton inscription à Piloti. Motif : ${reason}`,
+    }),
+  );
 
   revalidatePath("/admin/inscriptions");
   return { error: null };

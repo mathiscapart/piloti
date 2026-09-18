@@ -307,6 +307,7 @@ export const NOTIFICATION_TYPES = [
   "BADGE_AWARDED", // US-S05 — badge attribué (→ jeune / parent)
   "REPORT_CREATED", // SAFE-02 — signalement créé (→ les modérateurs concernés : ADMIN + CHEF de l'unité)
   "REPORT_UPDATE", // SAFE-02 — signalement traité (résolu ou rejeté) → le signalant
+  "ACCOUNT_UPDATE", // inscription validée ou refusée → le demandeur
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 

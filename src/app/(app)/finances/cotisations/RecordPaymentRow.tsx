@@ -17,7 +17,11 @@ import {
 } from "@/lib/enums";
 import { cn } from "@/lib/utils";
 import { formatEuros } from "@/modules/finance/format";
-import { recordPayment, toggleExemption } from "@/modules/finance/campaign-actions";
+import {
+  cancelPayment,
+  recordPayment,
+  toggleExemption,
+} from "@/modules/finance/campaign-actions";
 
 const STATUS_TONE: Record<PaymentStatus, string> = {
   PAID: "bg-forest-soft text-forest-ink",
@@ -25,6 +29,22 @@ const STATUS_TONE: Record<PaymentStatus, string> = {
   PENDING: "bg-sun-soft text-sun-ink",
   LATE: "bg-brick-soft text-brick-ink",
 };
+
+const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "UTC",
+});
+
+export interface PaymentHistoryVM {
+  id: string;
+  amountCents: number;
+  method: string;
+  paidAt: Date;
+  cancelledAt: Date | null;
+  cancelReason: string | null;
+}
 
 export interface PaymentRowVM {
   campaignId: string;
@@ -38,6 +58,7 @@ export interface PaymentRowVM {
   tier: "FIRST" | "SECOND" | "SOCIAL";
   exempt: boolean;
   reminded: boolean;
+  payments: PaymentHistoryVM[];
   canManage: boolean;
 }
 
@@ -49,9 +70,16 @@ export function RecordPaymentRow(props: PaymentRowVM) {
   );
   const [method, setMethod] = useState<PaymentMethod>("CHEQUE");
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  // #121 — trop-perçu signalé par le serveur, en attente de confirmation.
+  const [overpayment, setOverpayment] = useState<number | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
   const [pending, start] = useTransition();
 
-  function submit() {
+  const overpaidCents = Math.max(0, props.paidCents - props.expectedCents);
+
+  function submit(confirm = false) {
     start(async () => {
       const res = await recordPayment(
         props.campaignId,
@@ -59,11 +87,27 @@ export function RecordPaymentRow(props: PaymentRowVM) {
         amount,
         method,
         date,
+        confirm,
       );
-      if (res?.error) toast.error(res.error);
+      if (res.overpaymentCents) setOverpayment(res.overpaymentCents);
+      else if (res.error) toast.error(res.error);
       else {
         toast.success("Paiement enregistré.");
         setOpen(false);
+        setOverpayment(null);
+        router.refresh();
+      }
+    });
+  }
+
+  function cancel(paymentId: string) {
+    start(async () => {
+      const res = await cancelPayment(paymentId, reason);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Paiement annulé.");
+        setCancelling(null);
+        setReason("");
         router.refresh();
       }
     });
@@ -111,6 +155,11 @@ export function RecordPaymentRow(props: PaymentRowVM) {
             Relancé
           </span>
         ) : null}
+        {overpaidCents > 0 ? (
+          <span className="shrink-0 rounded-full bg-brick-soft px-2 py-0.5 text-xs font-bold text-brick-ink">
+            Trop-perçu {formatEuros(overpaidCents)}
+          </span>
+        ) : null}
         <span
           className={cn(
             "shrink-0 rounded-full px-2 py-0.5 text-xs font-bold",
@@ -119,7 +168,7 @@ export function RecordPaymentRow(props: PaymentRowVM) {
         >
           {PAYMENT_STATUS_LABEL[props.status]}
         </span>
-        {props.canManage ? (
+        {props.canManage && props.status !== "PAID" ? (
           <Button
             type="button"
             size="sm"
@@ -132,19 +181,96 @@ export function RecordPaymentRow(props: PaymentRowVM) {
         ) : null}
       </div>
 
-      {props.canManage && props.status !== "PAID" ? (
+      {props.canManage && (props.status !== "PAID" || props.payments.length > 0) ? (
         <div className="flex flex-wrap gap-x-4 gap-y-1">
-          <button
-            type="button"
-            onClick={toggleExempt}
-            disabled={pending}
-            className="text-xs font-bold text-trail underline-offset-2 hover:text-earth hover:underline disabled:opacity-50"
-          >
-            {props.exempt
-              ? "Réactiver les relances"
-              : "Échelonnement convenu (suspendre les relances)"}
-          </button>
+          {props.status !== "PAID" ? (
+            <button
+              type="button"
+              onClick={toggleExempt}
+              disabled={pending}
+              className="text-xs font-bold text-trail underline-offset-2 hover:text-earth hover:underline disabled:opacity-50"
+            >
+              {props.exempt
+                ? "Réactiver les relances"
+                : "Échelonnement convenu (suspendre les relances)"}
+            </button>
+          ) : null}
+          {props.payments.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              className="text-xs font-bold text-trail underline-offset-2 hover:text-earth hover:underline"
+            >
+              Historique ({props.payments.length})
+            </button>
+          ) : null}
         </div>
+      ) : null}
+
+      {historyOpen && props.canManage ? (
+        <ul className="space-y-1 rounded-xl bg-sand/60 p-2 text-xs">
+          {props.payments.map((p) => (
+            <li key={p.id} className="space-y-1">
+              <div className="flex flex-wrap items-center gap-x-2">
+                <span
+                  className={cn(
+                    "font-bold text-earth",
+                    p.cancelledAt && "text-trail line-through",
+                  )}
+                >
+                  {formatEuros(p.amountCents)}
+                </span>
+                <span className="text-trail">
+                  {PAYMENT_METHOD_LABEL[p.method as PaymentMethod] ?? p.method} ·{" "}
+                  {DATE_FMT.format(p.paidAt)}
+                </span>
+                {p.cancelledAt ? (
+                  <span className="text-trail">
+                    Annulé : {p.cancelReason}
+                  </span>
+                ) : cancelling !== p.id ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelling(p.id);
+                      setReason("");
+                    }}
+                    className="font-bold text-brick underline-offset-2 hover:underline"
+                  >
+                    Annuler
+                  </button>
+                ) : null}
+              </div>
+              {cancelling === p.id ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Motif (ex. erreur de saisie)"
+                    className="h-8 w-56"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={pending || reason.trim().length === 0}
+                    onClick={() => cancel(p.id)}
+                  >
+                    Confirmer l&apos;annulation
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setCancelling(null)}
+                  >
+                    Retour
+                  </Button>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
       ) : null}
 
       {open && props.canManage ? (
@@ -153,7 +279,10 @@ export function RecordPaymentRow(props: PaymentRowVM) {
             <label className="text-xs text-trail">Montant (€)</label>
             <Input
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setOverpayment(null);
+              }}
               inputMode="decimal"
               className="h-9 w-24"
             />
@@ -181,9 +310,21 @@ export function RecordPaymentRow(props: PaymentRowVM) {
               className="h-9 w-40 appearance-none"
             />
           </div>
-          <Button type="button" size="sm" disabled={pending} onClick={submit}>
-            {pending ? "…" : "Enregistrer"}
-          </Button>
+          {overpayment ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              disabled={pending}
+              onClick={() => submit(true)}
+            >
+              {pending ? "…" : `Confirmer le trop-perçu de ${formatEuros(overpayment)}`}
+            </Button>
+          ) : (
+            <Button type="button" size="sm" disabled={pending} onClick={() => submit()}>
+              {pending ? "…" : "Enregistrer"}
+            </Button>
+          )}
         </div>
       ) : null}
     </li>

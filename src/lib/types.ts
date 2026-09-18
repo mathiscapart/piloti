@@ -4,3 +4,8 @@
 export interface ActionResult {
   error: string | null;
 }
+
+/** Enregistrement d'un paiement : trop-perçu à confirmer explicitement (#121). */
+export interface PaymentActionResult extends ActionResult {
+  overpaymentCents?: number;
+}

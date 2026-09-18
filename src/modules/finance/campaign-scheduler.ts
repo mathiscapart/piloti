@@ -88,7 +88,7 @@ export async function sendCampaignReminders(): Promise<number> {
 
     const [payments, exemptions, reminders, links, socialCases] = await Promise.all([
       db.campaignPayment.findMany({
-        where: { campaignId: c.id, userId: { in: jeunes } },
+        where: { campaignId: c.id, userId: { in: jeunes }, cancelledAt: null },
         select: { userId: true, amountCents: true },
       }),
       db.campaignExemption.findMany({

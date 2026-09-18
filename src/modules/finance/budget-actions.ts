@@ -12,13 +12,15 @@ import {
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
-import type { ActionResult } from "@/lib/types";
+import type { ActionResult, PaymentActionResult } from "@/lib/types";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 
 import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 
+import { bracketedPriceCents } from "./brackets";
+import { overpaymentCents } from "./collection";
 import { notifyTreasurers } from "./expense-notify";
-import { parseAmountToCents } from "./format";
+import { formatEuros, parseAmountToCents } from "./format";
 
 // US-F05 — définir le tarif (par défaut) d'un événement payant. Le tarif
 // effectif de chaque jeune est ensuite pondéré par sa tranche de quotient
@@ -128,12 +130,14 @@ export async function setBudgetLine(
   return { error: null };
 }
 
-// US-F05 — enregistrer un encaissement pour l'inscription d'un jeune.
+// US-F05 — enregistrer un encaissement pour l'inscription d'un jeune. Au-delà
+// du reste dû, le trop-perçu doit être confirmé explicitement (#121).
 export async function recordEventPayment(
   eventId: string,
   userId: string,
   amountStr: string,
-): Promise<ActionResult> {
+  confirmOverpayment = false,
+): Promise<PaymentActionResult> {
   const actor = await getCurrentUser();
   if (!can(actor, "budget.manage")) return { error: "Permission refusée." };
 
@@ -145,9 +149,27 @@ export async function recordEventPayment(
 
   const reg = await db.eventRegistration.findUnique({
     where: { eventId_userId: { eventId, userId } },
-    select: { id: true, paidCents: true },
+    select: {
+      id: true,
+      paidCents: true,
+      event: { select: { priceCents: true } },
+      user: { select: { socialBracket: { select: { coefficientPermille: true } } } },
+    },
   });
   if (!reg) return { error: "Inscription introuvable." };
+
+  // Même tarif effectif que l'écran budget (tarif × tranche QF).
+  const priceCents = bracketedPriceCents(
+    reg.event.priceCents ?? 0,
+    reg.user.socialBracket?.coefficientPermille ?? 1000,
+  );
+  const overpaid = overpaymentCents(priceCents, reg.paidCents, amountCents);
+  if (overpaid > 0 && !confirmOverpayment) {
+    return {
+      error: `Trop-perçu de ${formatEuros(overpaid)} : confirmez le montant.`,
+      overpaymentCents: overpaid,
+    };
+  }
 
   await withAudit(
     (tx) =>
@@ -158,7 +180,59 @@ export async function recordEventPayment(
     {
       action: "EVENT_PAYMENT_RECORDED",
       userId: actor.id,
-      metadata: { eventId, userId, amountCents },
+      metadata: { eventId, userId, amountCents, overpaidCents: overpaid },
+    },
+  );
+
+  revalidatePath(`/planning/${eventId}/budget`);
+  return { error: null };
+}
+
+// #121 — corriger le total encaissé d'une inscription (saisie erronée). Une
+// inscription ne garde qu'un cumul, pas le détail des encaissements : on
+// corrige donc le cumul, avec motif ; l'audit garde l'ancienne valeur.
+export async function correctEventPayment(
+  eventId: string,
+  userId: string,
+  paidStr: string,
+  reason: string,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "budget.manage")) return { error: "Permission refusée." };
+
+  // 0 est admis ici (annulation totale), contrairement à un encaissement.
+  const t = paidStr.trim();
+  const paidCents = Number(t.replace(",", ".")) === 0 ? 0 : parseAmountToCents(t);
+  if (paidCents === null) return { error: "Montant invalide." };
+  const motive = reason.trim();
+  if (motive.length === 0) return { error: "Motif de correction requis." };
+
+  const outOfScope = await refuseIfEventOutOfScope(actor, "budget.manage", eventId);
+  if (outOfScope) return outOfScope;
+
+  const reg = await db.eventRegistration.findUnique({
+    where: { eventId_userId: { eventId, userId } },
+    select: { id: true, paidCents: true },
+  });
+  if (!reg) return { error: "Inscription introuvable." };
+  if (reg.paidCents === paidCents) return { error: "Montant inchangé." };
+
+  await withAudit(
+    (tx) =>
+      tx.eventRegistration.update({
+        where: { id: reg.id },
+        data: { paidCents },
+      }),
+    {
+      action: "EVENT_PAYMENT_CORRECTED",
+      userId: actor.id,
+      metadata: {
+        eventId,
+        userId,
+        previousCents: reg.paidCents,
+        paidCents,
+        reason: motive,
+      },
     },
   );
 

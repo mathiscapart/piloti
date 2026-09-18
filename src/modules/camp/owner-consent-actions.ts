@@ -86,7 +86,7 @@ export async function submitOwnerDecision(
   // d'audit, hors périmètre de ce lot (cf. D-032).
   if (place.createdById) {
     await withAudit((tx) => tx.campPlace.update({ where: { id: place.id }, data }), {
-      action: "PLACE_OWNER_CONTACT_ERASED",
+      action: erased ? "PLACE_OWNER_CONSENT_REFUSED" : "PLACE_OWNER_CONSENT_GRANTED",
       userId: place.createdById,
       metadata: {
         placeId: place.id,
@@ -155,14 +155,22 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
   }
 
   const token = newOwnerConsentToken();
-  await db.campPlace.update({
-    where: { id: placeId },
-    data: {
-      ownerConsentToken: token,
-      ownerConsentRequestedAt: new Date(),
-      ownerConsentStatus: "PENDING",
+  await withAudit(
+    (tx) =>
+      tx.campPlace.update({
+        where: { id: placeId },
+        data: {
+          ownerConsentToken: token,
+          ownerConsentRequestedAt: new Date(),
+          ownerConsentStatus: "PENDING",
+        },
+      }),
+    {
+      action: "PLACE_OWNER_CONSENT_RESENT",
+      userId: user.id,
+      metadata: { placeId, placeName: place.name, previousStatus: place.ownerConsentStatus },
     },
-  });
+  );
 
   await sendOwnerConsentRequest({
       to: place.ownerEmail,

@@ -53,6 +53,10 @@ const ACTION_LABEL: Record<string, string> = {
   LOAN_DRYING_STARTED: "Mis en séchage",
   INCIDENT_REPORTED: "Incident signalé",
   INCIDENT_RESOLVED: "Incident résolu",
+  PEDAGO_NOTE_DELETED: "Note supprimée",
+  PLACE_OWNER_CONSENT_GRANTED: "Accord du propriétaire",
+  PLACE_OWNER_CONSENT_REFUSED: "Refus du propriétaire",
+  PLACE_OWNER_CONSENT_RESENT: "Relance du propriétaire",
 };
 
 const ACTION_ICON: Record<string, LucideIcon> = {

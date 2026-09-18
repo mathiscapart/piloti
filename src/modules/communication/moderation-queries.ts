@@ -7,6 +7,7 @@ import { isVisibleMessage } from "./moderation-policy";
 export type ReportStatusFilter = "PENDING" | "RESOLVED" | "DISMISSED" | "all";
 
 interface QueueUser {
+  id: string;
   role: string;
   roles?: string[] | string | null;
   unit?: string | null;
@@ -42,6 +43,8 @@ export interface ReportQueueEntry {
 // invisible — fail-closed. L'ADMIN voit tout. Le RESPONSABLE_GROUPE (lecture
 // seule, `moderation.view`) garde une vue globale, alignée sur le reste de
 // l'appli où RG = lecture seule sur tout (arbitrage à confirmer, cf. la tâche).
+// #91 : un signalement visant un contenu de `user` lui est toujours masqué —
+// il y verrait le signalant.
 export async function listReports(
   status: ReportStatusFilter = "PENDING",
   user: QueueUser,
@@ -90,7 +93,12 @@ export async function listReports(
   const messageById = new Map(channelMessages.map((m) => [m.id, m]));
   const dmById = new Map(directMessages.map((m) => [m.id, m]));
 
-  return reports.map((r) => {
+  const authorIdOf = (r: (typeof reports)[number]): string | null =>
+    (r.targetType === "CHANNEL_MESSAGE"
+      ? messageById.get(r.targetId)?.authorId
+      : dmById.get(r.targetId)?.senderId) ?? null;
+
+  return reports.filter((r) => authorIdOf(r) !== user.id).map((r) => {
     let target: ReportQueueEntry["target"] = null;
     if (r.targetType === "CHANNEL_MESSAGE") {
       const m = messageById.get(r.targetId);

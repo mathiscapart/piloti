@@ -45,6 +45,16 @@ export function resolveConcernedUnit(author: ReportedAuthor | null | undefined):
 
 interface ReportUnitCtx {
   concernedUnit: string | null;
+  // Auteur du contenu signalé (#91), résolu côté requête ; `null` si le
+  // message est introuvable. Obligatoire pour qu'aucun appelant ne l'oublie.
+  targetAuthorId: string | null;
+}
+
+// #91 — la personne mise en cause ne voit ni ne traite le signalement qui la
+// vise, quel que soit son rôle : elle connaîtrait le signalant et pourrait
+// classer l'affaire elle-même.
+function isTargetAuthor(userId: string | undefined, targetAuthorId: string | null): boolean {
+  return targetAuthorId !== null && userId === targetAuthorId;
 }
 
 // Un modérateur peut traiter (masquer / résoudre / rejeter) un signalement
@@ -53,11 +63,16 @@ interface ReportUnitCtx {
 //  - OU c'est un CHEF de l'unité concernée par le signalement.
 // Un signalement dont `concernedUnit` est null (auteur sans unité) n'est
 // traitable que par un ADMIN — fail-closed plutôt que d'ouvrir à tous les CHEF.
+// Jamais par l'auteur du contenu signalé (#91).
 export function canModerateReport(user: ModerationCtx, report: ReportUnitCtx): boolean {
   // ADMIN et RESPONSABLE_GROUPE traitent toutes les unités ; un CHEF est limité
   // à l'unité concernée par le signalement — c'est exactement `inUnitScope`,
   // dont cette règle était l'implémentation d'origine (SAFE-02).
-  return canModerate(user) && inUnitScope(user, report.concernedUnit);
+  return (
+    canModerate(user) &&
+    inUnitScope(user, report.concernedUnit) &&
+    !isTargetAuthor(user.id, report.targetAuthorId)
+  );
 }
 
 interface ModeratorCandidate {
@@ -68,17 +83,20 @@ interface ModeratorCandidate {
 }
 
 // Destinataires de la notification à la CRÉATION d'un signalement : tous les
-// ADMIN (toutes unités) + les CHEF de l'unité concernée. Symétrique de
+// ADMIN et RESPONSABLE_GROUPE (toutes unités) + les CHEF de l'unité concernée,
+// sauf l'auteur du contenu signalé (#91). Symétrique de
 // `canModerateReport` (mêmes règles de routage), mais appliquée à une liste de
 // comptes candidats (déjà filtrés ACTIVE côté requête) plutôt qu'à un seul.
 export function selectReportRecipients(
   users: ModeratorCandidate[],
   concernedUnit: string | null,
+  targetAuthorId: string | null,
 ): string[] {
   return users
     .filter((u) => {
+      if (isTargetAuthor(u.id, targetAuthorId)) return false;
       const roles = effectiveRoles(u);
-      if (roles.includes("ADMIN")) return true;
+      if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
       return concernedUnit !== null && roles.includes("CHEF") && u.unit === concernedUnit;
     })
     .map((u) => u.id);

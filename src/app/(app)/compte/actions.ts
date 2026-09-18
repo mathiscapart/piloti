@@ -1,13 +1,17 @@
 "use server";
 
+import { APIError } from "better-auth";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 
 import { randomUUID } from "crypto";
 
 import { withAudit } from "@/lib/audit";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { passwordSchema } from "@/lib/password-policy";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 
 import type { ActionResult } from "@/lib/types";
@@ -203,5 +207,73 @@ export async function updateOwnSkillsProfile(
 
   revalidatePath("/compte");
   revalidatePath("/membres/annuaire");
+  return { error: null };
+}
+
+// Changement de mot de passe en auto-service. Passe par le serveur pour
+// appliquer `passwordSchema` (même politique qu'à l'inscription) et tracer
+// l'opération. better-auth vérifie le mot de passe actuel et écrit le hash.
+const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Mot de passe actuel requis."),
+    newPassword: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((d) => d.newPassword === d.confirmPassword, {
+    message: "Les nouveaux mots de passe ne correspondent pas.",
+  });
+
+export async function changeOwnPassword(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const user = await getCurrentUser();
+
+  const parsed = changePasswordSchema.safeParse({
+    currentPassword: formData.get("currentPassword"),
+    newPassword: formData.get("newPassword"),
+    confirmPassword: formData.get("confirmPassword"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+
+  const requestHeaders = await headers();
+  const session = await auth.api.getSession({ headers: requestHeaders });
+  if (!session) return { error: "Session expirée." };
+
+  try {
+    // Pas de `revokeOtherSessions` : il remplace aussi la session courante, et
+    // le re-rendu de /compte qui suit l'action, lancé avec l'ancien cookie,
+    // renverrait vers /login. Les autres sessions sont supprimées ci-dessous.
+    await auth.api.changePassword({
+      body: {
+        currentPassword: parsed.data.currentPassword,
+        newPassword: parsed.data.newPassword,
+      },
+      headers: requestHeaders,
+    });
+  } catch (e) {
+    if (e instanceof APIError && e.body?.code === "INVALID_PASSWORD") {
+      return { error: "Mot de passe actuel incorrect." };
+    }
+    console.error("[changeOwnPassword]", e);
+    return { error: "Impossible de changer le mot de passe." };
+  }
+
+  // Le hash est écrit par better-auth, hors de notre transaction. La révocation
+  // des autres sessions et l'audit (sans le mot de passe) sont atomiques.
+  await withAudit(
+    (tx) =>
+      tx.session.deleteMany({
+        where: { userId: user.id, id: { not: session.session.id } },
+      }),
+    {
+      action: "USER_PASSWORD_CHANGED",
+      userId: user.id,
+      metadata: { self: true, targetUserId: user.id },
+    },
+  );
+
   return { error: null };
 }

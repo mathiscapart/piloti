@@ -1,5 +1,6 @@
 import { APIError, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { Resend } from "resend";
 
@@ -9,6 +10,7 @@ import { db } from "@/lib/db";
 // il doit donc échapper lui-même.
 import { escapeHtml } from "@/lib/email";
 import { canEnableLogin } from "@/lib/legal/age";
+import { passwordSchema } from "@/lib/password-policy";
 
 // SEC-08 (Vuln 4) — code d'erreur porté par l'APIError du hook
 // `session.create.before` ci-dessous, repris tel quel par
@@ -180,6 +182,29 @@ export const auth = betterAuth({
         },
       },
     },
+  },
+
+  // Le changement de mot de passe passe uniquement par la Server Action
+  // `changeOwnPassword` (src/app/(app)/compte/actions.ts), seule à écrire
+  // l'audit. Un appel HTTP à POST /api/auth/change-password porte une
+  // `request` et est refusé ; `auth.api.changePassword` côté serveur n'en porte
+  // pas. `minPasswordLength` ne couvrant que la longueur, la politique complète
+  // est aussi appliquée ici, pour tout appelant serveur.
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/change-password") return;
+      if (ctx.request) {
+        throw new APIError("FORBIDDEN", {
+          message: "Changez votre mot de passe depuis la page « Mon compte ».",
+        });
+      }
+      const parsed = passwordSchema.safeParse(ctx.body?.newPassword);
+      if (!parsed.success) {
+        throw new APIError("BAD_REQUEST", {
+          message: parsed.error.issues[0]?.message,
+        });
+      }
+    }),
   },
 
   // Rate limit anti-bruteforce + anti-flood

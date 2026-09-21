@@ -32,7 +32,7 @@ export default async function BilanPage({ params }: PageProps) {
 
   // Bilan : pas de notes sensibles (US-S07 reste interne à l'équipe).
   const [data, attendance] = await Promise.all([
-    getProgression(id, false),
+    getProgression(id, () => false),
     getMemberAttendanceStats(id),
   ]);
   if (!data) notFound();

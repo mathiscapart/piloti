@@ -335,6 +335,8 @@ Non borné après examen : le rattachement d'un **prêt** à un événement (`lo
 
 Aucune de ces gardes ne compare `user.unit` en dur. Le périmètre de l'acteur passe par `canActOnUnit` ; l'appartenance de la personne ciblée passe par `isConcernedByEvent`. Le passage à l'appartenance multiple (#128) ne touchera donc que ces deux fonctions.
 
+**Amendement — les notes de suivi sensibles font exception à la lecture ouverte (#98).** La progression d'un jeune reste lisible par tout l'encadrement et le RG (`pedago.view`), mais les **notes de suivi** (US-S07) ne l'étaient qu'en apparence : la page les chargeait pour tout `pedago.view` et ne les affichait qu'aux chefs de la branche. Elles partaient donc dans le HTML et le payload RSC d'un chef d'une autre branche et du RG, lisibles par « Afficher la source ». Désormais une seule règle, `canReadPedagoNotes(user, jeuneUnit)` (`src/lib/permissions.ts`, alias de `canActOnUnit(user, "pedago.manage", …)`), décide à la fois du chargement et de l'affichage : **chefs de la branche du jeune et ADMIN**. Sans ce droit, `getProgression` ne requête pas les notes et renvoie `notes: null`. **Le RG ne les lit pas** — tranché par défaut (notes sensibles sur des mineurs, comportement déjà affiché), à revoir si le responsable en décide autrement : il suffirait alors d'élargir `canReadPedagoNotes`, sans toucher aux pages.
+
 ---
 
 ## D-025 — On ne s'inscrit qu'aux événements qui nous concernent

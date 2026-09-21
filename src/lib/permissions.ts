@@ -330,6 +330,17 @@ export function canActOnUnit(
 }
 
 /**
+ * US-S07 — notes de suivi sensibles d'un jeune (#98). Contrairement au reste de
+ * la progression (`pedago.view`, lecture ouverte à l'encadrement et au RG), elles
+ * ne se lisent que là où elles s'écrivent : chefs de la branche du jeune et
+ * ADMIN. Le RG ne les lit pas. Condition unique pour CHARGER et pour AFFICHER :
+ * une note qu'on n'a pas le droit de lire n'est jamais envoyée au navigateur.
+ */
+export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
+  return canActOnUnit(user, "pedago.manage", jeuneUnit);
+}
+
+/**
  * Branches sur lesquelles `user` a la main, dérivées de `inUnitScope` (pendant
  * de `assignableRoles` pour les rôles). Pratique pour filtrer une requête ou un
  * sélecteur d'unité sans jamais tester un rôle en dur côté page :

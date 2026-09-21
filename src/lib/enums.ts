@@ -304,6 +304,7 @@ export const NOTIFICATION_TYPES = [
   "CAMPAIGN_REMINDER", // US-F03 — relance d'une cotisation en retard
   "STEP_VALIDATION_REQUEST", // US-S04 — 2e chef sollicité pour confirmer une étape
   "STEP_VALIDATED", // US-S04 — étape confirmée (→ jeune / parent)
+  "STEP_VALIDATION_CANCELLED", // #100 — étape confirmée annulée par le RG / l'admin (→ jeune / parent)
   "BADGE_AWARDED", // US-S05 — badge attribué (→ jeune / parent)
   "REPORT_CREATED", // SAFE-02 — signalement créé (→ les modérateurs concernés : ADMIN + CHEF de l'unité)
   "REPORT_UPDATE", // SAFE-02 — signalement traité (résolu ou rejeté) → le signalant
@@ -422,6 +423,7 @@ export const AUDIT_ACTIONS = [
   "STEP_VALIDATION_PROPOSED",
   "STEP_VALIDATION_CONFIRMED",
   "STEP_VALIDATION_REMOVED",
+  "STEP_VALIDATION_CANCELLED",
   "BADGE_AWARD_GRANTED",
   "BADGE_AWARD_REVOKED",
   "PEDAGO_GOAL_SET",

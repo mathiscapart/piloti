@@ -504,3 +504,27 @@ describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => 
     ).toBe(false);
   });
 });
+
+describe("pedago.validation.cancel — annuler une étape confirmée (#100)", () => {
+  const user = (roles: string[], unit: string | null = null) =>
+    ({ role: roles[0], roles, unit, status: "ACTIVE" as const });
+
+  it.each([["RESPONSABLE_GROUPE"], ["ADMIN"]])("autorise %s", (role) => {
+    expect(can(user([role]), "pedago.validation.cancel")).toBe(true);
+  });
+
+  it("refuse un chef, même de la branche (il a pourtant pedago.manage)", () => {
+    expect(can(user(["CHEF"], "PIONNIERS"), "pedago.manage")).toBe(true);
+    expect(can(user(["CHEF"], "PIONNIERS"), "pedago.validation.cancel")).toBe(false);
+  });
+
+  it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"]])("refuse %s", (role) => {
+    expect(can(user([role]), "pedago.validation.cancel")).toBe(false);
+  });
+
+  it("refuse un RG dont le compte n'est pas actif", () => {
+    expect(
+      can({ role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "SUSPENDED" }, "pedago.validation.cancel"),
+    ).toBe(false);
+  });
+});

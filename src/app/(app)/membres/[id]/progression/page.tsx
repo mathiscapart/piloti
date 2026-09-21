@@ -36,6 +36,9 @@ export default async function ProgressionPage({ params }: PageProps) {
   // règle que les actions de `progression-actions.ts`, pour ne pas afficher des
   // boutons qui échoueraient à l'usage.
   const canManage = can(user, "pedago.manage") && inUnitScope(user, data.jeune.unit);
+  // #100 — annuler une étape CONFIRMÉE : RG et ADMIN seulement, quelle que soit
+  // la branche (même droit que `removeValidation`).
+  const canCancelConfirmed = can(user, "pedago.validation.cancel");
 
   // Badges attribuables (catalogue filtré par la branche du jeune), pour les chefs.
   const awardable = canManage
@@ -76,6 +79,7 @@ export default async function ProgressionPage({ params }: PageProps) {
         jeuneId={id}
         data={data}
         canManage={canManage}
+        canCancelConfirmed={canCancelConfirmed}
         currentUserId={user.id}
         awardableBadges={awardable.map((b) => ({ id: b.id, name: b.name, icon: b.icon }))}
       />

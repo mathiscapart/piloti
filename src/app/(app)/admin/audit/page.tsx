@@ -54,6 +54,7 @@ const ACTION_LABEL: Record<string, string> = {
   INCIDENT_REPORTED: "Incident signalé",
   INCIDENT_RESOLVED: "Incident résolu",
   PEDAGO_NOTE_DELETED: "Note supprimée",
+  STEP_VALIDATION_CANCELLED: "Validation d'étape annulée",
   MESSAGE_EDITED: "Message modifié",
   MESSAGE_DELETED: "Message supprimé",
   PLACE_OWNER_CONSENT_GRANTED: "Accord du propriétaire",

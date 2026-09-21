@@ -12,6 +12,7 @@ import {
   canAccessAdminZone,
   canActOnUnit,
   canAssignRole,
+  canReadPedagoNotes,
   effectiveRoles,
   hasRole,
   inUnitScope,
@@ -464,5 +465,42 @@ describe("canActOnUnit — rattachement familial borné à la branche du jeune (
   it("ne borne pas un compte CHEF + SECRÉTAIRE", () => {
     const chefSec = { role: "CHEF", roles: ["CHEF", "SECRETAIRE"], unit: "PIONNIERS", status: "ACTIVE" as const };
     expect(canActOnUnit(chefSec, "member.family.manage", "COMPAGNONS")).toBe(true);
+  });
+});
+
+describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => {
+  const user = (roles: string[], unit: string | null = null, status = "ACTIVE" as const) =>
+    ({ role: roles[0], roles, unit, status });
+
+  it("autorise un chef de la branche du jeune", () => {
+    expect(canReadPedagoNotes(user(["CHEF"], "PIONNIERS"), "PIONNIERS")).toBe(true);
+  });
+
+  it("refuse un chef d'une autre branche", () => {
+    expect(canReadPedagoNotes(user(["CHEF"], "SCOUTS"), "PIONNIERS")).toBe(false);
+  });
+
+  it("fail-closed : chef sans branche, ou jeune sans branche", () => {
+    expect(canReadPedagoNotes(user(["CHEF"], null), "PIONNIERS")).toBe(false);
+    expect(canReadPedagoNotes(user(["CHEF"], "PIONNIERS"), null)).toBe(false);
+  });
+
+  it("autorise l'ADMIN quelle que soit la branche", () => {
+    expect(canReadPedagoNotes(user(["ADMIN"]), "PIONNIERS")).toBe(true);
+  });
+
+  it("refuse le RG, qui a pourtant pedago.view", () => {
+    expect(can(user(["RESPONSABLE_GROUPE"]), "pedago.view")).toBe(true);
+    expect(canReadPedagoNotes(user(["RESPONSABLE_GROUPE"]), "PIONNIERS")).toBe(false);
+  });
+
+  it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"]])("refuse %s", (role) => {
+    expect(canReadPedagoNotes(user([role], "PIONNIERS"), "PIONNIERS")).toBe(false);
+  });
+
+  it("refuse un chef de la branche dont le compte n'est pas actif", () => {
+    expect(
+      canReadPedagoNotes({ role: "CHEF", roles: ["CHEF"], unit: "PIONNIERS", status: "SUSPENDED" }, "PIONNIERS"),
+    ).toBe(false);
   });
 });

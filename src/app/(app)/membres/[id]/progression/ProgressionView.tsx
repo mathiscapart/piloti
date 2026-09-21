@@ -314,8 +314,8 @@ export function ProgressionView({
         ) : null}
       </section>
 
-      {/* Notes (encadrement uniquement) */}
-      {canManage ? (
+      {/* Notes sensibles : `null` quand l'utilisateur ne peut pas les lire (#98). */}
+      {data.notes ? (
         <section className="space-y-2">
           <h2 className="text-lg font-bold text-earth">
             Notes de suivi

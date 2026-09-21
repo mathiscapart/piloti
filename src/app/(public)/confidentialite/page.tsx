@@ -171,17 +171,84 @@ export default function ConfidentialitePage() {
         <ul className="list-disc space-y-1 pl-5">
           <li>
             <strong>Resend</strong> — envoi des emails transactionnels (ex.
-            réinitialisation de mot de passe) ;
+            réinitialisation de mot de passe) : adresse email et contenu du
+            message. Les données sont hébergées dans l&apos;Union européenne
+            (Irlande) ;
           </li>
           <li>
             <strong>Cloudflare</strong> — tunnel sécurisé et protection réseau
-            (CDN/WAF), sans exposition directe du serveur sur Internet ;
+            (CDN/WAF), sans exposition directe du serveur sur Internet : le
+            trafic (adresse IP, requêtes) transite par son réseau mondial, y
+            compris aux États-Unis ;
+          </li>
+          <li>
+            <strong>Service de notification de votre navigateur</strong>{" "}
+            (par exemple Google, Microsoft, Mozilla ou Apple) — acheminement des
+            notifications push, uniquement si vous choisissez de les activer,
+            ce qui reste facultatif. Leur contenu est chiffré entre le serveur
+            et votre appareil : ce service le transmet sans pouvoir le lire.
+            Piloti conserve l&apos;adresse d&apos;abonnement fournie par le
+            navigateur et les clés de chiffrement associées ; elles sont
+            supprimées lorsque vous désactivez les notifications sur un
+            appareil, et lors de la suppression de votre compte ;
           </li>
           <li>
             <strong>{ORG_HOSTING_PROVIDER}</strong> —
             hébergement du serveur applicatif et de la base de données.
           </li>
         </ul>
+        <p>
+          Resend et Cloudflare sont des sociétés de droit américain. Les
+          transferts de données vers les États-Unis — y compris un éventuel
+          accès depuis ce pays à des données hébergées dans l&apos;Union
+          européenne (support, maison mère) — sont encadrés par leur
+          certification au <strong>Data Privacy Framework</strong>{" "}
+          UE–États-Unis, reconnu par la décision d&apos;adéquation de la
+          Commission européenne du 10 juillet 2023 ; leurs contrats de
+          sous-traitance prévoient en outre les clauses contractuelles types de
+          la Commission européenne. Les services de notification des
+          navigateurs peuvent également être opérés hors de l&apos;Union
+          européenne.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Sécurité</h2>
+        <p>
+          Des mesures techniques et organisationnelles protègent vos données
+          contre l&apos;accès non autorisé, la perte ou l&apos;altération :
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            L&apos;application n&apos;est accessible que par une connexion
+            chiffrée, et le serveur n&apos;est pas exposé directement sur
+            Internet ;
+          </li>
+          <li>
+            Chaque utilisateur n&apos;accède qu&apos;aux données nécessaires à
+            son rôle dans le groupe ;
+          </li>
+          <li>
+            Les mots de passe ne sont jamais conservés en clair, et les
+            tentatives de connexion répétées sont bloquées ;
+          </li>
+          <li>
+            Toute modification des données est enregistrée dans un journal qui
+            en conserve l&apos;auteur et la date ;
+          </li>
+          <li>
+            Des protections du navigateur limitent l&apos;injection de contenu
+            malveillant dans les pages ;
+          </li>
+          <li>Les sauvegardes de la base de données sont chiffrées.</li>
+        </ul>
+        <p>
+          En cas de violation de données présentant un risque pour vos droits
+          et libertés, <strong>{ORG_NAME}</strong>{" "}
+          la notifie à la CNIL dans les 72 heures suivant sa découverte et, si
+          le risque est élevé, en informe également les personnes concernées
+          dans les meilleurs délais.
+        </p>
       </section>
 
       <section className="space-y-2">

@@ -6,8 +6,11 @@
 // décrivaient l'ancienne règle (compte possible sous 15 ans avec autorisation
 // parentale), contredite par US-CM-04 et par l'amendement RGPD-02 du
 // 2026-08-08. Conformément à D-014, les comptes existants ne re-consentent pas.
-export const PRIVACY_VERSION = "2026-08-24";
-export const TERMS_VERSION = "2026-08-23";
+// #140-#142, #144 (2026-09-21) — transferts hors UE, services de push,
+// sécurité (confidentialité) et droit applicable (CGU). Évolutions mineures :
+// aucun re-consentement (D-014, section « Modification des CGU »).
+export const PRIVACY_VERSION = "2026-09-21";
+export const TERMS_VERSION = "2026-09-21";
 export const LEGAL_VERSION = "2026-08-22";
 
 // US-C08 — droit à l'image. Même convention : à faire évoluer si le texte/la

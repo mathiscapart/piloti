@@ -622,3 +622,29 @@ Deux défauts laissés par #97.
 - `anonymizeUserInTx` ne touche pas `Report` : la copie survit à l'effacement de l'auteur, comme les messages signalés (D-028). L'ancien texte présent dans l'audit, lui, est expurgé (clé `authorId`, cf. D-033).
 - **Limite acceptée** : un message modifié ou supprimé **avant** tout signalement n'est tracé que dans le journal d'audit.
 - Les signalements antérieurs n'ont pas de copie. Ils s'affichent comme avant, à partir du message actuel s'il existe encore.
+
+## D-035 — #147 : limite anti-bruteforce en mémoire, dans les hooks better-auth
+
+**Contexte** : le limiteur intégré de better-auth ne s'applique qu'aux requêtes HTTP (`/api/auth/*`). La doc le dit : « Server-side requests made using `auth.api` are not affected by rate limiting ». Or la connexion, l'inscription, « mot de passe oublié » et la réinitialisation passent par des Server Actions qui appellent `auth.api.*`. Reproduit : 10 échecs de connexion puis une connexion réussie par le formulaire, et 10 emails de réinitialisation en rafale. En prod, ce limiteur voyait de plus une seule IP pour tout le groupe : Traefik réécrit `X-Forwarded-For` avec l'IP du conteneur cloudflared.
+
+**Options écartées** :
+- **Compteur en base (`rateLimit.storage: "database"` ou table dédiée).** Chaque tentative ferait une écriture SQLite. Une attaque deviendrait un ralentissement de toute l'application, dont la base n'accepte qu'un écrivain à la fois. Une seule instance tourne : la mémoire suffit.
+- **fail2ban ou limite au niveau de Traefik.** Aucun des deux ne connaît l'issue d'une connexion (échec ou succès) ni l'email visé. Traefik garde sa limite large par IP (`middlewares.yml`), contre l'abus de volume.
+- **Contrôle dans chaque Server Action.** Quatre points à tenir alignés, et la route HTTP resterait couverte par une autre règle. Les hooks better-auth s'exécutent pour le routeur HTTP **et** pour `auth.api.*` (`dispatchAuthEndpoint`) : un seul point couvre les deux chemins.
+- **Faire passer les Server Actions par `auth.handler(new Request(...))`.** Le limiteur intégré s'appliquerait, mais le plugin `nextCookies` ne pose plus le cookie sur ce chemin. Et la clé reste IP + route : aucune limite par email.
+
+**Choix** :
+- `rate-limiter-flexible`, `RateLimiterMemory`, branché dans `hooks.before` / `hooks.after` de `src/lib/auth.ts`. Logique dans `src/lib/auth-rate-limit.ts`, testée par Vitest. Les compteurs suivent le modèle « Login endpoint protection » de la librairie :
+  - connexion : 5 échecs consécutifs par email + IP en 15 min, remis à zéro par une connexion réussie ; 30 échecs par IP en 1 h. Le point est consommé **avant** la vérification du mot de passe, puis rendu si ce n'était pas un échec : sinon des requêtes simultanées passeraient toutes le contrôle (vérifié : 10 requêtes parallèles, 5 essais réels) ;
+  - mot de passe oublié : 3 demandes par email ciblé en 1 h, et 10 par IP en 1 h, toutes adresses confondues ;
+  - inscription : 5 par IP en 1 h ;
+  - réinitialisation : 10 par IP en 15 min.
+- Dépassement : `APIError` 429 (code `RATE_LIMITED`), message français identique que le compte existe ou non.
+- IP lue dans `Cf-Connecting-Ip`, posé par l'edge Cloudflare, seul point d'entrée en prod. `advanced.ipAddress.ipAddressHeaders: ["cf-connecting-ip"]` pour que le limiteur intégré voie aussi la vraie IP.
+- Limiteurs rangés dans `globalThis`, **aussi en prod** : Next peut charger le module dans plusieurs bundles, qui doivent partager les mêmes compteurs.
+
+**Conséquences** :
+- Aucun verrouillage définitif : chaque compteur expire à la fin de sa fenêtre. Un attaquant depuis une autre IP ne bloque pas la connexion du titulaire (clé email + IP). Il peut en revanche rendre « mot de passe oublié » indisponible pour une adresse aussi longtemps qu'il renouvelle 3 demandes par heure : c'est le prix d'une limite par adresse contre l'inondation d'emails. Chaque fenêtre expire, mais l'attaquant peut la relancer. Recours : un ADMIN change le mot de passe du compte (`changeUserPassword`).
+- Les compteurs repartent de zéro au redémarrage de l'application. Limite acceptée.
+- Une IP partagée (wifi d'un local ou d'un camp) partage le compteur par IP, d'où les seuils larges par IP.
+- Passer à plusieurs instances imposerait un stockage partagé (`RateLimiterRedis`…) : la même API, une autre classe.

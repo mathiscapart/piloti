@@ -9,7 +9,10 @@
 // #140-#142, #144 (2026-09-21) — transferts hors UE, services de push,
 // sécurité (confidentialité) et droit applicable (CGU). Évolutions mineures :
 // aucun re-consentement (D-014, section « Modification des CGU »).
-export const PRIVACY_VERSION = "2026-09-21";
+// #147 (2026-09-21, 2e version du jour) — rétablit « les tentatives de
+// connexion répétées sont bloquées », désormais vrai. Évolution mineure :
+// aucun re-consentement (D-014).
+export const PRIVACY_VERSION = "2026-09-21.2";
 export const TERMS_VERSION = "2026-09-21";
 export const LEGAL_VERSION = "2026-08-22";
 

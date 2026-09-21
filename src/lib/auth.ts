@@ -4,6 +4,7 @@ import { createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { Resend } from "resend";
 
+import { enforceAuthRateLimit, recordAuthOutcome } from "@/lib/auth-rate-limit";
 import { db } from "@/lib/db";
 // SEC-08 (Vuln 5) — `user.name` est un texte libre modifiable par le
 // titulaire du compte : ce gabarit-ci vit hors de `notificationEmailHtml()`,
@@ -120,6 +121,11 @@ export const auth = betterAuth({
 
   advanced: {
     cookiePrefix: "piloti",
+    // #147 — derrière cloudflared + Traefik, X-Forwarded-For porte l'IP du
+    // conteneur cloudflared : sans ce réglage, le limiteur intégré compte tout
+    // le groupe comme une seule IP. Cf-Connecting-Ip est posé par l'edge
+    // Cloudflare, seul point d'entrée en prod (aucun port publié).
+    ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
   },
 
   // SEC-08 (Vuln 4) — `/api` est exclu du proxy (src/proxy.ts) et
@@ -190,8 +196,14 @@ export const auth = betterAuth({
   // `request` et est refusé ; `auth.api.changePassword` côté serveur n'en porte
   // pas. `minPasswordLength` ne couvrant que la longueur, la politique complète
   // est aussi appliquée ici, pour tout appelant serveur.
+  //
+  // #147 — les hooks s'exécutent pour le routeur HTTP ET pour `auth.api.*`
+  // (dispatchAuthEndpoint), contrairement au `rateLimit` ci-dessous qui ne voit
+  // que le HTTP : c'est ici que les Server Actions de connexion, inscription et
+  // mot de passe oublié/réinitialisation sont limitées (src/lib/auth-rate-limit.ts).
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
+      await enforceAuthRateLimit(ctx.path, ctx.body, ctx.headers);
       if (ctx.path !== "/change-password") return;
       if (ctx.request) {
         throw new APIError("FORBIDDEN", {
@@ -205,9 +217,13 @@ export const auth = betterAuth({
         });
       }
     }),
+    after: createAuthMiddleware(async (ctx) => {
+      await recordAuthOutcome(ctx.path, ctx.body, ctx.headers, ctx.context.returned);
+    }),
   },
 
-  // Rate limit anti-bruteforce + anti-flood
+  // Rate limit anti-bruteforce + anti-flood — routes HTTP /api/auth seulement ;
+  // les appels `auth.api.*` des Server Actions sont limités par les hooks.
   rateLimit: {
     enabled: true,
     window: 60 * 15, // 15 min

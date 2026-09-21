@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { ACCOUNT_NOT_ACTIVE_CODE, auth } from "@/lib/auth";
+import { rateLimitMessage } from "@/lib/auth-rate-limit";
 
 export interface SignInActionResult {
   error: string | null;
@@ -49,6 +50,8 @@ export async function signInAction(
     });
     user = result.user;
   } catch (e) {
+    const limited = rateLimitMessage(e);
+    if (limited) return { error: limited };
     if (e instanceof APIError && e.body?.code === ACCOUNT_NOT_ACTIVE_CODE) {
       return { error: e.body.message ?? "Ce compte ne peut pas se connecter." };
     }

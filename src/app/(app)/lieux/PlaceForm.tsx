@@ -30,6 +30,8 @@ export interface PlaceFormValues {
   ownerEmail: string;
   notes: string;
   photos: string[];
+  /** #97 — date (JJ/MM) du refus du précédent propriétaire, s'il a refusé. */
+  ownerRefusedOn?: string;
 }
 
 export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
@@ -205,6 +207,18 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
           </a>
           . Ne saisissez que le strict nécessaire.
         </p>
+        {/* #97 — le refus a vidé les champs : on ne peut pas reconnaître la même
+            personne sans avoir gardé une empreinte de ses coordonnées, ce qu'on
+            s'interdit (D-032). Seul le chef peut éviter de la ressaisir. */}
+        {initial?.ownerRefusedOn ? (
+          <p
+            role="alert"
+            className="rounded-xl border border-brick/30 bg-brick-soft p-3 text-sm font-medium text-brick-ink"
+          >
+            Le précédent contact a refusé le {initial.ownerRefusedOn}.
+            N&apos;enregistrez pas à nouveau ses coordonnées.
+          </p>
+        ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="ownerName">Nom</Label>
           <Input id="ownerName" name="ownerName" defaultValue={initial?.ownerName} />

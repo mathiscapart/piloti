@@ -61,6 +61,57 @@ export function isConsentLinkExpired(requestedAt: Date | null | undefined): bool
   return ageMs > OWNER_CONSENT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000;
 }
 
+/** Les trois coordonnées du propriétaire, telles que stockées sur la fiche. */
+export interface OwnerContact {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+/** Remise en attente de l'accord, et ce qu'il advient du jeton. */
+export interface OwnerConsentReset {
+  status: "PENDING";
+  /** `NEW` : un nouveau lien est émis ; `NONE` : plus aucun contact, plus aucun lien. */
+  token: "NEW" | "NONE";
+  reason: "CONTACT_CHANGED" | "CONTACT_ERASED";
+}
+
+function isEmptyContact(c: OwnerContact): boolean {
+  return !c.name && !c.phone && !c.email;
+}
+
+/**
+ * #97 — nouveau statut d'accord quand le chef modifie ou efface le contact.
+ * `null` : rien ne change.
+ *
+ * L'accord vaut pour une PERSONNE, pas pour une fiche. Il tombe dès que
+ * l'email ou le téléphone change : ce sont eux qui désignent la personne
+ * jointe. Le nom seul ne la désigne pas — le corriger (faute de frappe) ne
+ * redemande rien.
+ *
+ * Le jeton est renouvelé même si l'accord était déjà en attente : l'ancien lien
+ * montrerait sinon le NOUVEAU contact à l'ANCIEN destinataire.
+ *
+ * Après un refus, les champs ont été vidés : toute saisie est un nouveau
+ * contact, qu'on ne peut pas comparer à celui qui a refusé sans en avoir gardé
+ * une empreinte — ce qu'on s'interdit (D-032, amendement #97).
+ */
+export function nextOwnerConsent(
+  status: string,
+  before: OwnerContact,
+  after: OwnerContact,
+): OwnerConsentReset | null {
+  if (isEmptyContact(after)) {
+    return isEmptyContact(before)
+      ? null
+      : { status: "PENDING", token: "NONE", reason: "CONTACT_ERASED" };
+  }
+  const samePerson =
+    !isEmptyContact(before) && before.email === after.email && before.phone === after.phone;
+  if (samePerson && status !== "REFUSED") return null;
+  return { status: "PENDING", token: "NEW", reason: "CONTACT_CHANGED" };
+}
+
 /** Jeton d'URL publique : 32 octets, base64url — non devinable, non séquentiel. */
 export function newOwnerConsentToken(): string {
   return randomBytes(32).toString("base64url");

@@ -13,6 +13,8 @@ import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 import { geocodeAddress } from "./geocode";
 import {
   newOwnerConsentToken,
+  nextOwnerConsent,
+  type OwnerConsentReset,
   sendOwnerConsentRequest,
 } from "./owner-consent";
 import { parseOwnerEmail } from "./types";
@@ -50,6 +52,18 @@ function collectEquipment(fd: FormData): string[] {
     .getAll("equipment")
     .map(String)
     .filter((e) => VALID_EQUIPMENT.has(e));
+}
+
+// #97 — colonnes à écrire quand l'accord du propriétaire retombe en attente.
+// Un nouveau jeton neutralise l'ancien lien ; sans contact, plus aucun lien.
+function consentResetData(reset: OwnerConsentReset) {
+  const issued = reset.token === "NEW";
+  return {
+    ownerConsentStatus: reset.status,
+    ownerConsentToken: issued ? newOwnerConsentToken() : null,
+    ownerConsentRequestedAt: issued ? new Date() : null,
+    ownerConsentDecidedAt: null,
+  };
 }
 
 function collectPhotos(fd: FormData): string[] {
@@ -146,7 +160,17 @@ export async function updatePlace(
 
   const place = await db.campPlace.findUnique({
     where: { id: placeId },
-    select: { id: true, createdById: true, address: true, latitude: true, longitude: true },
+    select: {
+      id: true,
+      createdById: true,
+      address: true,
+      latitude: true,
+      longitude: true,
+      ownerName: true,
+      ownerPhone: true,
+      ownerEmail: true,
+      ownerConsentStatus: true,
+    },
   });
   if (!place) return { error: "Lieu introuvable." };
 
@@ -165,6 +189,15 @@ export async function updatePlace(
   const ownerEmailParsed = parseOwnerEmail(str(fd, "ownerEmail"));
   if (!ownerEmailParsed.ok) return { error: ownerEmailParsed.error };
   const ownerEmail = ownerEmailParsed.value;
+  const ownerName = str(fd, "ownerName");
+  const ownerPhone = str(fd, "ownerPhone");
+
+  // #97 — l'accord du propriétaire ne survit pas à un changement de personne.
+  const consentReset = nextOwnerConsent(
+    place.ownerConsentStatus,
+    { name: place.ownerName, phone: place.ownerPhone, email: place.ownerEmail },
+    { name: ownerName, phone: ownerPhone, email: ownerEmail },
+  );
 
   const address = str(fd, "address");
   let latitude = parseCoord(fd, "latitude");
@@ -185,9 +218,9 @@ export async function updatePlace(
   if (latitude === null) latitude = place.latitude;
   if (longitude === null) longitude = place.longitude;
 
-  await withAudit(
-    (tx) =>
-      tx.campPlace.update({
+  const updated = await withAudit(
+    async (tx) => {
+      const row = await tx.campPlace.update({
         where: { id: placeId },
         data: {
           name,
@@ -197,15 +230,45 @@ export async function updatePlace(
           latitude,
           longitude,
           equipmentJson: JSON.stringify(collectEquipment(fd)),
-          ownerName: str(fd, "ownerName"),
-          ownerPhone: str(fd, "ownerPhone"),
+          ownerName,
+          ownerPhone,
           ownerEmail,
           notes: str(fd, "notes"),
           photosJson: JSON.stringify(collectPhotos(fd)),
+          ...(consentReset ? consentResetData(consentReset) : {}),
         },
-      }),
+      });
+      // Seconde entrée, même transaction : le retour en attente a sa propre
+      // action pour se lire dans le journal sans ouvrir le détail du PLACE_UPDATED.
+      // Ni l'ancien ni le nouveau contact n'y sont recopiés : l'audit ne doit
+      // pas devenir un second stockage des coordonnées.
+      if (consentReset) {
+        await tx.auditLog.create({
+          data: {
+            action: "PLACE_OWNER_CONSENT_RESET",
+            userId: user.id,
+            metadata: JSON.stringify({
+              placeId,
+              placeName: name,
+              previousStatus: place.ownerConsentStatus,
+              reason: consentReset.reason,
+            }),
+          },
+        });
+      }
+      return row;
+    },
     { action: "PLACE_UPDATED", userId: user.id, metadata: { placeId, name } },
   );
+
+  // RGPD-09 — nouvelle personne, nouvelle demande. Hors transaction, comme à la
+  // création : un envoi raté laisse simplement le contact en attente.
+  if (consentReset?.token === "NEW" && updated.ownerEmail) {
+    await sendOwnerConsentRequest({
+      to: updated.ownerEmail,
+      token: updated.ownerConsentToken!,
+    });
+  }
 
   revalidatePath("/lieux");
   revalidatePath(`/lieux/${placeId}`);
@@ -256,10 +319,24 @@ export async function erasePlaceOwnerContact(placeId: string): Promise<ActionRes
 
   const place = await db.campPlace.findUnique({
     where: { id: placeId },
-    select: { id: true, name: true, ownerName: true, ownerPhone: true, ownerEmail: true },
+    select: {
+      id: true,
+      name: true,
+      ownerName: true,
+      ownerPhone: true,
+      ownerEmail: true,
+      ownerConsentStatus: true,
+    },
   });
   if (!place) return { error: "Lieu introuvable." };
-  if (!place.ownerName && !place.ownerPhone && !place.ownerEmail) {
+  // #97 — sans contact, plus d'accord : le statut repasse en attente, sans
+  // jeton. Un contact ressaisi plus tard ne peut ainsi hériter d'aucun accord.
+  const consentReset = nextOwnerConsent(
+    place.ownerConsentStatus,
+    { name: place.ownerName, phone: place.ownerPhone, email: place.ownerEmail },
+    { name: null, phone: null, email: null },
+  );
+  if (!consentReset) {
     return { error: "Ce lieu ne porte aucun contact de propriétaire." };
   }
 
@@ -267,7 +344,12 @@ export async function erasePlaceOwnerContact(placeId: string): Promise<ActionRes
     (tx) =>
       tx.campPlace.update({
         where: { id: placeId },
-        data: { ownerName: null, ownerPhone: null, ownerEmail: null },
+        data: {
+          ownerName: null,
+          ownerPhone: null,
+          ownerEmail: null,
+          ...consentResetData(consentReset),
+        },
       }),
     {
       action: "PLACE_OWNER_CONTACT_ERASED",
@@ -280,6 +362,7 @@ export async function erasePlaceOwnerContact(placeId: string): Promise<ActionRes
         hadName: place.ownerName !== null,
         hadPhone: place.ownerPhone !== null,
         hadEmail: place.ownerEmail !== null,
+        previousStatus: place.ownerConsentStatus,
       },
     },
   );

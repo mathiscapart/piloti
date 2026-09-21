@@ -57,6 +57,8 @@ const ACTION_LABEL: Record<string, string> = {
   PLACE_OWNER_CONSENT_GRANTED: "Accord du propriétaire",
   PLACE_OWNER_CONSENT_REFUSED: "Refus du propriétaire",
   PLACE_OWNER_CONSENT_RESENT: "Relance du propriétaire",
+  PLACE_OWNER_CONSENT_RESET: "Accord du propriétaire annulé",
+  PLACE_OWNER_CONTACT_ERASED: "Contact du propriétaire effacé",
 };
 
 const ACTION_ICON: Record<string, LucideIcon> = {

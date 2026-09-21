@@ -8,6 +8,11 @@ import { can, effectiveRoles } from "@/lib/permissions";
 
 import { PlaceForm, type PlaceFormValues } from "../../PlaceForm";
 
+const REFUSED_ON_FMT = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "2-digit",
+});
+
 function parseJsonArray(raw: string): string[] {
   try {
     const v = JSON.parse(raw);
@@ -44,6 +49,10 @@ export default async function EditPlacePage({ params }: PageProps) {
     ownerEmail: place.ownerEmail ?? "",
     notes: place.notes ?? "",
     photos: parseJsonArray(place.photosJson),
+    ownerRefusedOn:
+      place.ownerConsentStatus === "REFUSED" && place.ownerConsentDecidedAt
+        ? REFUSED_ON_FMT.format(place.ownerConsentDecidedAt)
+        : undefined,
   };
 
   return (

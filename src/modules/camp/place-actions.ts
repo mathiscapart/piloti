@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
@@ -14,7 +15,10 @@ import { geocodeAddress } from "./geocode";
 import {
   newOwnerConsentToken,
   nextOwnerConsent,
+  OWNER_CONSENT_REQUEST_DEFERRED,
+  type OwnerContact,
   type OwnerConsentReset,
+  ownerConsentRequestTooSoon,
   sendOwnerConsentRequest,
 } from "./owner-consent";
 import { parseOwnerEmail } from "./types";
@@ -56,7 +60,14 @@ function collectEquipment(fd: FormData): string[] {
 
 // #97 — colonnes à écrire quand l'accord du propriétaire retombe en attente.
 // Un nouveau jeton neutralise l'ancien lien ; sans contact, plus aucun lien.
-function consentResetData(reset: OwnerConsentReset) {
+// `keepLink` (#137) : l'envoi est différé et l'email n'a pas changé. Le lien
+// déjà reçu reste valable, faute de quoi le propriétaire n'en aurait plus aucun
+// d'utilisable jusqu'à la relance. Même destinataire : il n'y voit rien qui ne
+// le concerne, et la page lit le contact à jour à partir du jeton.
+function consentResetData(reset: OwnerConsentReset, keepLink = false) {
+  if (keepLink) {
+    return { ownerConsentStatus: reset.status, ownerConsentDecidedAt: null };
+  }
   const issued = reset.token === "NEW";
   return {
     ownerConsentStatus: reset.status,
@@ -74,10 +85,19 @@ function collectPhotos(fd: FormData): string[] {
     .slice(0, 8);
 }
 
+// #136 — sort du contact dans le formulaire de modification. `keep` : le
+// contact en attente n'a pas été renvoyé au navigateur, ses colonnes ne sont
+// pas touchées. `replace` : les champs soumis font foi (#97). Le choix est
+// explicite : des champs vides ne valent jamais « conserver ».
+const ownerContactModeSchema = z.enum(["keep", "replace"]);
+
+/** `notice` : enregistré, mais la demande au propriétaire est différée (#137). */
+type PlaceActionResult = ActionResult & { notice?: string };
+
 // US-L04 — créer une fiche lieu (géocodage best-effort de l'adresse).
 export async function createPlace(
   fd: FormData,
-): Promise<ActionResult & { id?: string }> {
+): Promise<PlaceActionResult & { id?: string }> {
   const user = await getCurrentUser();
   if (!can(user, "place.create")) return { error: "Permission refusée." };
 
@@ -104,9 +124,11 @@ export async function createPlace(
     }
   }
 
-  const place = await withAudit(
-    (tx) =>
-      tx.campPlace.create({
+  const { place, deferred } = await withAudit(
+    async (tx) => {
+      // #137 — lu avant de poser le jeton, dans la même transaction.
+      const deferred = ownerEmail ? await ownerConsentRequestTooSoon(tx, ownerEmail) : false;
+      const place = await tx.campPlace.create({
         data: {
           name,
           address,
@@ -127,11 +149,13 @@ export async function createPlace(
           photosJson: JSON.stringify(collectPhotos(fd)),
           createdById: user.id,
         },
-      }),
-    (created) => ({
+      });
+      return { place, deferred };
+    },
+    ({ place, deferred }) => ({
       action: "PLACE_CREATED",
       userId: user.id,
-      metadata: { placeId: created.id, name },
+      metadata: { placeId: place.id, name, ownerConsentRequestDeferred: deferred },
     }),
   );
 
@@ -139,7 +163,8 @@ export async function createPlace(
   // et on lui demande son accord. L'envoi est hors transaction, à dessein — un
   // email est un effet de bord irréversible, il n'a rien à faire dans un
   // `withAudit()`, et son échec ne doit pas annuler la création du lieu.
-  if (place.ownerEmail) {
+  // Différé (#137) : le jeton est posé, le chef relancera depuis la fiche.
+  if (place.ownerEmail && !deferred) {
     await sendOwnerConsentRequest({
       to: place.ownerEmail,
       token: place.ownerConsentToken!,
@@ -147,16 +172,21 @@ export async function createPlace(
   }
 
   revalidatePath("/lieux");
-  return { error: null, id: place.id };
+  return deferred
+    ? { error: null, id: place.id, notice: OWNER_CONSENT_REQUEST_DEFERRED }
+    : { error: null, id: place.id };
 }
 
 // US-L05 — modifier un lieu (chef créateur OU admin).
 export async function updatePlace(
   placeId: string,
   fd: FormData,
-): Promise<ActionResult> {
+): Promise<PlaceActionResult> {
   const user = await getCurrentUser();
   if (!can(user, "place.manage")) return { error: "Permission refusée." };
+
+  const contactMode = ownerContactModeSchema.safeParse(fd.get("ownerContact"));
+  if (!contactMode.success) return { error: "Formulaire invalide." };
 
   const place = await db.campPlace.findUnique({
     where: { id: placeId },
@@ -182,22 +212,30 @@ export async function updatePlace(
   const name = str(fd, "name");
   if (!name) return { error: "Le nom est requis." };
 
-  // RGPD-09 / sécurité — cette adresse devient un destinataire d'envoi réel.
-  // On refuse explicitement plutôt que d'enregistrer une valeur inexploitable :
-  // un email silencieusement ignoré laisserait le chef croire le propriétaire
-  // informé alors qu'aucun message n'est parti.
-  const ownerEmailParsed = parseOwnerEmail(str(fd, "ownerEmail"));
-  if (!ownerEmailParsed.ok) return { error: ownerEmailParsed.error };
-  const ownerEmail = ownerEmailParsed.value;
-  const ownerName = str(fd, "ownerName");
-  const ownerPhone = str(fd, "ownerPhone");
+  // #136 — « conserver » : aucune colonne de contact n'est écrite, donc ni le
+  // statut ni le jeton ne bougent. Les champs du formulaire sont ignorés.
+  let contact: OwnerContact | null = null;
+  let consentReset: OwnerConsentReset | null = null;
+  if (contactMode.data === "replace") {
+    // RGPD-09 / sécurité — cette adresse devient un destinataire d'envoi réel.
+    // On refuse explicitement plutôt que d'enregistrer une valeur inexploitable :
+    // un email silencieusement ignoré laisserait le chef croire le propriétaire
+    // informé alors qu'aucun message n'est parti.
+    const ownerEmailParsed = parseOwnerEmail(str(fd, "ownerEmail"));
+    if (!ownerEmailParsed.ok) return { error: ownerEmailParsed.error };
+    contact = {
+      name: str(fd, "ownerName"),
+      phone: str(fd, "ownerPhone"),
+      email: ownerEmailParsed.value,
+    };
 
-  // #97 — l'accord du propriétaire ne survit pas à un changement de personne.
-  const consentReset = nextOwnerConsent(
-    place.ownerConsentStatus,
-    { name: place.ownerName, phone: place.ownerPhone, email: place.ownerEmail },
-    { name: ownerName, phone: ownerPhone, email: ownerEmail },
-  );
+    // #97 — l'accord du propriétaire ne survit pas à un changement de personne.
+    consentReset = nextOwnerConsent(
+      place.ownerConsentStatus,
+      { name: place.ownerName, phone: place.ownerPhone, email: place.ownerEmail },
+      contact,
+    );
+  }
 
   const address = str(fd, "address");
   let latitude = parseCoord(fd, "latitude");
@@ -218,8 +256,13 @@ export async function updatePlace(
   if (latitude === null) latitude = place.latitude;
   if (longitude === null) longitude = place.longitude;
 
-  const updated = await withAudit(
+  const { updated, deferred } = await withAudit(
     async (tx) => {
+      // #137 — lu avant de poser le nouveau jeton, dans la même transaction.
+      const deferred =
+        consentReset?.token === "NEW" && contact?.email
+          ? await ownerConsentRequestTooSoon(tx, contact.email)
+          : false;
       const row = await tx.campPlace.update({
         where: { id: placeId },
         data: {
@@ -230,12 +273,14 @@ export async function updatePlace(
           latitude,
           longitude,
           equipmentJson: JSON.stringify(collectEquipment(fd)),
-          ownerName,
-          ownerPhone,
-          ownerEmail,
+          ...(contact
+            ? { ownerName: contact.name, ownerPhone: contact.phone, ownerEmail: contact.email }
+            : {}),
           notes: str(fd, "notes"),
           photosJson: JSON.stringify(collectPhotos(fd)),
-          ...(consentReset ? consentResetData(consentReset) : {}),
+          ...(consentReset
+            ? consentResetData(consentReset, deferred && contact?.email === place.ownerEmail)
+            : {}),
         },
       });
       // Seconde entrée, même transaction : le retour en attente a sa propre
@@ -252,18 +297,20 @@ export async function updatePlace(
               placeName: name,
               previousStatus: place.ownerConsentStatus,
               reason: consentReset.reason,
+              requestDeferred: deferred,
             }),
           },
         });
       }
-      return row;
+      return { updated: row, deferred };
     },
     { action: "PLACE_UPDATED", userId: user.id, metadata: { placeId, name } },
   );
 
   // RGPD-09 — nouvelle personne, nouvelle demande. Hors transaction, comme à la
   // création : un envoi raté laisse simplement le contact en attente.
-  if (consentReset?.token === "NEW" && updated.ownerEmail) {
+  // Différé (#137) : le jeton est posé, le chef relancera depuis la fiche.
+  if (consentReset?.token === "NEW" && updated.ownerEmail && !deferred) {
     await sendOwnerConsentRequest({
       to: updated.ownerEmail,
       token: updated.ownerConsentToken!,
@@ -272,7 +319,7 @@ export async function updatePlace(
 
   revalidatePath("/lieux");
   revalidatePath(`/lieux/${placeId}`);
-  return { error: null };
+  return deferred ? { error: null, notice: OWNER_CONSENT_REQUEST_DEFERRED } : { error: null };
 }
 
 // US-L05 — archiver un lieu (créateur ou admin).

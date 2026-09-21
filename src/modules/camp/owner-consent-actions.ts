@@ -11,6 +11,7 @@ import type { ActionResult } from "@/lib/types";
 import {
   isConsentLinkExpired,
   newOwnerConsentToken,
+  ownerConsentRequestTooSoon,
   sendOwnerConsentRequest,
 } from "./owner-consent";
 
@@ -131,7 +132,6 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
       ownerName: true,
       ownerEmail: true,
       ownerConsentStatus: true,
-      ownerConsentRequestedAt: true,
     },
   });
   if (!place) return { error: "Lieu introuvable." };
@@ -143,14 +143,11 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
   }
 
   // SÉCURITÉ — anti-harcèlement. Sans ce délai, le bouton de relance permet à
-  // un chef d'inonder une boîte mail d'un simple clic répété, et l'application
-  // en porterait la réputation d'expéditeur. Le destinataire n'est pas
-  // utilisateur : il n'a aucun moyen de se désabonner de nos envois.
-  const RELANCE_DELAI_MS = 15 * 60 * 1000;
-  const derniere = place.ownerConsentRequestedAt?.getTime() ?? 0;
-  if (Date.now() - derniere < RELANCE_DELAI_MS) {
+  // un chef d'inonder une boîte mail d'un simple clic répété. Même règle que la
+  // création et la modification (#137) : par adresse, tous lieux confondus.
+  if (await ownerConsentRequestTooSoon(db, place.ownerEmail)) {
     return {
-      error: "Une demande vient d'être envoyée. Merci de patienter avant de relancer.",
+      error: "Une demande a déjà été envoyée récemment à cette adresse. Merci de patienter avant de relancer.",
     };
   }
 

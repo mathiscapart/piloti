@@ -449,5 +449,8 @@ export const AUDIT_ACTIONS = [
   "PLACE_OWNER_CONSENT_GRANTED",
   "PLACE_OWNER_CONSENT_REFUSED",
   "PLACE_OWNER_CONSENT_RESENT",
+  // #97 — l'accord retombe en attente quand le chef change l'email ou le
+  // téléphone du propriétaire (ou vide le contact depuis le formulaire).
+  "PLACE_OWNER_CONSENT_RESET",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

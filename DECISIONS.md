@@ -555,6 +555,18 @@ Elle journalise chaque passage dans `piloti-backups/journal-<env>.log`, succès 
 
 **Résidu connu** : la clé privée reste sur la machine sauvegardée tant que son propriétaire ne l'a pas déplacée. Tant qu'elle y est, la protection contre un rançongiciel est théorique — l'attaquant obtient la base ET de quoi déchiffrer les archives, y compris celles répliquées hors-site.
 
+**Amendement 2026-09-21 — l'accord vaut pour une personne, pas pour une fiche (#97)** :
+
+L'accord `GRANTED` survivait à toute modification du contact. Un chef qui remplaçait le propriétaire par une autre personne la faisait apparaître aussitôt comme ayant consenti ; un contact effacé puis ressaisi héritait de l'accord précédent ; un contact qui avait refusé pouvait être ressaisi à l'identique.
+
+- **Email ou téléphone modifié** → retour à `PENDING`, **nouveau jeton**, contact masqué, nouvelle demande si un email existe. Ce sont eux qui désignent la personne jointe. Le jeton est renouvelé même si l'accord était déjà en attente : l'ancien lien montrerait sinon le nouveau contact à l'ancien destinataire.
+- **Nom seul modifié** → statut inchangé. Corriger une faute de frappe ne justifie pas de solliciter à nouveau le propriétaire.
+- **Contact vidé** (bouton d'effacement ou formulaire) → `PENDING` **sans jeton** : plus de contact, plus de lien.
+- **Ressaisie après un refus : avertissement, pas interdiction.** Le refus vide les champs. Reconnaître ensuite la même personne supposerait de conserver une empreinte de ses coordonnées, par exemple un hachage de l'email. On s'y refuse : une empreinte d'email reste une donnée personnelle, facile à retrouver par dictionnaire, et la garder contredirait l'effacement demandé. Le formulaire affiche donc « Le précédent contact a refusé le JJ/MM. N'enregistrez pas à nouveau ses coordonnées. », et toute nouvelle saisie repasse en `PENDING` avec un nouveau jeton. Si c'est la même personne, elle reçoit une nouvelle demande et peut refuser de nouveau. Aucun contact n'est jamais affiché sans son accord.
+- La transition est une fonction pure (`nextOwnerConsent`, `src/modules/camp/owner-consent.ts`), testée. Chaque retour en attente est tracé par `PLACE_OWNER_CONSENT_RESET` (statut précédent et motif, jamais les coordonnées), dans la même transaction que la modification.
+
+**Résidu connu** : les fiches déjà modifiées avant ce correctif peuvent porter un `GRANTED` donné par une autre personne. Rien ne permet de les distinguer après coup. Elles se corrigent à la prochaine modification de l'email ou du téléphone, ou en effaçant le contact (la relance est refusée sur un accord `GRANTED`).
+
 ## D-033 — RGPD-05 : un compte refusé est anonymisé après 30 jours, et l'anonymisation expurge l'audit
 
 **Contexte** : refuser une inscription passait le compte en `REJECTED` sans rien effacer (#124). Nom, email, date de naissance, IP et navigateur du consentement restaient en base sans finalité ni durée, parfois pour des mineurs de 15 à 17 ans. Le compte n'apparaissait dans aucune liste, et seule une URL tapée à la main permettait de le supprimer. Par ailleurs, l'anonymisation d'un compte laissait des données personnelles en clair dans `AuditLog.metadata` (#94) : la date de naissance avant et après correction (`USER_BIRTHDATE_CHANGED`) et le motif de refus (`USER_REJECTED`).

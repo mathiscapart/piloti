@@ -380,7 +380,7 @@ export async function deleteNote(noteId: string): Promise<ActionResult> {
 
   await withAudit(
     (tx) => tx.pedagogicalNote.delete({ where: { id: noteId } }),
-    { action: "PEDAGO_NOTE_ADDED", userId: user.id, metadata: { noteId, deleted: true } },
+    { action: "PEDAGO_NOTE_DELETED", userId: user.id, metadata: { noteId, jeuneId: note.userId } },
   );
   revalidatePath(`/membres/${note.userId}/progression`);
   return { error: null };

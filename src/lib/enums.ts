@@ -427,6 +427,7 @@ export const AUDIT_ACTIONS = [
   "PEDAGO_GOAL_SET",
   "PEDAGO_GOAL_UPDATED",
   "PEDAGO_NOTE_ADDED",
+  "PEDAGO_NOTE_DELETED",
   "MESSAGE_REPORTED",
   "MESSAGE_HIDDEN",
   "REPORT_RESOLVED",
@@ -440,5 +441,9 @@ export const AUDIT_ACTIONS = [
   "IMAGE_RIGHTS_STATUS_SET",
   // RGPD-09 — effacement du contact d'un propriétaire de lieu, à sa demande.
   "PLACE_OWNER_CONTACT_ERASED",
+  // RGPD-09 — décision du propriétaire via son lien, et relance par un chef.
+  "PLACE_OWNER_CONSENT_GRANTED",
+  "PLACE_OWNER_CONSENT_REFUSED",
+  "PLACE_OWNER_CONSENT_RESENT",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -88,6 +88,7 @@ export const ACTIONS = [
   // Suivi pédagogique (US-S01…S10)
   "pedago.view", // consulter la progression / fiches (encadrement + RG)
   "pedago.manage", // valider étape, attribuer badge, objectifs, notes (chef)
+  "pedago.validation.cancel", // #100 — annuler une étape CONFIRMÉE (RG + ADMIN)
   "pedago.referential", // gérer le référentiel d'étapes & le catalogue de badges
 ] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -215,6 +216,11 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // page (pas par `can()`), hors notes sensibles (US-S07/S10).
   "pedago.view": [CHEF, RG],
   "pedago.manage": [CHEF],
+  // #100 — une étape confirmée par deux chefs ne se défait pas par un seul :
+  // l'annulation est réservée au RG (déroge à « RG = lecture seule », c'est un
+  // arbitrage, pas une gestion courante) et à l'ADMIN. Une proposition non
+  // confirmée reste retirable par les chefs de la branche (`pedago.manage`).
+  "pedago.validation.cancel": [RG],
   "pedago.referential": [CHEF],
 };
 

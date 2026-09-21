@@ -121,7 +121,41 @@ export default async function ModerationPage({ searchParams }: PageProps) {
                       Motif : {r.reason}
                     </p>
                   ) : null}
-                  {r.target ? (
+                  {r.snapshot ? (
+                    // #92 — la copie prise au signalement fait preuve, quel que
+                    // soit le sort du message depuis.
+                    <div className="mt-2 space-y-2 rounded-lg border border-stone/60 px-3 py-2">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs font-bold text-trail">
+                            {r.target?.context ??
+                              (r.targetType === "CHANNEL_MESSAGE" ? "Salon" : "Message privé")}{" "}
+                            · {r.snapshot.authorName} · texte au moment du signalement
+                          </p>
+                          {r.targetState === "EDITED" ? (
+                            <span className="rounded-full bg-sun-soft px-2 py-0.5 text-xs font-bold text-sun-ink">
+                              Modifié depuis le signalement
+                            </span>
+                          ) : r.targetState === "DELETED" ? (
+                            <span className="rounded-full bg-brick-soft px-2 py-0.5 text-xs font-bold text-brick-ink">
+                              Supprimé par l&apos;auteur
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-earth">
+                          {r.snapshot.body}
+                        </p>
+                      </div>
+                      {r.targetState === "EDITED" && r.target ? (
+                        <div className="border-t border-stone/60 pt-2">
+                          <p className="text-xs font-bold text-trail">Texte actuel</p>
+                          <p className="mt-0.5 whitespace-pre-wrap break-words text-sm text-earth">
+                            {r.target.body}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : r.target ? (
                     <div className="mt-2 rounded-lg border border-stone/60 px-3 py-2">
                       <p className="text-xs font-bold text-trail">
                         {r.target.context} · {r.target.authorName}
@@ -143,10 +177,12 @@ export default async function ModerationPage({ searchParams }: PageProps) {
                 </div>
               </div>
 
-              {canReview && r.status === "PENDING" && r.target ? (
+              {/* #92 — le signalement reste traitable même si le message a
+                  disparu ; seul « Masquer » suppose un message à masquer. */}
+              {canReview && r.status === "PENDING" ? (
                 <ModerationActions
                   reportId={r.id}
-                  alreadyHidden={r.target.hidden}
+                  canHide={r.target !== null && !r.target.hidden}
                 />
               ) : null}
             </li>

@@ -1063,6 +1063,11 @@ model Report {
   // à chaque lecture : un CHEF ne voit/traite que les signalements de son unité,
   // l'ADMIN voit tout. Null si l'auteur n'a pas d'unité renseignée (ex. ADULTES).
   concernedUnit String?
+  // #92 — copie du message au moment du signalement (JSON { body, authorId }),
+  // preuve de référence : l'auteur peut toujours modifier ou supprimer son
+  // message. L'auteur est un id, son nom se résout à la lecture (anonymisation).
+  // Null pour les signalements antérieurs.
+  targetSnapshot String?
 
   reporter  User  @relation("ReportReporter", fields: [reporterId], references: [id])
   moderator User? @relation("ReportModerator", fields: [moderatorId], references: [id])

@@ -17,6 +17,8 @@ import {
   canModerate,
   canModerateReport,
   isVisibleMessage,
+  parseTargetSnapshot,
+  reportTargetState,
   resolveConcernedUnit,
   selectReportRecipients,
 } from "./moderation-policy";
@@ -178,5 +180,33 @@ describe("exclusion de l'auteur du contenu signalé (#91)", () => {
   it("signalement sans unité concernée : le RG est notifié en plus de l'ADMIN", () => {
     const recipients = selectReportRecipients([peer, rg, admin], null, "u-parent");
     expect(recipients.sort()).toEqual(["u-admin", "u-rg"].sort());
+  });
+});
+
+// #92 — copie du message prise au signalement (modèle Discord) : c'est la
+// preuve de référence, comparée au message actuel pour indiquer à la
+// modération s'il a été modifié ou supprimé depuis.
+describe("copie du contenu signalé (#92)", () => {
+  const snapshot = { body: "texte d'origine", authorId: "u-auteur" };
+
+  it("parseTargetSnapshot relit la copie stockée", () => {
+    expect(parseTargetSnapshot(JSON.stringify(snapshot))).toEqual(snapshot);
+  });
+
+  it("parseTargetSnapshot renvoie null sans copie (signalement antérieur) ou si elle est illisible", () => {
+    expect(parseTargetSnapshot(null)).toBeNull();
+    expect(parseTargetSnapshot("pas du json")).toBeNull();
+    expect(parseTargetSnapshot(JSON.stringify({ body: "x" }))).toBeNull();
+  });
+
+  it("reportTargetState : inchangé, modifié ou supprimé par rapport à la copie", () => {
+    expect(reportTargetState(snapshot, { body: "texte d'origine" })).toBe("UNCHANGED");
+    expect(reportTargetState(snapshot, { body: "texte adouci" })).toBe("EDITED");
+    expect(reportTargetState(snapshot, null)).toBe("DELETED");
+  });
+
+  it("reportTargetState : sans copie, l'état est inconnu", () => {
+    expect(reportTargetState(null, { body: "x" })).toBeNull();
+    expect(reportTargetState(null, null)).toBeNull();
   });
 });

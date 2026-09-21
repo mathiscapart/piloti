@@ -53,6 +53,7 @@ export const ACTIONS = [
   "donation.review",
   // Communication
   "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
+  "message.manage_any", // #92 — modifier / supprimer le message d'un autre (l'auteur, lui, gère les siens)
   // SAFE-02 — signalement & modération de contenu (salons + messagerie privée).
   "moderation.view", // consulter la file de modération (CHEF + RG, lecture)
   "moderation.review", // traiter la file : masquer un message, résoudre/rejeter
@@ -170,6 +171,9 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "donation.review": [MAT],
   // Communication — publier une annonce / diffusion urgente : encadrants.
   "announcement.publish": [CHEF, RG],
+  // #92 — l'auteur modifie / supprime ses propres messages (contrôle dans
+  // l'action) ; le message d'un autre : ADMIN seul.
+  "message.manage_any": [],
   // SAFE-02 — la file de modération se consulte ET se traite par les chefs et le
   // responsable de groupe (masquer, résoudre, rejeter). Un CHEF est limité à son
   // unité (cf. canModerateReport) ; RG et ADMIN voient et traitent toutes les unités.

@@ -24,8 +24,9 @@ const ERASED_BODY = "[Contenu effacé à la demande de son auteur]";
  *
  * Les corps de messages écrits par la personne SONT effacés, sauf ceux visés
  * par un signalement — seule exception, motivée par la protection des mineurs
- * (cf. DECISIONS.md D-028). `Report.reason` est conservé pour la même raison :
- * c'est par nature une pièce de modération.
+ * (cf. DECISIONS.md D-028). `Report.reason` et `Report.targetSnapshot` (copie
+ * du message prise au signalement, #92) sont conservés pour la même raison :
+ * ce sont par nature des pièces de modération.
  *
  * ATTENTION en faisant évoluer le schéma : l'effacement est une ANONYMISATION,
  * jamais un `delete` de la ligne `User` — donc aucun `onDelete: Cascade` du

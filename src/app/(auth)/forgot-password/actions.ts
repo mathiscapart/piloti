@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
+import { rateLimitMessage } from "@/lib/auth-rate-limit";
 
 export interface ForgotPasswordResult {
   error: string | null;
@@ -25,9 +26,9 @@ export async function forgotPasswordAction(
 
   try {
     // better-auth 1.6 : la route /forget-password n'existe plus, elle a été
-    // renommée /request-password-reset. On appelle la méthode typée plutôt que
-    // de fabriquer une Request — les headers réels donnent aussi son IP au
-    // rate-limiter.
+    // renommée /request-password-reset. Les headers réels donnent son IP au
+    // hook de limite (#147, src/lib/auth-rate-limit.ts) ; le limiteur intégré
+    // de better-auth, lui, ne voit pas les appels `auth.api.*`.
     await auth.api.requestPasswordReset({
       body: {
         email: parsed.data.email,
@@ -36,6 +37,8 @@ export async function forgotPasswordAction(
       headers: await headers(),
     });
   } catch (e) {
+    const limited = rateLimitMessage(e);
+    if (limited) return { error: limited, sent: false };
     console.error("[forgotPassword]", e);
     return {
       error: "Impossible d'envoyer l'email. Réessayez ou contactez un administrateur.",

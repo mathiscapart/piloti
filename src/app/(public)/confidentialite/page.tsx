@@ -229,6 +229,7 @@ export default function ConfidentialitePage() {
             son rôle dans le groupe ;
           </li>
           <li>Les mots de passe ne sont jamais conservés en clair ;</li>
+          <li>Les tentatives de connexion répétées sont bloquées ;</li>
           <li>
             Les opérations de gestion du groupe (matériel, finances, planning,
             suivi pédagogique…) sont enregistrées dans un journal qui en

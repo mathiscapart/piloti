@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
+import { rateLimitMessage } from "@/lib/auth-rate-limit";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
@@ -173,7 +174,7 @@ export async function signUpAction(
         },
       }),
     );
-  } catch {
+  } catch (e) {
     // R1 — si le consentement n'a pas pu être tracé après la création du
     // compte, on ne laisse jamais un compte exister sans preuve de
     // consentement : suppression immédiate (hard-delete) du compte créé.
@@ -187,6 +188,8 @@ export async function signUpAction(
         );
       });
     }
+    const limited = rateLimitMessage(e);
+    if (limited) return { error: limited, success: null };
     return {
       error: "Erreur lors de l'inscription. Réessayez dans un instant.",
       success: null,

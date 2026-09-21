@@ -30,6 +30,9 @@ export const AUTH_RATE_LIMITS = {
   signUpsByIp: { points: 5, duration: 60 * 60 },
   // Réinitialisations par IP : le jeton n'est pas devinable, simple garde-fou.
   passwordResetsByIp: { points: 10, duration: 15 * 60 },
+  // Alertes « connexion bloquée » envoyées au titulaire : une par heure au plus,
+  // pour qu'un attaquant qui change d'IP n'inonde pas sa boîte.
+  signInAlertsByEmail: { points: 1, duration: 60 * 60 },
 } as const;
 
 type LimiterName = keyof typeof AUTH_RATE_LIMITS;
@@ -134,9 +137,12 @@ function rateLimited(msBeforeNext: number): APIError {
   });
 }
 
+function emailOf(body: unknown): string | null {
+  return normalizeEmail((body as { email?: unknown } | undefined)?.email);
+}
+
 function planFor(path: string, body: unknown, headers: Headers | null | undefined) {
-  const email = (body as { email?: unknown } | undefined)?.email;
-  return authRateLimitPlan(path, normalizeEmail(email), clientIp(headers));
+  return authRateLimitPlan(path, emailOf(body), clientIp(headers));
 }
 
 /** Hook `before` : lève une APIError 429 si un compteur est épuisé. */
@@ -158,20 +164,41 @@ export async function enforceAuthRateLimit(
   }
 }
 
-/** Hook `after` : rend le point consommé sauf échec, remet à zéro après un succès. */
+/**
+ * Hook `after` : rend le point consommé sauf échec, remet à zéro après un succès.
+ * Renvoie l'email du compte dont le titulaire doit être prévenu, quand cet échec
+ * vient de bloquer la connexion (au plus une fois par heure et par compte).
+ */
 export async function recordAuthOutcome(
   path: string,
   body: unknown,
   headers: Headers | null | undefined,
   returned: unknown,
-): Promise<void> {
+): Promise<string | null> {
   const plan = planFor(path, body, headers);
-  if (!plan) return;
+  if (!plan) return null;
 
   const outcome = classifyOutcome(returned);
-  if (outcome === "failure") return;
+  if (outcome === "failure") return ownerToAlert(plan, emailOf(body));
   for (const { limiter, key } of plan.failures) await limiters[limiter].reward(key, 1);
   if (outcome === "success") {
     for (const { limiter, key } of plan.resetOnSuccess) await limiters[limiter].delete(key);
+  }
+  return null;
+}
+
+async function ownerToAlert(plan: AuthRateLimitPlan, email: string | null): Promise<string | null> {
+  const counter = plan.failures.find((c) => c.limiter === "loginFailsByEmailAndIp");
+  if (!counter || !email) return null;
+  const res = await limiters.loginFailsByEmailAndIp.get(counter.key);
+  // `>=` et non `===` : des requêtes simultanées rejetées gonflent le compteur
+  // avant que ce hook ne le lise. Le limiteur d'alertes dédoublonne.
+  if (!res || res.consumedPoints < AUTH_RATE_LIMITS.loginFailsByEmailAndIp.points) return null;
+  try {
+    await limiters.signInAlertsByEmail.consume(email);
+    return email;
+  } catch (e) {
+    if (isLimiterRejection(e)) return null;
+    throw e;
   }
 }

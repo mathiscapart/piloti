@@ -286,3 +286,39 @@ describe("isLimiterRejection", () => {
     expect(isLimiterRejection(null)).toBe(false);
   });
 });
+
+describe("alerte au titulaire du compte", () => {
+  async function failOnce(email: string, headers: Headers) {
+    await enforceAuthRateLimit("/sign-in/email", { email }, headers);
+    return recordAuthOutcome("/sign-in/email", { email }, headers, failure);
+  }
+
+  it("désigne le compte à prévenir quand l'échec atteint le seuil de blocage, pas avant", async () => {
+    const { email, headers } = fresh();
+    const alerts: (string | null)[] = [];
+    for (let i = 0; i < AUTH_RATE_LIMITS.loginFailsByEmailAndIp.points; i++) {
+      alerts.push(await failOnce(email.toUpperCase(), headers));
+    }
+    expect(alerts.slice(0, -1).every((a) => a === null)).toBe(true);
+    expect(alerts.at(-1)).toBe(email);
+  });
+
+  it("une seule alerte par compte et par heure, même depuis d'autres IP", async () => {
+    const { email } = fresh();
+    const blockFrom = async (headers: Headers) => {
+      let last: string | null = null;
+      for (let i = 0; i < AUTH_RATE_LIMITS.loginFailsByEmailAndIp.points; i++) {
+        last = await failOnce(email, headers);
+      }
+      return last;
+    };
+    expect(await blockFrom(fresh().headers)).toBe(email);
+    expect(await blockFrom(fresh().headers)).toBeNull();
+  });
+
+  it("aucune alerte pour un succès ni pour les autres routes", async () => {
+    const { email, headers } = fresh();
+    expect(await recordAuthOutcome("/sign-in/email", { email }, headers, { user: {} })).toBeNull();
+    expect(await recordAuthOutcome("/sign-up/email", { email }, headers, failure)).toBeNull();
+  });
+});

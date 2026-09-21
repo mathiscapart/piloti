@@ -218,7 +218,20 @@ export const auth = betterAuth({
       }
     }),
     after: createAuthMiddleware(async (ctx) => {
-      await recordAuthOutcome(ctx.path, ctx.body, ctx.headers, ctx.context.returned);
+      const alertEmail = await recordAuthOutcome(
+        ctx.path,
+        ctx.body,
+        ctx.headers,
+        ctx.context.returned,
+      );
+      // Sans await : une réponse plus lente quand le compte existe trahirait
+      // son existence. Import dynamique : le module est `server-only`, or
+      // prisma/seed.ts importe ce fichier hors de Next.
+      if (alertEmail) {
+        void import("@/modules/notifications/security-alert")
+          .then((m) => m.alertBlockedSignIn(alertEmail))
+          .catch((e) => console.error("[auth] alerte de sécurité non envoyée:", e));
+      }
     }),
   },
 

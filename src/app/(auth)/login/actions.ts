@@ -10,6 +10,8 @@ import { rateLimitMessage } from "@/lib/auth-rate-limit";
 
 export interface SignInActionResult {
   error: string | null;
+  // #147 — connexion bloquée : le formulaire propose la réinitialisation.
+  rateLimited?: boolean;
 }
 
 const schema = z.object({
@@ -51,7 +53,7 @@ export async function signInAction(
     user = result.user;
   } catch (e) {
     const limited = rateLimitMessage(e);
-    if (limited) return { error: limited };
+    if (limited) return { error: limited, rateLimited: true };
     if (e instanceof APIError && e.body?.code === ACCOUNT_NOT_ACTIVE_CODE) {
       return { error: e.body.message ?? "Ce compte ne peut pas se connecter." };
     }

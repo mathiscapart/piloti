@@ -179,6 +179,8 @@ export async function confirmStep(
   return { error: null };
 }
 
+class StaleValidationError extends Error {}
+
 // Deux régimes (#100) : une PROPOSITION se retire par les chefs de la branche
 // (`pedago.manage`, comme les autres écritures) ; une étape CONFIRMÉE par deux
 // chefs ne se défait pas par un seul — annulation réservée au RG et à l'ADMIN
@@ -217,19 +219,35 @@ export async function removeValidation(
   }
 
   const cancelled = validation.status === "CONFIRMED";
-  await withAudit(
-    (tx) => tx.stepValidation.delete({ where: { id: validation.id } }),
-    {
-      action: cancelled ? "STEP_VALIDATION_CANCELLED" : "STEP_VALIDATION_REMOVED",
-      userId: user.id,
-      metadata: {
-        jeuneId,
-        stepId,
-        proposedById: validation.proposedById,
-        confirmedById: validation.confirmedById,
+  // Le statut a été lu hors transaction : on ne supprime que s'il n'a pas changé.
+  // Sans ce garde, une proposition confirmée entre-temps par un 2e chef serait
+  // effacée par un chef seul, tracée comme simple retrait (#100). Lever annule
+  // la transaction, AuditLog compris.
+  try {
+    await withAudit(
+      async (tx) => {
+        const { count } = await tx.stepValidation.deleteMany({
+          where: { id: validation.id, status: validation.status },
+        });
+        if (count === 0) throw new StaleValidationError();
       },
-    },
-  );
+      {
+        action: cancelled ? "STEP_VALIDATION_CANCELLED" : "STEP_VALIDATION_REMOVED",
+        userId: user.id,
+        metadata: {
+          jeuneId,
+          stepId,
+          proposedById: validation.proposedById,
+          confirmedById: validation.confirmedById,
+        },
+      },
+    );
+  } catch (err) {
+    if (err instanceof StaleValidationError) {
+      return { error: "La validation a changé entre-temps, recharge la page." };
+    }
+    throw err;
+  }
 
   if (cancelled) {
     after(async () => {

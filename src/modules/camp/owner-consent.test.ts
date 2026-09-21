@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   isConsentLinkExpired,
+  isOwnerConsentRequestTooSoon,
   nextOwnerConsent,
   OWNER_CONSENT_LINK_TTL_DAYS,
+  OWNER_CONSENT_REQUEST_INTERVAL_MINUTES,
 } from "./owner-consent";
 
 const JOUR_MS = 24 * 60 * 60 * 1000;
@@ -106,5 +108,55 @@ describe("nextOwnerConsent", () => {
 
   it("REFUSED + toujours aucun contact → statut inchangé", () => {
     expect(nextOwnerConsent("REFUSED", aucun, aucun)).toBeNull();
+  });
+});
+
+// #137 — le destinataire n'est pas utilisateur et ne peut pas se désabonner :
+// le délai entre deux demandes est sa seule protection. Il vaut par ADRESSE,
+// tous lieux confondus, sinon créer des lieux en série le contournerait.
+describe("isOwnerConsentRequestTooSoon", () => {
+  const MINUTE_MS = 60 * 1000;
+  const now = new Date("2026-09-21T10:00:00Z").getTime();
+  const envoi = (email: string | null, minutes: number) => ({
+    email,
+    requestedAt: new Date(now - minutes * MINUTE_MS),
+  });
+
+  it("même adresse il y a moins de 15 minutes → refusé", () => {
+    expect(isOwnerConsentRequestTooSoon("jean@ferme.fr", [envoi("jean@ferme.fr", 5)], now)).toBe(true);
+  });
+
+  it("même adresse juste avant la limite → refusé", () => {
+    const presque = { email: "jean@ferme.fr", requestedAt: new Date(now - OWNER_CONSENT_REQUEST_INTERVAL_MINUTES * MINUTE_MS + 1) };
+    expect(isOwnerConsentRequestTooSoon("jean@ferme.fr", [presque], now)).toBe(true);
+  });
+
+  it("même adresse il y a 15 minutes ou plus → accepté", () => {
+    expect(
+      isOwnerConsentRequestTooSoon("jean@ferme.fr", [envoi("jean@ferme.fr", OWNER_CONSENT_REQUEST_INTERVAL_MINUTES)], now),
+    ).toBe(false);
+    expect(isOwnerConsentRequestTooSoon("jean@ferme.fr", [envoi("jean@ferme.fr", 60)], now)).toBe(false);
+  });
+
+  it("autre adresse, même récente → accepté", () => {
+    expect(isOwnerConsentRequestTooSoon("jean@ferme.fr", [envoi("marie@ferme.fr", 1)], now)).toBe(false);
+  });
+
+  it("la casse ne distingue pas deux adresses", () => {
+    expect(isOwnerConsentRequestTooSoon("jean@ferme.fr", [envoi("Jean@Ferme.FR", 1)], now)).toBe(true);
+  });
+
+  it("une trace sans adresse ou sans date ne bloque rien", () => {
+    expect(
+      isOwnerConsentRequestTooSoon(
+        "jean@ferme.fr",
+        [envoi(null, 1), { email: "jean@ferme.fr", requestedAt: null }],
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it("aucune demande antérieure → accepté", () => {
+    expect(isOwnerConsentRequestTooSoon("jean@ferme.fr", [], now)).toBe(false);
   });
 });

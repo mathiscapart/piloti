@@ -37,6 +37,13 @@ export default async function EditPlacePage({ params }: PageProps) {
   const isAdmin = effectiveRoles(user).includes("ADMIN");
   if (!isAdmin && place.createdById !== user.id) redirect(`/lieux/${id}`);
 
+  // #136 — sans accord, le contact reste masqué ici comme sur la fiche. Il
+  // n'entre ni dans les props ni, donc, dans le payload RSC : le formulaire
+  // propose seulement de le conserver ou de le remplacer.
+  const ownerContactPending =
+    place.ownerConsentStatus !== "GRANTED" &&
+    !!(place.ownerName || place.ownerPhone || place.ownerEmail);
+
   const initial: PlaceFormValues = {
     id: place.id,
     name: place.name,
@@ -44,9 +51,10 @@ export default async function EditPlacePage({ params }: PageProps) {
     region: place.region ?? "",
     capacity: place.capacity != null ? String(place.capacity) : "",
     equipment: parseJsonArray(place.equipmentJson),
-    ownerName: place.ownerName ?? "",
-    ownerPhone: place.ownerPhone ?? "",
-    ownerEmail: place.ownerEmail ?? "",
+    ownerName: ownerContactPending ? "" : (place.ownerName ?? ""),
+    ownerPhone: ownerContactPending ? "" : (place.ownerPhone ?? ""),
+    ownerEmail: ownerContactPending ? "" : (place.ownerEmail ?? ""),
+    ownerContactPending,
     notes: place.notes ?? "",
     photos: parseJsonArray(place.photosJson),
     ownerRefusedOn:

@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 
+import type { Prisma } from "@prisma/client";
+
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { db } from "@/lib/db";
 
@@ -60,6 +62,73 @@ export function isConsentLinkExpired(requestedAt: Date | null | undefined): bool
   const ageMs = Date.now() - requestedAt.getTime();
   return ageMs > OWNER_CONSENT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000;
 }
+
+/**
+ * Délai minimal entre deux demandes vers une même adresse, en minutes.
+ *
+ * SÉCURITÉ — anti-harcèlement. Le destinataire n'est pas utilisateur : il n'a
+ * aucun moyen de se désabonner de nos envois, et l'application en porterait la
+ * réputation d'expéditeur. L'auto-limitation est sa seule protection.
+ */
+export const OWNER_CONSENT_REQUEST_INTERVAL_MINUTES = 15;
+
+/** Une demande déjà émise : l'adresse d'un lieu et la date de son dernier jeton. */
+export interface OwnerConsentRequestTrace {
+  email: string | null;
+  requestedAt: Date | null;
+}
+
+/**
+ * #137 — une demande vers `to` serait-elle trop rapprochée de la précédente ?
+ *
+ * La règle vaut par ADRESSE, tous lieux confondus : par lieu, créer des lieux
+ * en série ou alterner deux téléphones sur une fiche la contournerait. Création,
+ * modification et relance passent toutes par elle.
+ */
+export function isOwnerConsentRequestTooSoon(
+  to: string,
+  previous: OwnerConsentRequestTrace[],
+  now: number = Date.now(),
+): boolean {
+  const target = to.toLowerCase();
+  const since = now - OWNER_CONSENT_REQUEST_INTERVAL_MINUTES * 60 * 1000;
+  return previous.some(
+    (p) =>
+      p.email?.toLowerCase() === target &&
+      p.requestedAt !== null &&
+      p.requestedAt.getTime() > since,
+  );
+}
+
+/**
+ * Lit les demandes récentes et applique la règle. À appeler DANS la transaction
+ * qui pose le nouveau jeton, et avant de le poser : sinon le lieu se trouverait
+ * lui-même, et deux enregistrements simultanés passeraient tous les deux.
+ */
+export async function ownerConsentRequestTooSoon(
+  tx: Pick<Prisma.TransactionClient, "campPlace">,
+  to: string,
+): Promise<boolean> {
+  const now = Date.now();
+  const recent = await tx.campPlace.findMany({
+    where: {
+      ownerEmail: { not: null },
+      ownerConsentRequestedAt: {
+        gt: new Date(now - OWNER_CONSENT_REQUEST_INTERVAL_MINUTES * 60 * 1000),
+      },
+    },
+    select: { ownerEmail: true, ownerConsentRequestedAt: true },
+  });
+  return isOwnerConsentRequestTooSoon(
+    to,
+    recent.map((r) => ({ email: r.ownerEmail, requestedAt: r.ownerConsentRequestedAt })),
+    now,
+  );
+}
+
+/** Message affiché au chef quand l'envoi est différé. */
+export const OWNER_CONSENT_REQUEST_DEFERRED =
+  "Une demande a déjà été envoyée récemment à cette adresse. Vous pourrez la relancer depuis la fiche dans quelques minutes.";
 
 /** Les trois coordonnées du propriétaire, telles que stockées sur la fiche. */
 export interface OwnerContact {

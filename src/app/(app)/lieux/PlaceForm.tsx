@@ -32,6 +32,8 @@ export interface PlaceFormValues {
   photos: string[];
   /** #97 — date (JJ/MM) du refus du précédent propriétaire, s'il a refusé. */
   ownerRefusedOn?: string;
+  /** #136 — un contact attend l'accord du propriétaire ; ses valeurs ne sont pas transmises. */
+  ownerContactPending?: boolean;
 }
 
 export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
@@ -43,6 +45,9 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
   );
   const [photos, setPhotos] = useState<string[]>(initial?.photos ?? []);
   const [uploading, setUploading] = useState(false);
+  const [contactMode, setContactMode] = useState<"keep" | "replace">(
+    initial?.ownerContactPending ? "keep" : "replace",
+  );
   const inputRef = useRef<HTMLInputElement>(null);
 
   function toggleEquip(key: string, on: boolean) {
@@ -91,6 +96,7 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
           return;
         }
         toast.success("Lieu mis à jour.");
+        if (res.notice) toast.warning(res.notice);
         router.push(`/lieux/${initial!.id}`);
         router.refresh();
       } else {
@@ -100,6 +106,7 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
           return;
         }
         toast.success("Lieu créé.");
+        if (res.notice) toast.warning(res.notice);
         router.push(`/lieux/${res.id}`);
         router.refresh();
       }
@@ -115,6 +122,7 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
       {photos.map((url) => (
         <input key={url} type="hidden" name="photo" value={url} />
       ))}
+      {isEdit ? <input type="hidden" name="ownerContact" value={contactMode} /> : null}
 
       <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
         <div className="space-y-1.5">
@@ -219,30 +227,70 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
             N&apos;enregistrez pas à nouveau ses coordonnées.
           </p>
         ) : null}
-        <div className="space-y-1.5">
-          <Label htmlFor="ownerName">Nom</Label>
-          <Input id="ownerName" name="ownerName" defaultValue={initial?.ownerName} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="ownerPhone">Téléphone</Label>
-            <Input
-              id="ownerPhone"
-              name="ownerPhone"
-              type="tel"
-              defaultValue={initial?.ownerPhone}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="ownerEmail">Email</Label>
-            <Input
-              id="ownerEmail"
-              name="ownerEmail"
-              type="email"
-              defaultValue={initial?.ownerEmail}
-            />
-          </div>
-        </div>
+        {/* #136 — le contact en attente n'est pas transmis au navigateur. Le
+            conserver est le choix par défaut, et il est explicite : des champs
+            vides ne valent jamais « conserver » côté serveur. */}
+        {initial?.ownerContactPending ? (
+          <fieldset className="space-y-2">
+            <legend className="mb-2 text-sm text-earth">
+              Un contact est enregistré, en attente de l&apos;accord du propriétaire.
+            </legend>
+            {(
+              [
+                ["keep", "Conserver ce contact"],
+                ["replace", "Remplacer le contact"],
+              ] as const
+            ).map(([mode, label]) => (
+              <label
+                key={mode}
+                className="flex items-center gap-2 rounded-xl bg-sand/50 px-3 py-2 text-sm text-earth"
+              >
+                <input
+                  type="radio"
+                  name="ownerContactChoice"
+                  checked={contactMode === mode}
+                  onChange={() => setContactMode(mode)}
+                  className="size-4 accent-forest"
+                />
+                {label}
+              </label>
+            ))}
+            {contactMode === "replace" ? (
+              <p className="text-xs text-trail">
+                Le contact actuel sera remplacé par ce que vous saisissez ci-dessous
+                (laissez vide pour l&apos;effacer).
+              </p>
+            ) : null}
+          </fieldset>
+        ) : null}
+        {contactMode === "replace" ? (
+          <>
+            <div className="space-y-1.5">
+              <Label htmlFor="ownerName">Nom</Label>
+              <Input id="ownerName" name="ownerName" defaultValue={initial?.ownerName} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ownerPhone">Téléphone</Label>
+                <Input
+                  id="ownerPhone"
+                  name="ownerPhone"
+                  type="tel"
+                  defaultValue={initial?.ownerPhone}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ownerEmail">Email</Label>
+                <Input
+                  id="ownerEmail"
+                  name="ownerEmail"
+                  type="email"
+                  defaultValue={initial?.ownerEmail}
+                />
+              </div>
+            </div>
+          </>
+        ) : null}
       </section>
 
       {/* Photos + notes */}

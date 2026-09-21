@@ -577,3 +577,21 @@ Elle journalise chaque passage dans `piloti-backups/journal-<env>.log`, succès 
 - **Limite connue** : seules les entrées d'audit dont une valeur de premier niveau vaut l'id de la personne sont expurgées. Un texte libre qui la nomme sans porter son id (note d'incident, `Equipment.notes`…) n'est pas nettoyé, dans la continuité des résidus déjà consignés en D-011.
 - `deleteUser` refuse un compte déjà `DELETED` : un second effacement réécrirait l'audit et ferait disparaître la mention de la purge automatique.
 - Les actions continuent d'écrire des données personnelles brutes dans l'audit tant que la personne existe. Ne plus les écrire du tout est une piste distincte, non traitée ici.
+
+## D-034 — #92 : la preuve d'un message signalé est une copie prise au signalement
+
+**Contexte** : l'auteur d'un message de salon signalé pouvait le modifier puis le supprimer (suppression en dur). La modération perdait alors le contenu, et le signalement devenait intraitable : la page n'affichait « Résoudre » et « Rejeter » que si le message existait encore. `editMessage` et `deleteMessage` échappaient en outre à `withAudit()`.
+
+**Options écartées** :
+- **Bloquer la modification et la suppression d'un message signalé.** Le message offensant resterait visible des jeunes jusqu'au traitement. Laisser l'auteur le retirer réduit le mal fait.
+- **Suppression logique.** Inutile une fois la copie en place.
+
+**Choix** (modèle Discord, décision du 2026-09-18 sur l'issue) :
+- `Report.targetSnapshot` (JSON `{ body, authorId }`) est rempli par `reportMessage`, pour les salons comme pour les messages privés. L'auteur est un id, jamais un nom : le nom se résout à la lecture, pour que l'anonymisation s'applique.
+- L'auteur n'est jamais bloqué. `editMessage` et `deleteMessage` passent par `withAudit()` (`MESSAGE_EDITED` avec l'ancien texte, `MESSAGE_DELETED` avec le texte supprimé). Agir sur le message d'un autre exige `can(user, "message.manage_any")`, réservé à l'ADMIN.
+- La file de modération affiche la copie et l'état actuel (« Modifié depuis le signalement » / « Supprimé par l'auteur »). « Résoudre » et « Rejeter » restent disponibles quand la cible a disparu. L'exclusion de l'auteur (#91) lit l'auteur dans la copie.
+
+**Conséquences** :
+- `anonymizeUserInTx` ne touche pas `Report` : la copie survit à l'effacement de l'auteur, comme les messages signalés (D-028). L'ancien texte présent dans l'audit, lui, est expurgé (clé `authorId`, cf. D-033).
+- **Limite acceptée** : un message modifié ou supprimé **avant** tout signalement n'est tracé que dans le journal d'audit.
+- Les signalements antérieurs n'ont pas de copie. Ils s'affichent comme avant, à partir du message actuel s'il existe encore.

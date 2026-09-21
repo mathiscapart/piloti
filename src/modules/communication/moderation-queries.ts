@@ -2,7 +2,12 @@ import { db } from "@/lib/db";
 import type { ReportStatus, ReportTargetType } from "@/lib/enums";
 import { effectiveRoles } from "@/lib/permissions";
 
-import { isVisibleMessage } from "./moderation-policy";
+import {
+  isVisibleMessage,
+  parseTargetSnapshot,
+  reportTargetState,
+  type ReportTargetState,
+} from "./moderation-policy";
 
 export type ReportStatusFilter = "PENDING" | "RESOLVED" | "DISMISSED" | "all";
 
@@ -26,7 +31,12 @@ export interface ReportQueueEntry {
   resolution: string | null;
   createdAt: Date;
   resolvedAt: Date | null;
-  // null = le message a été supprimé/introuvable depuis (rare, defensive).
+  // #92 — copie prise au signalement (preuve de référence). null pour un
+  // signalement antérieur à la copie.
+  snapshot: { body: string; authorName: string } | null;
+  // État du message actuel par rapport à la copie ; null sans copie.
+  targetState: ReportTargetState | null;
+  // Message actuel. null = supprimé depuis (par son auteur, cf. #92).
   target: {
     body: string;
     authorName: string;
@@ -93,10 +103,30 @@ export async function listReports(
   const messageById = new Map(channelMessages.map((m) => [m.id, m]));
   const dmById = new Map(directMessages.map((m) => [m.id, m]));
 
+  const snapshotById = new Map(reports.map((r) => [r.id, parseTargetSnapshot(r.targetSnapshot)]));
+  // Nom de l'auteur résolu à la lecture, jamais copié : un compte anonymisé
+  // apparaît anonymisé ici aussi.
+  const snapshotAuthorIds = [
+    ...new Set([...snapshotById.values()].flatMap((s) => (s ? [s.authorId] : []))),
+  ];
+  const snapshotAuthors =
+    snapshotAuthorIds.length > 0
+      ? await db.user.findMany({
+          where: { id: { in: snapshotAuthorIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : [];
+  const authorNameById = new Map(
+    snapshotAuthors.map((a) => [a.id, `${a.firstName} ${a.lastName}`]),
+  );
+
+  // Auteur lu dans la copie d'abord : le message a pu être supprimé depuis.
   const authorIdOf = (r: (typeof reports)[number]): string | null =>
+    snapshotById.get(r.id)?.authorId ??
     (r.targetType === "CHANNEL_MESSAGE"
       ? messageById.get(r.targetId)?.authorId
-      : dmById.get(r.targetId)?.senderId) ?? null;
+      : dmById.get(r.targetId)?.senderId) ??
+    null;
 
   return reports.filter((r) => authorIdOf(r) !== user.id).map((r) => {
     let target: ReportQueueEntry["target"] = null;
@@ -122,6 +152,14 @@ export async function listReports(
       }
     }
 
+    const rawSnapshot = snapshotById.get(r.id) ?? null;
+    const snapshot = rawSnapshot
+      ? {
+          body: rawSnapshot.body,
+          authorName: authorNameById.get(rawSnapshot.authorId) ?? "Compte inconnu",
+        }
+      : null;
+
     return {
       id: r.id,
       targetType: r.targetType as ReportTargetType,
@@ -135,6 +173,8 @@ export async function listReports(
       resolution: r.resolution,
       createdAt: r.createdAt,
       resolvedAt: r.resolvedAt,
+      snapshot,
+      targetState: reportTargetState(rawSnapshot, target),
       target,
     };
   });

@@ -430,6 +430,10 @@ export const AUDIT_ACTIONS = [
   "PEDAGO_NOTE_DELETED",
   "MESSAGE_REPORTED",
   "MESSAGE_HIDDEN",
+  // #92 — modification / suppression d'un message de salon par son auteur (ou
+  // un ADMIN) ; l'ancien texte est en métadonnée.
+  "MESSAGE_EDITED",
+  "MESSAGE_DELETED",
   "REPORT_RESOLVED",
   "REPORT_DISMISSED",
   // US-CM-01 — compte enfant sans connexion, créé par la SECRÉTAIRE/ADMIN.

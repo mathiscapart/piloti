@@ -101,3 +101,46 @@ export function selectReportRecipients(
     })
     .map((u) => u.id);
 }
+
+// #92 — copie du contenu signalé, prise par `reportMessage` et stockée en JSON
+// dans `Report.targetSnapshot`. L'auteur y est un id, jamais un nom : le nom se
+// résout à la lecture, pour que l'anonymisation du compte s'applique.
+export interface ReportTargetSnapshot {
+  body: string;
+  authorId: string;
+}
+
+// `null` pour un signalement antérieur à #92 (pas de copie) ou une copie
+// illisible — la modération retombe alors sur le message actuel.
+export function parseTargetSnapshot(raw: string | null): ReportTargetSnapshot | null {
+  if (raw === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as ReportTargetSnapshot).body === "string" &&
+      typeof (parsed as ReportTargetSnapshot).authorId === "string"
+    ) {
+      const { body, authorId } = parsed as ReportTargetSnapshot;
+      return { body, authorId };
+    }
+  } catch {
+    // copie illisible : traitée comme absente
+  }
+  return null;
+}
+
+export type ReportTargetState = "UNCHANGED" | "EDITED" | "DELETED";
+
+// État du message visé par rapport à la copie : l'auteur peut toujours le
+// modifier ou le supprimer (modèle Discord), la modération doit le savoir.
+// `null` sans copie : on ne peut rien comparer.
+export function reportTargetState(
+  snapshot: ReportTargetSnapshot | null,
+  current: { body: string } | null,
+): ReportTargetState | null {
+  if (!snapshot) return null;
+  if (!current) return "DELETED";
+  return current.body === snapshot.body ? "UNCHANGED" : "EDITED";
+}

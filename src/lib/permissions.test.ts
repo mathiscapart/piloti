@@ -190,6 +190,17 @@ describe("can — SAFE-02 modération de contenu", () => {
   });
 });
 
+describe("can — message.manage_any (#92)", () => {
+  it("seul l'ADMIN modifie ou supprime le message d'un autre", () => {
+    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "message.manage_any")).toBe(
+      true,
+    );
+    for (const role of ["CHEF", "RESPONSABLE_GROUPE", "PARENT", "SCOUT"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "message.manage_any")).toBe(false);
+    }
+  });
+});
+
 describe("hasRole", () => {
   it("détecte un rôle additionnel comme un rôle principal", () => {
     const user = { role: "PARENT", roles: ["PARENT", "TRESORIER"] };

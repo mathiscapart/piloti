@@ -60,7 +60,14 @@ function collectEquipment(fd: FormData): string[] {
 
 // #97 — colonnes à écrire quand l'accord du propriétaire retombe en attente.
 // Un nouveau jeton neutralise l'ancien lien ; sans contact, plus aucun lien.
-function consentResetData(reset: OwnerConsentReset) {
+// `keepLink` (#137) : l'envoi est différé et l'email n'a pas changé. Le lien
+// déjà reçu reste valable, faute de quoi le propriétaire n'en aurait plus aucun
+// d'utilisable jusqu'à la relance. Même destinataire : il n'y voit rien qui ne
+// le concerne, et la page lit le contact à jour à partir du jeton.
+function consentResetData(reset: OwnerConsentReset, keepLink = false) {
+  if (keepLink) {
+    return { ownerConsentStatus: reset.status, ownerConsentDecidedAt: null };
+  }
   const issued = reset.token === "NEW";
   return {
     ownerConsentStatus: reset.status,
@@ -271,7 +278,9 @@ export async function updatePlace(
             : {}),
           notes: str(fd, "notes"),
           photosJson: JSON.stringify(collectPhotos(fd)),
-          ...(consentReset ? consentResetData(consentReset) : {}),
+          ...(consentReset
+            ? consentResetData(consentReset, deferred && contact?.email === place.ownerEmail)
+            : {}),
         },
       });
       // Seconde entrée, même transaction : le retour en attente a sa propre

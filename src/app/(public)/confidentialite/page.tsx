@@ -228,13 +228,11 @@ export default function ConfidentialitePage() {
             Chaque utilisateur n&apos;accède qu&apos;aux données nécessaires à
             son rôle dans le groupe ;
           </li>
+          <li>Les mots de passe ne sont jamais conservés en clair ;</li>
           <li>
-            Les mots de passe ne sont jamais conservés en clair, et les
-            tentatives de connexion répétées sont bloquées ;
-          </li>
-          <li>
-            Toute modification des données est enregistrée dans un journal qui
-            en conserve l&apos;auteur et la date ;
+            Les opérations de gestion du groupe (matériel, finances, planning,
+            suivi pédagogique…) sont enregistrées dans un journal qui en
+            conserve l&apos;auteur et la date ;
           </li>
           <li>
             Des protections du navigateur limitent l&apos;injection de contenu

@@ -640,6 +640,7 @@ Deux défauts laissés par #97.
   - inscription : 5 par IP en 1 h ;
   - réinitialisation : 10 par IP en 15 min.
 - Dépassement : `APIError` 429 (code `RATE_LIMITED`), message français identique que le compte existe ou non.
+- Connexion bloquée : le formulaire propose « Réinitialiser mon mot de passe ». Le titulaire du compte est prévenu (notification `SECURITY_ALERT`, forcée : email, push et in-app quelles que soient ses préférences) quand une série d'échecs atteint le seuil. Au plus une alerte par compte et par heure, pour qu'un attaquant qui change d'IP n'inonde pas sa boîte. L'alerte part sans être attendue par la réponse : une réponse plus lente quand le compte existe trahirait son existence.
 - IP lue dans `Cf-Connecting-Ip`, posé par l'edge Cloudflare, seul point d'entrée en prod. `advanced.ipAddress.ipAddressHeaders: ["cf-connecting-ip"]` pour que le limiteur intégré voie aussi la vraie IP.
 - Limiteurs rangés dans `globalThis`, **aussi en prod** : Next peut charger le module dans plusieurs bundles, qui doivent partager les mêmes compteurs.
 

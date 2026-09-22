@@ -621,11 +621,11 @@ Deux défauts laissés par #97.
 **Conséquences** :
 - `anonymizeUserInTx` ne touche pas `Report` : la copie survit à l'effacement de l'auteur, comme les messages signalés (D-028). L'ancien texte présent dans l'audit, lui, est expurgé (clé `authorId`, cf. D-033).
 - **Limite acceptée** : un message modifié ou supprimé **avant** tout signalement n'est tracé que dans le journal d'audit.
-- Les signalements antérieurs n'ont pas de copie. Ils s'affichent comme avant, à partir du message actuel s'il existe encore.
+- Les signalements antérieurs n'ont pas de copie. Ils s'affichent comme avant, à partir du message actuel s'il existe encore (sauf auteur indéterminable, cf. amendement #150).
 
 **Amendement #150 (2026-09-22)** — quand l'auteur d'un signalement est indéterminable (pas de copie ou copie illisible, message disparu), l'auteur mis en cause pouvait revoir et rejeter le signalement.
 - Fail-closed : seuls l'ADMIN et le RG voient et traitent un tel signalement (`canModerateReport`). La file (`listReports`) et le compteur du tableau de bord appliquent désormais exactement la règle des actions.
-- Pas de migration de remplissage : aucun signalement n'existe encore en production, il n'y a pas d'historique sans copie à rattraper.
+- Pas de migration de remplissage : aucun signalement n'existe encore en production, il n'y a pas d'historique sans copie à rattraper. Le fail-closed est donc une défense en profondeur : depuis D-034, `reportMessage` prend toujours la copie, un auteur indéterminable ne vient plus que d'une copie illisible ou d'une base de dev ancienne.
 - Un compte RG + CHEF n'est plus borné à son unité dans la file (`isGroupWideModerator`), comme il ne l'était déjà pas dans les actions ni les notifications.
 - **Limite acceptée** : un RG auteur d'un message au signalement sans copie exploitable voit ce signalement. L'ADMIN aussi, par construction.
 

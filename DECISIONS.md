@@ -616,12 +616,18 @@ Deux défauts laissés par #97.
 **Choix** (modèle Discord, décision du 2026-09-18 sur l'issue) :
 - `Report.targetSnapshot` (JSON `{ body, authorId }`) est rempli par `reportMessage`, pour les salons comme pour les messages privés. L'auteur est un id, jamais un nom : le nom se résout à la lecture, pour que l'anonymisation s'applique.
 - L'auteur n'est jamais bloqué. `editMessage` et `deleteMessage` passent par `withAudit()` (`MESSAGE_EDITED` avec l'ancien texte, `MESSAGE_DELETED` avec le texte supprimé). Agir sur le message d'un autre exige `can(user, "message.manage_any")`, réservé à l'ADMIN.
-- La file de modération affiche la copie et l'état actuel (« Modifié depuis le signalement » / « Supprimé par l'auteur »). « Résoudre » et « Rejeter » restent disponibles quand la cible a disparu. L'exclusion de l'auteur (#91) lit l'auteur dans la copie.
+- La file de modération affiche la copie et l'état actuel (« Modifié depuis le signalement » / « Supprimé depuis le signalement » — amendé par #150 : l'ADMIN peut aussi supprimer). « Résoudre » et « Rejeter » restent disponibles quand la cible a disparu. L'exclusion de l'auteur (#91) lit l'auteur dans la copie.
 
 **Conséquences** :
 - `anonymizeUserInTx` ne touche pas `Report` : la copie survit à l'effacement de l'auteur, comme les messages signalés (D-028). L'ancien texte présent dans l'audit, lui, est expurgé (clé `authorId`, cf. D-033).
 - **Limite acceptée** : un message modifié ou supprimé **avant** tout signalement n'est tracé que dans le journal d'audit.
 - Les signalements antérieurs n'ont pas de copie. Ils s'affichent comme avant, à partir du message actuel s'il existe encore.
+
+**Amendement #150 (2026-09-22)** — un signalement antérieur sans copie dont le message avait disparu n'avait plus d'auteur connu : l'auteur mis en cause le revoyait et pouvait le rejeter.
+- La migration `20260921130000_report_target_snapshot_backfill` remplit la copie des signalements antérieurs dont le message existe encore, salons et messages privés, au format de `reportMessage` plus `backfilled: true`. Ce texte est celui du jour de la migration, pas forcément celui qui a été signalé : la file l'affiche comme « copie reprise après le signalement ».
+- Auteur indéterminable (pas de copie, message disparu) : fail-closed, seuls l'ADMIN et le RG voient et traitent le signalement (`canModerateReport`). La file (`listReports`) et le compteur du tableau de bord appliquent désormais exactement la règle des actions.
+- Un compte RG + CHEF n'est plus borné à son unité dans la file (`isGroupWideModerator`), comme il ne l'était déjà pas dans les actions ni les notifications.
+- **Limite acceptée** : un RG auteur d'un tel message disparu voit le signalement. L'ADMIN aussi, par construction.
 
 ## D-035 — #147 : limite anti-bruteforce en mémoire, dans les hooks better-auth
 

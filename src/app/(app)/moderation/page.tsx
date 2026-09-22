@@ -123,22 +123,28 @@ export default async function ModerationPage({ searchParams }: PageProps) {
                   ) : null}
                   {r.snapshot ? (
                     // #92 — la copie prise au signalement fait preuve, quel que
-                    // soit le sort du message depuis.
+                    // soit le sort du message depuis. #150 : une copie remplie
+                    // après coup ne date pas du signalement, on le dit.
                     <div className="mt-2 space-y-2 rounded-lg border border-stone/60 px-3 py-2">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-xs font-bold text-trail">
                             {r.target?.context ??
                               (r.targetType === "CHANNEL_MESSAGE" ? "Salon" : "Message privé")}{" "}
-                            · {r.snapshot.authorName} · texte au moment du signalement
+                            · {r.snapshot.authorName} ·{" "}
+                            {r.snapshot.backfilled
+                              ? "copie reprise après le signalement"
+                              : "texte au moment du signalement"}
                           </p>
                           {r.targetState === "EDITED" ? (
                             <span className="rounded-full bg-sun-soft px-2 py-0.5 text-xs font-bold text-sun-ink">
-                              Modifié depuis le signalement
+                              {r.snapshot.backfilled
+                                ? "Modifié depuis la copie"
+                                : "Modifié depuis le signalement"}
                             </span>
                           ) : r.targetState === "DELETED" ? (
                             <span className="rounded-full bg-brick-soft px-2 py-0.5 text-xs font-bold text-brick-ink">
-                              Supprimé par l&apos;auteur
+                              Supprimé depuis le signalement
                             </span>
                           ) : null}
                         </div>

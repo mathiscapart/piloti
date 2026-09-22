@@ -1,8 +1,10 @@
 import { db } from "@/lib/db";
 import type { ReportStatus, ReportTargetType } from "@/lib/enums";
-import { effectiveRoles } from "@/lib/permissions";
+import type { CurrentUser } from "@/lib/get-current-user";
 
 import {
+  canModerateReport,
+  isGroupWideModerator,
   isVisibleMessage,
   parseTargetSnapshot,
   reportTargetState,
@@ -10,13 +12,6 @@ import {
 } from "./moderation-policy";
 
 export type ReportStatusFilter = "PENDING" | "RESOLVED" | "DISMISSED" | "all";
-
-interface QueueUser {
-  id: string;
-  role: string;
-  roles?: string[] | string | null;
-  unit?: string | null;
-}
 
 export interface ReportQueueEntry {
   id: string;
@@ -32,8 +27,9 @@ export interface ReportQueueEntry {
   createdAt: Date;
   resolvedAt: Date | null;
   // #92 — copie prise au signalement (preuve de référence). null pour un
-  // signalement antérieur à la copie.
-  snapshot: { body: string; authorName: string } | null;
+  // signalement antérieur à la copie. `backfilled` : copie remplie après coup
+  // par migration (#150), pas prise au moment du signalement.
+  snapshot: { body: string; authorName: string; backfilled: boolean } | null;
   // État du message actuel par rapport à la copie ; null sans copie.
   targetState: ReportTargetState | null;
   // Message actuel. null = supprimé depuis (par son auteur, cf. #92).
@@ -55,12 +51,14 @@ export interface ReportQueueEntry {
 // l'appli où RG = lecture seule sur tout (arbitrage à confirmer, cf. la tâche).
 // #91 : un signalement visant un contenu de `user` lui est toujours masqué —
 // il y verrait le signalant.
+// #150 : la file applique `canModerateReport`, la règle des actions — un RG
+// également CHEF n'est pas borné à son unité, et un signalement dont l'auteur
+// est indéterminable reste invisible d'un CHEF.
 export async function listReports(
   status: ReportStatusFilter = "PENDING",
-  user: QueueUser,
+  user: CurrentUser,
 ): Promise<ReportQueueEntry[]> {
-  const roles = effectiveRoles(user);
-  const scopedToUnit = !roles.includes("ADMIN") && roles.includes("CHEF");
+  const scopedToUnit = !isGroupWideModerator(user);
   if (scopedToUnit && !user.unit) return [];
 
   const reports = await db.report.findMany({
@@ -128,7 +126,10 @@ export async function listReports(
       : dmById.get(r.targetId)?.senderId) ??
     null;
 
-  return reports.filter((r) => authorIdOf(r) !== user.id).map((r) => {
+  const visible = reports.filter((r) =>
+    canModerateReport(user, { concernedUnit: r.concernedUnit, targetAuthorId: authorIdOf(r) }),
+  );
+  return visible.map((r) => {
     let target: ReportQueueEntry["target"] = null;
     if (r.targetType === "CHANNEL_MESSAGE") {
       const m = messageById.get(r.targetId);
@@ -157,6 +158,7 @@ export async function listReports(
       ? {
           body: rawSnapshot.body,
           authorName: authorNameById.get(rawSnapshot.authorId) ?? "Compte inconnu",
+          backfilled: rawSnapshot.backfilled === true,
         }
       : null;
 

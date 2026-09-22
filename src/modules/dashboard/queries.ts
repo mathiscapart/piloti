@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import type { CurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
+import { listReports } from "@/modules/communication/moderation-queries";
 
 // Agrégateur du tableau de bord.
 //
@@ -51,7 +52,6 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
   const [
     expenses,
     incidentsBloquants,
-    reports,
     accounts,
     places,
     sansDroitImage,
@@ -63,9 +63,6 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
     veut.incidents
       ? db.incident.count({ where: { resolvedAt: null, severity: "BLOQUANT" } })
       : db.incident.count({ where: { id: "" } }),
-    veut.reports
-      ? db.report.count({ where: { status: "PENDING" } })
-      : db.report.count({ where: { id: "" } }),
     veut.accounts
       ? db.user.count({ where: { status: "PENDING" } })
       : db.user.count({ where: { id: "" } }),
@@ -95,6 +92,9 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
         })
       : db.event.count({ where: { id: "" } }),
   ]);
+  // #150 — même filtrage que la file (unité, auteur visé, auteur
+  // indéterminable) : un simple `count` révélait à l'auteur qu'il est signalé.
+  const reports = veut.reports ? (await listReports("PENDING", user)).length : 0;
 
   const items: ActionItem[] = [];
   const pousser = (

@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 import {
   canModerate,
   canModerateReport,
+  isGroupWideModerator,
   isVisibleMessage,
   parseTargetSnapshot,
   reportTargetState,
@@ -80,34 +81,34 @@ describe("resolveConcernedUnit", () => {
 describe("canModerateReport", () => {
   it("autorise l'ADMIN sur un signalement de n'importe quelle unité", () => {
     const admin = { role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE", unit: null };
-    expect(canModerateReport(admin, { concernedUnit: "SCOUTS", targetAuthorId: null })).toBe(true);
-    expect(canModerateReport(admin, { concernedUnit: null, targetAuthorId: null })).toBe(true);
+    expect(canModerateReport(admin, { concernedUnit: "SCOUTS", targetAuthorId: "u-autre" })).toBe(true);
+    expect(canModerateReport(admin, { concernedUnit: null, targetAuthorId: "u-autre" })).toBe(true);
   });
 
   it("autorise un CHEF sur un signalement de SA propre unité", () => {
     const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS" };
-    expect(canModerateReport(chef, { concernedUnit: "SCOUTS", targetAuthorId: null })).toBe(true);
+    expect(canModerateReport(chef, { concernedUnit: "SCOUTS", targetAuthorId: "u-autre" })).toBe(true);
   });
 
   it("refuse un CHEF sur un signalement d'une AUTRE unité", () => {
     const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS" };
-    expect(canModerateReport(chef, { concernedUnit: "LOUVETEAUX", targetAuthorId: null })).toBe(false);
+    expect(canModerateReport(chef, { concernedUnit: "LOUVETEAUX", targetAuthorId: "u-autre" })).toBe(false);
   });
 
   it("refuse un CHEF sur un signalement sans unité concernée (fail-closed)", () => {
     const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS" };
-    expect(canModerateReport(chef, { concernedUnit: null, targetAuthorId: null })).toBe(false);
+    expect(canModerateReport(chef, { concernedUnit: null, targetAuthorId: "u-autre" })).toBe(false);
   });
 
   it("autorise le RESPONSABLE_GROUPE sur toutes les unités", () => {
     const rg = { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE", unit: "SCOUTS" };
-    expect(canModerateReport(rg, { concernedUnit: "LOUVETEAUX", targetAuthorId: null })).toBe(true);
-    expect(canModerateReport(rg, { concernedUnit: null, targetAuthorId: null })).toBe(true);
+    expect(canModerateReport(rg, { concernedUnit: "LOUVETEAUX", targetAuthorId: "u-autre" })).toBe(true);
+    expect(canModerateReport(rg, { concernedUnit: null, targetAuthorId: "u-autre" })).toBe(true);
   });
 
   it("autorise un RESPONSABLE_GROUPE même sur une unité autre que la sienne", () => {
     const rg = { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE", unit: "SCOUTS" };
-    expect(canModerateReport(rg, { concernedUnit: "PIONNIERS", targetAuthorId: null })).toBe(true);
+    expect(canModerateReport(rg, { concernedUnit: "PIONNIERS", targetAuthorId: "u-autre" })).toBe(true);
   });
 });
 
@@ -121,23 +122,23 @@ describe("selectReportRecipients", () => {
     const recipients = selectReportRecipients(
       [admin, chefScouts, chefLouveteaux, parent],
       "SCOUTS",
-      null,
+      "u-autre",
     );
     expect(recipients.sort()).toEqual(["u-admin", "u-chef-scouts"].sort());
   });
 
   it("n'inclut jamais un chef d'une autre unité", () => {
-    const recipients = selectReportRecipients([chefLouveteaux], "SCOUTS", null);
+    const recipients = selectReportRecipients([chefLouveteaux], "SCOUTS", "u-autre");
     expect(recipients).toEqual([]);
   });
 
   it("sans unité concernée, seuls les ADMIN sont notifiés (fail-closed)", () => {
-    const recipients = selectReportRecipients([admin, chefScouts, chefLouveteaux], null, null);
+    const recipients = selectReportRecipients([admin, chefScouts, chefLouveteaux], null, "u-autre");
     expect(recipients).toEqual(["u-admin"]);
   });
 
   it("ne sélectionne jamais un rôle sans droit de modération (parent, jeune…)", () => {
-    const recipients = selectReportRecipients([parent], "SCOUTS", null);
+    const recipients = selectReportRecipients([parent], "SCOUTS", "u-autre");
     expect(recipients).toEqual([]);
   });
 });
@@ -208,5 +209,49 @@ describe("copie du contenu signalé (#92)", () => {
   it("reportTargetState : sans copie, l'état est inconnu", () => {
     expect(reportTargetState(null, { body: "x" })).toBeNull();
     expect(reportTargetState(null, null)).toBeNull();
+  });
+});
+
+// #150 — signalement antérieur à la copie dont le message a disparu : l'auteur
+// est indéterminable, ce pourrait être le chef qui ouvre la file. Fail-closed :
+// seuls l'ADMIN et le RG, qui ne sont pas bornés à une unité, le traitent.
+describe("auteur indéterminable et RG également chef (#150)", () => {
+  const chef = { id: "u-chef", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "PIONNIERS" };
+  const rg = { id: "u-rg", role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE", unit: null };
+  const rgChef = { id: "u-rg-chef", role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE", "CHEF"], status: "ACTIVE", unit: "SCOUTS" };
+  const admin = { id: "u-admin", role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE", unit: null };
+  const orphan = { concernedUnit: "PIONNIERS", targetAuthorId: null };
+
+  it("auteur null et acteur CHEF de l'unité : refusé", () => {
+    expect(canModerateReport(chef, orphan)).toBe(false);
+  });
+
+  it("auteur null et acteur RG, RG + CHEF ou ADMIN : autorisé", () => {
+    expect(canModerateReport(rg, orphan)).toBe(true);
+    expect(canModerateReport(rgChef, orphan)).toBe(true);
+    expect(canModerateReport(admin, orphan)).toBe(true);
+  });
+
+  it("auteur null : seuls l'ADMIN et le RG sont notifiés", () => {
+    expect(selectReportRecipients([chef, rg, admin], "PIONNIERS", null).sort()).toEqual(
+      ["u-admin", "u-rg"].sort(),
+    );
+  });
+
+  it("RG + CHEF traite un signalement d'une autre unité que la sienne", () => {
+    expect(canModerateReport(rgChef, { concernedUnit: "PIONNIERS", targetAuthorId: "u-autre" })).toBe(true);
+  });
+
+  it("vue non bornée à l'unité pour RG, RG + CHEF et ADMIN ; bornée pour un CHEF seul", () => {
+    expect(isGroupWideModerator(rg)).toBe(true);
+    expect(isGroupWideModerator(rgChef)).toBe(true);
+    expect(isGroupWideModerator(admin)).toBe(true);
+    expect(isGroupWideModerator(chef)).toBe(false);
+  });
+
+  it("parseTargetSnapshot garde la marque d'une copie remplie après coup", () => {
+    expect(
+      parseTargetSnapshot(JSON.stringify({ body: "x", authorId: "u-a", backfilled: true })),
+    ).toEqual({ body: "x", authorId: "u-a", backfilled: true });
   });
 });

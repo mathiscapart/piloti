@@ -41,6 +41,9 @@ export const AUTH_RATE_LIMITS = {
   // Alertes « connexion bloquée » envoyées au titulaire : une par heure au plus,
   // pour qu'un attaquant qui change d'IP n'inonde pas sa boîte.
   signInAlertsByEmail: { points: 1, duration: 60 * 60 },
+  // Alertes « changement de mot de passe bloqué » : une par heure au plus, même
+  // si plusieurs sessions volées atteignent le seuil tour à tour.
+  passwordChangeAlertsByUser: { points: 1, duration: 60 * 60 },
 } as const;
 
 type LimiterName = keyof typeof AUTH_RATE_LIMITS;
@@ -249,13 +252,33 @@ export async function enforcePasswordChangeLimit(
 /**
  * Après `auth.api.changePassword` : un mot de passe actuel erroné garde son
  * point, toute autre issue le rend, un succès remet le compte à zéro.
+ * `locked` : cet échec vient de bloquer le compte, la session qui insiste doit
+ * être déconnectée. `alertOwner` : le titulaire doit être prévenu (au plus une
+ * fois par heure).
  */
 export async function recordPasswordChangeOutcome(
   userId: string,
   headers: Headers | null | undefined,
   outcome: "success" | "failure" | "other",
-): Promise<void> {
-  await settlePlan(passwordChangePlan(userId, headers), outcome);
+): Promise<{ locked: boolean; alertOwner: boolean }> {
+  const notLocked = { locked: false, alertOwner: false };
+  if (outcome !== "failure") {
+    await settlePlan(passwordChangePlan(userId, headers), outcome);
+    return notLocked;
+  }
+  const res = await limiters.passwordChangeFailsByUser.get(userId);
+  // `>=` : des échecs simultanés au seuil voient tous le compteur plein, et
+  // chacune de ces sessions insistait. Le limiteur d'alertes dédoublonne.
+  if (!res || res.consumedPoints < AUTH_RATE_LIMITS.passwordChangeFailsByUser.points) {
+    return notLocked;
+  }
+  try {
+    await limiters.passwordChangeAlertsByUser.consume(userId);
+    return { locked: true, alertOwner: true };
+  } catch (e) {
+    if (isLimiterRejection(e)) return { locked: true, alertOwner: false };
+    throw e;
+  }
 }
 
 async function ownerToAlert(plan: AuthRateLimitPlan, email: string | null): Promise<string | null> {

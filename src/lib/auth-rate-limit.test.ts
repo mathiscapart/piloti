@@ -381,6 +381,75 @@ describe("changement de mot de passe", () => {
     await failChange(userId, new Headers(), AUTH_RATE_LIMITS.passwordChangeFailsByUser.points);
     await expectRateLimited(enforcePasswordChangeLimit(userId, new Headers()));
   });
+
+  describe("au seuil : déconnexion de la session et alerte au titulaire", () => {
+    async function failOnce(userId: string, headers: Headers) {
+      await enforcePasswordChangeLimit(userId, headers);
+      return recordPasswordChangeOutcome(userId, headers, "failure");
+    }
+
+    it("signale le blocage à l'échec qui atteint le seuil, pas avant", async () => {
+      const userId = freshUser();
+      const { headers } = fresh();
+      const results = [];
+      for (let i = 0; i < AUTH_RATE_LIMITS.passwordChangeFailsByUser.points; i++) {
+        results.push(await failOnce(userId, headers));
+      }
+      expect(results.slice(0, -1).every((r) => !r.locked && !r.alertOwner)).toBe(true);
+      expect(results.at(-1)).toEqual({ locked: true, alertOwner: true });
+    });
+
+    it("succès et erreur autre ne bloquent rien", async () => {
+      const userId = freshUser();
+      const { headers } = fresh();
+      await enforcePasswordChangeLimit(userId, headers);
+      expect(await recordPasswordChangeOutcome(userId, headers, "success")).toEqual({
+        locked: false,
+        alertOwner: false,
+      });
+      await enforcePasswordChangeLimit(userId, headers);
+      expect(await recordPasswordChangeOutcome(userId, headers, "other")).toEqual({
+        locked: false,
+        alertOwner: false,
+      });
+    });
+
+    it("chaque session qui atteint le seuil est déconnectée, une seule alerte par heure", async () => {
+      vi.useFakeTimers();
+      try {
+        const userId = freshUser();
+        const block = async () => {
+          let last = { locked: false, alertOwner: false };
+          for (let i = 0; i < AUTH_RATE_LIMITS.passwordChangeFailsByUser.points; i++) {
+            last = await failOnce(userId, fresh().headers);
+          }
+          return last;
+        };
+        expect(await block()).toEqual({ locked: true, alertOwner: true });
+        // Fenêtre du compte expirée, mais pas celle de l'alerte : une autre
+        // session volée qui recommence est déconnectée, sans second email.
+        vi.advanceTimersByTime(AUTH_RATE_LIMITS.passwordChangeFailsByUser.duration * 1000 + 1000);
+        expect(await block()).toEqual({ locked: true, alertOwner: false });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("des échecs simultanés au seuil déconnectent chacun leur session, une seule alerte", async () => {
+      const userId = freshUser();
+      const { headers } = fresh();
+      const points = AUTH_RATE_LIMITS.passwordChangeFailsByUser.points;
+      for (let i = 0; i < points - 2; i++) await failOnce(userId, headers);
+      await enforcePasswordChangeLimit(userId, headers);
+      await enforcePasswordChangeLimit(userId, headers);
+      const results = await Promise.all([
+        recordPasswordChangeOutcome(userId, headers, "failure"),
+        recordPasswordChangeOutcome(userId, headers, "failure"),
+      ]);
+      expect(results.every((r) => r.locked)).toBe(true);
+      expect(results.filter((r) => r.alertOwner)).toHaveLength(1);
+    });
+  });
 });
 
 describe("inscription et réinitialisation", () => {

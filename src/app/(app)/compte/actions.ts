@@ -3,6 +3,7 @@
 import { APIError } from "better-auth";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { randomUUID } from "crypto";
@@ -18,6 +19,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { passwordSchema } from "@/lib/password-policy";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
+import { alertBlockedPasswordChange } from "@/modules/notifications/security-alert";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -270,7 +272,31 @@ export async function changeOwnPassword(
     });
   } catch (e) {
     const wrongPassword = e instanceof APIError && e.body?.code === "INVALID_PASSWORD";
-    await recordPasswordChangeOutcome(user.id, requestHeaders, wrongPassword ? "failure" : "other");
+    const { locked, alertOwner } = await recordPasswordChangeOutcome(
+      user.id,
+      requestHeaders,
+      wrongPassword ? "failure" : "other",
+    );
+    if (locked) {
+      // #153 — cette session vient d'atteindre le seuil : probablement volée.
+      // On la déconnecte, et le titulaire est prévenu. `deleteMany` : une
+      // requête simultanée a pu la supprimer déjà. Le proxy efface le cookie
+      // devenu invalide en arrivant sur /login.
+      await withAudit(
+        (tx) => tx.session.deleteMany({ where: { id: session.session.id } }),
+        {
+          action: "USER_SESSION_REVOKED",
+          userId: user.id,
+          metadata: { reason: "PASSWORD_CHANGE_LOCKED", targetUserId: user.id },
+        },
+      );
+      if (alertOwner) {
+        await alertBlockedPasswordChange(user.id).catch((err) =>
+          console.error("[changeOwnPassword] alerte de sécurité non envoyée:", err),
+        );
+      }
+      redirect("/login?locked=1");
+    }
     if (wrongPassword) return { error: "Mot de passe actuel incorrect." };
     console.error("[changeOwnPassword]", e);
     return { error: "Impossible de changer le mot de passe." };

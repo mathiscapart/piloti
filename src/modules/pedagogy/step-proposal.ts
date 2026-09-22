@@ -7,7 +7,7 @@ export function stepProposalError(
   jeuneUnit: string | null,
 ): string | null {
   if (step.unit !== jeuneUnit) return "Cette étape n'appartient pas à la branche de ce jeune.";
-  if (step.archived) return "Cette étape est archivée : elle ne peut plus être proposée.";
+  if (step.archived) return "Cette étape est archivée : elle ne peut plus être validée.";
   return null;
 }
 

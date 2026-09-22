@@ -23,7 +23,7 @@ describe("stepProposalError — étape proposable pour un jeune (#100)", () => {
 
   it("refuse une étape archivée de la branche du jeune", () => {
     expect(stepProposalError(step("PIONNIERS", true), "PIONNIERS")).toBe(
-      "Cette étape est archivée : elle ne peut plus être proposée.",
+      "Cette étape est archivée : elle ne peut plus être validée.",
     );
   });
 });
@@ -55,7 +55,7 @@ describe("stepConfirmationError — proposition confirmable par un 2e chef (#152
 
   it("refuse une étape archivée entre la proposition et la confirmation", () => {
     expect(stepConfirmationError(proposed, step("PIONNIERS", true), "PIONNIERS", "chef-b")).toBe(
-      "Cette étape est archivée : elle ne peut plus être proposée.",
+      "Cette étape est archivée : elle ne peut plus être validée.",
     );
   });
 
@@ -65,14 +65,14 @@ describe("stepConfirmationError — proposition confirmable par un 2e chef (#152
     );
   });
 
-  it("refuse une proposition dont le proposeur a été effacé si l'étape est archivée", () => {
+  it("accepte une proposition dont le proposeur a été anonymisé", () => {
     expect(
       stepConfirmationError(
         { status: "PROPOSED", proposedById: null },
-        step("PIONNIERS", true),
+        step("PIONNIERS"),
         "PIONNIERS",
         "chef-b",
       ),
-    ).toBe("Cette étape est archivée : elle ne peut plus être proposée.");
+    ).toBeNull();
   });
 });

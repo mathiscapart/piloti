@@ -173,7 +173,11 @@ export function RecordPaymentRow(props: PaymentRowVM) {
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              setOpen((v) => !v);
+              setAmount(String(Math.max(0, props.expectedCents - props.paidCents) / 100));
+              setOverpayment(null);
+            }}
           >
             <Plus className="size-4" />
             Paiement
@@ -247,6 +251,7 @@ export function RecordPaymentRow(props: PaymentRowVM) {
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
                     placeholder="Motif (ex. erreur de saisie)"
+                    aria-label="Motif d'annulation"
                     className="h-8 w-56"
                   />
                   <Button

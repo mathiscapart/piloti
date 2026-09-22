@@ -145,7 +145,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
               tier={r.tier}
               exempt={r.exempt}
               reminded={r.reminded}
-              payments={r.payments}
+              payments={canManage ? r.payments : []}
               canManage={canManage}
             />
           ))}

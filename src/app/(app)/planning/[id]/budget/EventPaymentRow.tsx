@@ -122,7 +122,11 @@ export function EventPaymentRow(props: PaymentRowVM) {
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => {
+              setOpen((v) => !v);
+              setAmount(String(props.dueCents / 100));
+              setOverpayment(null);
+            }}
           >
             <Plus className="size-4" />
             Encaisser

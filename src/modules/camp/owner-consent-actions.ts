@@ -12,16 +12,11 @@ import type { ActionResult } from "@/lib/types";
 import {
   isConsentLinkExpired,
   newOwnerConsentToken,
+  nullIfOwnerContactChanged,
   OwnerContactChangedError,
   ownerConsentRequestTooSoon,
   sendOwnerConsentRequest,
 } from "./owner-consent";
-
-/** #151 — une transaction annulée faute de fiche inchangée rend `false`. */
-function falseIfOwnerContactChanged(e: unknown): false {
-  if (e instanceof OwnerContactChangedError) return false;
-  throw e;
-}
 
 // RGPD-09 — actions liées à la validation par le propriétaire d'un lieu.
 //
@@ -116,13 +111,13 @@ export async function submitOwnerDecision(
         decision,
         erased,
       },
-    }).catch(falseIfOwnerContactChanged);
+    }).catch(nullIfOwnerContactChanged);
     if (!decided) return staleLink;
   } else {
     // Lieu dont le créateur a été supprimé : la décision du propriétaire prime
     // sur la traçabilité interne — on n'allait pas refuser un effacement RGPD
     // au motif qu'on ne sait pas à qui imputer la ligne d'audit.
-    const decided = await decide(db).catch(falseIfOwnerContactChanged);
+    const decided = await decide(db).catch(nullIfOwnerContactChanged);
     if (!decided) return staleLink;
   }
 
@@ -202,7 +197,7 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
       userId: user.id,
       metadata: { placeId, placeName: place.name, previousStatus: place.ownerConsentStatus },
     },
-  ).catch(falseIfOwnerContactChanged);
+  ).catch(nullIfOwnerContactChanged);
   if (!resent) {
     return { error: "La fiche a changé entre-temps (contact modifié ou demande déjà envoyée). Rechargez la page." };
   }

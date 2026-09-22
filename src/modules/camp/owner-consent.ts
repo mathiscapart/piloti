@@ -200,6 +200,12 @@ export const OWNER_CONTACT_CHANGED =
 /** Levée dans une transaction pour l'annuler quand le contact a changé. */
 export class OwnerContactChangedError extends Error {}
 
+/** `.catch` d'une transaction annulée par `OwnerContactChangedError` : rend `null`. */
+export function nullIfOwnerContactChanged(e: unknown): null {
+  if (e instanceof OwnerContactChangedError) return null;
+  throw e;
+}
+
 /**
  * #151 — empreinte de l'état du contact, envoyée avec le formulaire de
  * modification et recalculée à l'enregistrement : un formulaire ouvert avant

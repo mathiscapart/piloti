@@ -19,6 +19,7 @@ import {
   OWNER_CONTACT_CHANGED,
   type OwnerContact,
   OwnerContactChangedError,
+  nullIfOwnerContactChanged,
   ownerContactUnchanged,
   ownerContactVersion,
   type OwnerConsentReset,
@@ -94,12 +95,6 @@ function collectPhotos(fd: FormData): string[] {
 // pas touchées. `replace` : les champs soumis font foi (#97). Le choix est
 // explicite : des champs vides ne valent jamais « conserver ».
 const ownerContactModeSchema = z.enum(["keep", "replace"]);
-
-/** #151 — une transaction annulée faute de contact inchangé rend `null`. */
-function nullIfOwnerContactChanged(e: unknown): null {
-  if (e instanceof OwnerContactChangedError) return null;
-  throw e;
-}
 
 /** `notice` : enregistré, mais la demande au propriétaire est différée (#137). */
 type PlaceActionResult = ActionResult & { notice?: string };

@@ -175,7 +175,7 @@ export async function recordEventPayment(
     (tx) =>
       tx.eventRegistration.update({
         where: { id: reg.id },
-        data: { paidCents: reg.paidCents + amountCents },
+        data: { paidCents: { increment: amountCents } },
       }),
     {
       action: "EVENT_PAYMENT_RECORDED",

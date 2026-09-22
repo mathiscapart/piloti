@@ -667,3 +667,23 @@ Deux défauts laissés par #97.
 - Les compteurs repartent de zéro au redémarrage de l'application. Limite acceptée.
 - Une IP partagée (wifi d'un local ou d'un camp) partage le compteur par IP, d'où les seuils larges par IP.
 - Passer à plusieurs instances imposerait un stockage partagé (`RateLimiterRedis`…) : la même API, une autre classe.
+
+## D-036 — #121 : trop-perçu confirmé, paiement annulé plutôt que compensé
+
+**Contexte** : un paiement supérieur au reste dû était accepté sans alerte. Le « Reste » d'une campagne se calculait globalement (`attendu − encaissé`), si bien qu'un trop-perçu chez un jeune masquait ce que devaient les autres. Aucune saisie ne pouvait être corrigée, ni sur une cotisation ni sur un événement.
+
+**Options écartées** :
+- **Refuser tout trop-perçu.** Un parent peut régler deux enfants d'un seul chèque : le refus bloquerait un cas réel.
+- **Paiement négatif de régularisation.** L'historique devient une suite d'écritures qui s'annulent, difficile à relire pour un trésorier bénévole.
+- **Table `EventPayment` pour le détail des encaissements d'événement.** Cela impose une migration et une reprise des cumuls existants, pour un besoin que la correction du cumul couvre.
+
+**Choix** :
+- Le reste, le trop-perçu et le pourcentage se calculent **jeune par jeune**, puis se somment (`summarizeCollection`, `src/modules/finance/collection.ts`). Le pourcentage est plafonné à 100 %, et le trop-perçu s'affiche à part.
+- Un paiement au-delà du reste dû est **refusé côté serveur tant qu'il n'est pas confirmé** : l'action renvoie `overpaymentCents`, et l'interface propose « Confirmer le trop-perçu de X € ».
+- **Cotisation** : annulation logique d'un `CampaignPayment` (`cancelledAt`, `cancelledById`, `cancelReason`), avec motif obligatoire et audit `CAMPAIGN_PAYMENT_CANCELLED`. Le paiement reste visible, barré, dans l'historique du jeune.
+- **Événement** : `EventRegistration` ne garde qu'un cumul (`paidCents`). On corrige donc ce cumul, avec motif obligatoire et audit `EVENT_PAYMENT_CORRECTED`, qui garde l'ancienne valeur.
+
+**Conséquences** :
+- Toute lecture de `CampaignPayment` qui somme des montants doit filtrer `cancelledAt: null` (détail et liste des campagnes, relances, tableau de bord).
+- Le bouton « Paiement » disparaît d'une ligne soldée. Pour corriger, on annule le paiement fautif, puis on ressaisit le bon montant.
+- Côté événement, le détail des encaissements n'existe que dans l'audit. Si ce détail devient nécessaire à l'écran, il faudra la table écartée ci-dessus.

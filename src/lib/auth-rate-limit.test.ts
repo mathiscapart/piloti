@@ -227,6 +227,18 @@ describe("connexion", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("un compte bloqué qui insiste n'entame pas le compteur par IP", async () => {
+    const { email, headers } = fresh();
+    await failSignIn(email, headers, AUTH_RATE_LIMITS.loginFailsByEmailAndIp.points);
+    for (let i = 0; i < AUTH_RATE_LIMITS.loginFailsByIp.points; i++) {
+      await expectRateLimited(enforceAuthRateLimit("/sign-in/email", { email }, headers));
+    }
+    // L'IP (wifi partagé) garde son quota : 5 échecs pris, 25 encore disponibles.
+    await expect(
+      enforceAuthRateLimit("/sign-in/email", { email: `voisin${seq}@piloti.fr` }, headers),
+    ).resolves.toBeUndefined();
+  });
+
   it("bloque une IP qui essaie beaucoup de comptes différents", async () => {
     const { headers } = fresh();
     for (let i = 0; i < AUTH_RATE_LIMITS.loginFailsByIp.points; i++) {
@@ -352,6 +364,16 @@ describe("changement de mot de passe", () => {
     // Refus par IP avant tout : le compteur du compte visé n'a pas été entamé.
     await failChange(target, fresh().headers, AUTH_RATE_LIMITS.passwordChangeFailsByUser.points - 1);
     await expect(enforcePasswordChangeLimit(target, fresh().headers)).resolves.toBeUndefined();
+  });
+
+  it("un compte bloqué qui insiste n'entame pas le compteur par IP", async () => {
+    const userId = freshUser();
+    const { headers } = fresh();
+    await failChange(userId, headers, AUTH_RATE_LIMITS.passwordChangeFailsByUser.points);
+    for (let i = 0; i < AUTH_RATE_LIMITS.passwordChangeFailsByIp.points; i++) {
+      await expectRateLimited(enforcePasswordChangeLimit(userId, headers));
+    }
+    await expect(enforcePasswordChangeLimit(freshUser(), headers)).resolves.toBeUndefined();
   });
 
   it("sans Cf-Connecting-Ip (dev), le compteur par compte s'applique quand même", async () => {

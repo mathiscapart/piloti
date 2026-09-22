@@ -166,11 +166,17 @@ function planFor(path: string, body: unknown, headers: Headers | null | undefine
   return authRateLimitPlan(path, emailOf(body), clientIp(headers));
 }
 
+// Une requête refusée ne coûte que sur le compteur qui refuse : les points déjà
+// pris par cet appel sont rendus. Sinon un compte bloqué qui insiste épuiserait
+// le compteur de son IP, partagée (wifi d'un local), sans que `after` le rende.
 async function consumePlan(plan: AuthRateLimitPlan): Promise<void> {
-  for (const { limiter, key } of [...plan.failures, ...plan.everyRequest]) {
+  const consumed: Counter[] = [];
+  for (const counter of [...plan.failures, ...plan.everyRequest]) {
     try {
-      await limiters[limiter].consume(key);
+      await limiters[counter.limiter].consume(counter.key);
+      consumed.push(counter);
     } catch (e) {
+      for (const { limiter, key } of consumed) await limiters[limiter].reward(key, 1);
       if (isLimiterRejection(e)) throw rateLimited(e.msBeforeNext);
       throw e;
     }

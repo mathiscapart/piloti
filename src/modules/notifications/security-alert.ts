@@ -41,7 +41,8 @@ export async function alertBlockedSignIn(email: string): Promise<void> {
  * été saisis sur son compte en voulant changer de mot de passe, toutes sessions
  * confondues : signe probable d'une session volée. Seule la session qui a fait
  * le dernier essai est fermée. Forcé, comme ci-dessus. Le compte a une session :
- * il est actif.
+ * il est actif. « Mot de passe oublié » n'est accessible que déconnecté
+ * (src/proxy.ts renvoie une session active vers /dashboard), d'où le texte.
  */
 export async function alertBlockedPasswordChange(userId: string): Promise<void> {
   await notify({
@@ -52,9 +53,11 @@ export async function alertBlockedPasswordChange(userId: string): Promise<void> 
       "Plusieurs mots de passe erronés ont été saisis pour changer le mot de passe " +
       "de votre compte Piloti. La session qui a fait le dernier essai a été fermée, " +
       "et le changement de mot de passe est bloqué temporairement. " +
-      "Si c'était vous, patientez quelques minutes ou réinitialisez votre mot de passe. " +
-      "Sinon, quelqu'un a peut-être accès à votre compte : réinitialisez votre mot " +
-      "de passe depuis « Mot de passe oublié », puis prévenez un administrateur.",
+      "Si c'était vous, réessayez dans 15 minutes au plus. " +
+      "Sinon, quelqu'un a peut-être accès à votre compte : dès la fin du blocage, " +
+      "changez votre mot de passe depuis « Mon compte », ce qui ferme vos autres " +
+      "sessions ; ou déconnectez-vous et utilisez « Mot de passe oublié ». " +
+      "Prévenez ensuite un administrateur.",
     link: "/compte",
     force: true,
   });

@@ -20,7 +20,7 @@ import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 import { bracketedPriceCents } from "./brackets";
 import { overpaymentCents } from "./collection";
 import { notifyTreasurers } from "./expense-notify";
-import { formatEuros, parseAmountToCents } from "./format";
+import { formatEuros, parseAmountToCents, parseCorrectedTotalToCents } from "./format";
 
 // US-F05 — définir le tarif (par défaut) d'un événement payant. Le tarif
 // effectif de chaque jeune est ensuite pondéré par sa tranche de quotient
@@ -200,9 +200,7 @@ export async function correctEventPayment(
   const actor = await getCurrentUser();
   if (!can(actor, "budget.manage")) return { error: "Permission refusée." };
 
-  // 0 est admis ici (annulation totale), contrairement à un encaissement.
-  const t = paidStr.trim();
-  const paidCents = Number(t.replace(",", ".")) === 0 ? 0 : parseAmountToCents(t);
+  const paidCents = parseCorrectedTotalToCents(paidStr);
   if (paidCents === null) return { error: "Montant invalide." };
   const motive = reason.trim();
   if (motive.length === 0) return { error: "Motif de correction requis." };

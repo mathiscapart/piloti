@@ -44,6 +44,14 @@ export const AUTH_RATE_LIMITS = {
   // Alertes « changement de mot de passe bloqué » : une par heure au plus, même
   // si plusieurs sessions volées atteignent le seuil tour à tour.
   passwordChangeAlertsByUser: { points: 1, duration: 60 * 60 },
+  // Échecs sur 24 h, par compte. Ne bloque jamais : c'est un signal. Un
+  // attaquant qui s'arrête à 4 échecs par fenêtre de 15 min n'est jamais fermé,
+  // mais son titulaire est prévenu au 10e échec en 24 h. Fenêtre fixe depuis le
+  // premier échec : 9 échecs par fenêtre passent en silence (débit accepté).
+  passwordChangeFailsByUserDaily: { points: 10, duration: 24 * 60 * 60 },
+  // Alertes « échecs répétés » : une par 24 h ; sans elle, chaque échec au-delà
+  // du 10e en enverrait une.
+  passwordChangeSlowAlertsByUser: { points: 1, duration: 24 * 60 * 60 },
 } as const;
 
 type LimiterName = keyof typeof AUTH_RATE_LIMITS;
@@ -253,33 +261,42 @@ export async function enforcePasswordChangeLimit(
  * Après `auth.api.changePassword` : un mot de passe actuel erroné garde son
  * point, toute autre issue le rend, un succès remet le compte à zéro.
  * `locked` : cet échec vient de bloquer le compte, la session qui insiste doit
- * être déconnectée. `alertOwner` : le titulaire doit être prévenu (au plus une
- * fois par heure).
+ * être déconnectée. `alertOwner` : le titulaire doit être prévenu, du blocage
+ * si `locked` (au plus une fois par heure), sinon d'échecs répétés sur 24 h
+ * (au plus une fois par jour).
  */
 export async function recordPasswordChangeOutcome(
   userId: string,
   headers: Headers | null | undefined,
   outcome: "success" | "failure" | "other",
 ): Promise<{ locked: boolean; alertOwner: boolean }> {
-  const notLocked = { locked: false, alertOwner: false };
   if (outcome !== "failure") {
     await settlePlan(passwordChangePlan(userId, headers), outcome);
-    return notLocked;
+    if (outcome === "success") await limiters.passwordChangeFailsByUserDaily.delete(userId);
+    return { locked: false, alertOwner: false };
   }
+  const daily = await limiters.passwordChangeFailsByUserDaily.penalty(userId);
   const res = await limiters.passwordChangeFailsByUser.get(userId);
   // `>=` : des échecs simultanés au seuil voient tous le compteur plein, et
   // chacune de ces sessions insistait. Le limiteur d'alertes dédoublonne.
   // Le compteur inclut les points des requêtes encore en cours : dans une
   // course, une session peut être fermée après 4 échecs réels. Rare, et dans
   // le sens de la prudence.
-  if (!res || res.consumedPoints < AUTH_RATE_LIMITS.passwordChangeFailsByUser.points) {
-    return notLocked;
+  if (res && res.consumedPoints >= AUTH_RATE_LIMITS.passwordChangeFailsByUser.points) {
+    return { locked: true, alertOwner: await takeAlertToken("passwordChangeAlertsByUser", userId) };
   }
+  if (daily.consumedPoints >= AUTH_RATE_LIMITS.passwordChangeFailsByUserDaily.points) {
+    return { locked: false, alertOwner: await takeAlertToken("passwordChangeSlowAlertsByUser", userId) };
+  }
+  return { locked: false, alertOwner: false };
+}
+
+async function takeAlertToken(limiter: LimiterName, key: string): Promise<boolean> {
   try {
-    await limiters.passwordChangeAlertsByUser.consume(userId);
-    return { locked: true, alertOwner: true };
+    await limiters[limiter].consume(key);
+    return true;
   } catch (e) {
-    if (isLimiterRejection(e)) return { locked: true, alertOwner: false };
+    if (isLimiterRejection(e)) return false;
     throw e;
   }
 }

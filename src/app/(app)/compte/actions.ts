@@ -20,7 +20,10 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { passwordSchema } from "@/lib/password-policy";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
-import { alertBlockedPasswordChange } from "@/modules/notifications/security-alert";
+import {
+  alertBlockedPasswordChange,
+  alertRepeatedPasswordChangeFailures,
+} from "@/modules/notifications/security-alert";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -296,9 +299,12 @@ export async function changeOwnPassword(
       const { path, domain, secure } = attributes;
       (await cookies()).set(name, "", { path, domain, secure, httpOnly: true, maxAge: 0 });
       // Après la réponse : un envoi d'email lent ne retarde pas la redirection.
+      // Enregistrée ici, une fois la session fermée : l'alerte l'affirme.
       if (alertOwner) after(() => alertBlockedPasswordChange(user.id));
       redirect("/login?locked=1");
     }
+    // #153 — échecs répétés sur 24 h, sous le seuil : alerte seule.
+    if (alertOwner) after(() => alertRepeatedPasswordChangeFailures(user.id));
     if (wrongPassword) return { error: "Mot de passe actuel incorrect." };
     console.error("[changeOwnPassword]", e);
     return { error: "Impossible de changer le mot de passe." };

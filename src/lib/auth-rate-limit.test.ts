@@ -450,6 +450,79 @@ describe("changement de mot de passe", () => {
       expect(results.filter((r) => r.alertOwner)).toHaveLength(1);
     });
   });
+
+  describe("échecs dosés sous le seuil : alerte sur 24 h", () => {
+    const perWindow = AUTH_RATE_LIMITS.passwordChangeFailsByUser.points - 1;
+    const daily = AUTH_RATE_LIMITS.passwordChangeFailsByUserDaily.points;
+    const windowMs = AUTH_RATE_LIMITS.passwordChangeFailsByUser.duration * 1000 + 1000;
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    // Un attaquant patient : 4 échecs, puis il attend la fin de la fenêtre.
+    async function slowFailures(userId: string, count: number) {
+      const results = [];
+      for (let i = 0; i < count; i++) {
+        if (i > 0 && i % perWindow === 0) vi.advanceTimersByTime(windowMs);
+        await enforcePasswordChangeLimit(userId, fresh().headers);
+        results.push(await recordPasswordChangeOutcome(userId, fresh().headers, "failure"));
+      }
+      return results;
+    }
+
+    it("prévient le titulaire au 10e échec de la journée, sans fermer la session", async () => {
+      vi.useFakeTimers();
+      const results = await slowFailures(freshUser(), daily);
+      expect(results.slice(0, -1).every((r) => !r.locked && !r.alertOwner)).toBe(true);
+      expect(results.at(-1)).toEqual({ locked: false, alertOwner: true });
+    });
+
+    it("une seule alerte par 24 h si l'attaquant continue au même rythme", async () => {
+      vi.useFakeTimers();
+      const results = await slowFailures(freshUser(), daily * 3);
+      expect(results.filter((r) => r.alertOwner)).toHaveLength(1);
+      expect(results.some((r) => r.locked)).toBe(false);
+    });
+
+    it("un changement réussi remet aussi le compteur de la journée à zéro", async () => {
+      vi.useFakeTimers();
+      const userId = freshUser();
+      await slowFailures(userId, daily - 1);
+      await enforcePasswordChangeLimit(userId, fresh().headers);
+      await recordPasswordChangeOutcome(userId, fresh().headers, "success");
+      vi.advanceTimersByTime(windowMs);
+      const results = await slowFailures(userId, daily - 1);
+      expect(results.some((r) => r.alertOwner)).toBe(false);
+    });
+
+    it("une erreur autre qu'un mot de passe faux ne compte pas", async () => {
+      vi.useFakeTimers();
+      const userId = freshUser();
+      const { headers } = fresh();
+      for (let i = 0; i < daily + 2; i++) {
+        await enforcePasswordChangeLimit(userId, headers);
+        await recordPasswordChangeOutcome(userId, headers, "other");
+      }
+      // Si « other » comptait, le 1er échec réel serait déjà au-delà du seuil.
+      const results = await slowFailures(userId, daily - 1);
+      expect(results.some((r) => r.alertOwner)).toBe(false);
+    });
+
+    it("pas de seconde alerte avant 24 h, une nouvelle après", async () => {
+      vi.useFakeTimers();
+      const userId = freshUser();
+      await slowFailures(userId, daily);
+      // Juste avant la fin des 24 h de l'alerte : l'attaquant continue.
+      vi.advanceTimersByTime(AUTH_RATE_LIMITS.passwordChangeSlowAlertsByUser.duration * 1000 - 2 * windowMs);
+      const late = await slowFailures(userId, perWindow);
+      expect(late.some((r) => r.alertOwner)).toBe(false);
+      // Toutes les fenêtres (24 h) expirées : un nouveau cycle de 10 échecs alerte.
+      vi.advanceTimersByTime(AUTH_RATE_LIMITS.passwordChangeFailsByUserDaily.duration * 1000);
+      const next = await slowFailures(userId, daily);
+      expect(next.at(-1)).toEqual({ locked: false, alertOwner: true });
+    });
+  });
 });
 
 describe("inscription et réinitialisation", () => {

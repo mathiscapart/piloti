@@ -62,3 +62,25 @@ export async function alertBlockedPasswordChange(userId: string): Promise<void> 
     force: true,
   });
 }
+
+/**
+ * #153 — prévient le titulaire d'échecs répétés au changement de mot de passe
+ * sur 24 h, restés sous le seuil de blocage : un attaquant patient, avec une
+ * session volée, qui dose ses essais. Rien n'est fermé ni bloqué : le titulaire
+ * peut changer son mot de passe tout de suite. Forcé, comme ci-dessus.
+ */
+export async function alertRepeatedPasswordChangeFailures(userId: string): Promise<void> {
+  await notify({
+    userId,
+    type: "SECURITY_ALERT",
+    title: "Essais répétés de changement de mot de passe",
+    body:
+      "Au moins 10 mots de passe erronés ont été saisis en 24 heures pour changer " +
+      "le mot de passe de votre compte Piloti. Si c'était vous, vous pouvez ignorer " +
+      "ce message. Sinon, quelqu'un a peut-être accès à votre compte : changez votre " +
+      "mot de passe depuis « Mon compte », ce qui ferme vos autres sessions, puis " +
+      "prévenez un administrateur.",
+    link: "/compte",
+    force: true,
+  });
+}

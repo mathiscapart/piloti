@@ -687,3 +687,16 @@ Deux défauts laissés par #97.
 - Toute lecture de `CampaignPayment` qui somme des montants doit filtrer `cancelledAt: null` (détail et liste des campagnes, relances, tableau de bord).
 - Le bouton « Paiement » disparaît d'une ligne soldée. Pour corriger, on annule le paiement fautif, puis on ressaisit le bon montant.
 - Côté événement, le détail des encaissements n'existe que dans l'audit. Si ce détail devient nécessaire à l'écran, il faudra la table écartée ci-dessus.
+
+## D-037 — le texte d'un message de salon modifié ou supprimé reste dans le journal d'audit
+
+**Contexte** : depuis #92, `editMessage` et `deleteMessage` (`src/modules/communication/actions.ts`) recopient le texte d'origine dans `AuditLog.metadata` (`previousBody`, `body`), pour tous les messages de salon, signalés ou non. La revue avant promotion vers `main` a relevé deux effets : le RG, qui a `audit.view`, lit dans `/admin/audit` le texte de salons qui lui sont fermés, et un message supprimé par son auteur reste lisible dans le journal.
+
+**Option écartée** : ne tracer que les identifiants (`messageId`, `channelId`, `authorId`). La copie du signalement (D-034) suffit comme preuve pour un message signalé, mais un message problématique supprimé **avant** tout signalement ne laisserait alors aucune trace.
+
+**Choix** : on garde le texte dans l'audit, au titre de la modération et de la protection des mineurs. Le RG et l'ADMIN, qui lisent le journal, sont les responsables du groupe : qu'ils voient le texte d'un salon restreint est accepté.
+
+**Conséquences** :
+- La politique de confidentialité le dit (`PRIVACY_VERSION` 2026-09-22) : supprimer un message le retire des salons, pas du journal.
+- À l'anonymisation de l'auteur, `previousBody` et `body` sont retirés par `redactAuditMetadata` (liste blanche, #94).
+- Aucune durée de conservation n'est fixée pour ces textes : le journal d'audit n'est jamais purgé. Suivi dans #163.

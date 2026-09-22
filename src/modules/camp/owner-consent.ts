@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 
 import type { Prisma } from "@prisma/client";
 
@@ -179,6 +179,66 @@ export function nextOwnerConsent(
     !isEmptyContact(before) && before.email === after.email && before.phone === after.phone;
   if (samePerson && status !== "REFUSED") return null;
   return { status: "PENDING", token: "NEW", reason: "CONTACT_CHANGED" };
+}
+
+/**
+ * #151 — état du contact tel qu'un formulaire ou une action l'a lu. Le jeton
+ * n'en fait pas partie : une relance ne change pas la personne jointe.
+ */
+export interface OwnerContactState {
+  ownerConsentStatus: string;
+  ownerName: string | null;
+  ownerPhone: string | null;
+  ownerEmail: string | null;
+  ownerConsentDecidedAt: Date | null;
+}
+
+/** Message affiché quand le contact a changé depuis sa lecture. */
+export const OWNER_CONTACT_CHANGED =
+  "Le contact du propriétaire a changé entre-temps. Rechargez la page.";
+
+/** Levée dans une transaction pour l'annuler quand le contact a changé. */
+export class OwnerContactChangedError extends Error {}
+
+/**
+ * #151 — empreinte de l'état du contact, envoyée avec le formulaire de
+ * modification et recalculée à l'enregistrement : un formulaire ouvert avant
+ * un effacement ou un refus ne peut plus ressusciter le contact.
+ *
+ * HMAC par la clé du serveur : le contact en attente n'atteint pas le
+ * navigateur (#136), pas même sous une forme qu'on pourrait recalculer à partir
+ * d'une adresse devinée. L'empreinte n'est jamais stockée (amendement #97).
+ */
+export function ownerContactFingerprint(state: OwnerContactState, key: string): string {
+  return createHmac("sha256", key)
+    .update(
+      JSON.stringify([
+        state.ownerConsentStatus,
+        state.ownerName,
+        state.ownerPhone,
+        state.ownerEmail,
+        state.ownerConsentDecidedAt?.toISOString() ?? null,
+      ]),
+    )
+    .digest("base64url");
+}
+
+/** Empreinte par la clé de l'instance (celle de better-auth, obligatoire au démarrage). */
+export function ownerContactVersion(state: OwnerContactState): string {
+  const key = process.env.BETTER_AUTH_SECRET;
+  if (!key) throw new Error("BETTER_AUTH_SECRET manquant.");
+  return ownerContactFingerprint(state, key);
+}
+
+/** Condition Prisma : la ligne porte encore exactement cet état de contact. */
+export function ownerContactUnchanged(state: OwnerContactState): OwnerContactState {
+  return {
+    ownerConsentStatus: state.ownerConsentStatus,
+    ownerName: state.ownerName,
+    ownerPhone: state.ownerPhone,
+    ownerEmail: state.ownerEmail,
+    ownerConsentDecidedAt: state.ownerConsentDecidedAt,
+  };
 }
 
 /** Jeton d'URL publique : 32 octets, base64url — non devinable, non séquentiel. */

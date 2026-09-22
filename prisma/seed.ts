@@ -2,13 +2,14 @@ import "dotenv/config";
 
 import { randomBytes } from "node:crypto";
 
-import { auth } from "../src/lib/auth";
 import { db } from "../src/lib/db";
 import type { AccountStatus, Role, Unit } from "../src/lib/enums";
 import { PRIVACY_VERSION, TERMS_VERSION } from "../src/lib/legal/versions";
 import { canonicalPair } from "../src/modules/communication/dm";
 import { resolveConcernedUnit } from "../src/modules/communication/moderation-policy";
 import { computeTiers } from "../src/modules/finance/tiers";
+
+import { createCredentialUser } from "./seed-account";
 
 // === Garde-fou ===
 // Ce script commence par un `deleteMany()` en cascade : il DÉTRUIT la base
@@ -155,18 +156,9 @@ interface SeedUserInput {
  * puis met à jour role / status / emailVerified (champs `input: false`).
  */
 async function seedUser(input: SeedUserInput) {
-  await auth.api.signUpEmail({
-    body: {
-      email: input.email,
-      password: input.password,
-      name: `${input.firstName} ${input.lastName}`,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      phone: input.phone,
-    },
-  });
+  const user = await createCredentialUser(input);
   return db.user.update({
-    where: { email: input.email },
+    where: { id: user.id },
     data: {
       // US-32 — rôles unifiés : `roles` est la source ; `role` reste un miroir.
       role: input.role,

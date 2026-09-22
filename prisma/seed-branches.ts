@@ -2,9 +2,10 @@ import "dotenv/config";
 
 import { randomBytes } from "node:crypto";
 
-import { auth } from "../src/lib/auth";
 import { db } from "../src/lib/db";
 import type { Unit } from "../src/lib/enums";
+
+import { createCredentialUser } from "./seed-account";
 
 // Jeu de données de développement pour exercer le PÉRIMÈTRE D'UNITÉ (D-024) :
 // des jeunes dans trois branches, des événements passés pointés et à pointer,
@@ -120,14 +121,11 @@ async function creerJeune(input: JeuneInput) {
   const existant = await db.user.findUnique({ where: { email } });
   if (existant) return existant;
 
-  await auth.api.signUpEmail({
-    body: {
-      email,
-      password: MOT_DE_PASSE,
-      name: `${input.firstName} ${input.lastName}`,
-      firstName: input.firstName,
-      lastName: input.lastName,
-    },
+  await createCredentialUser({
+    email,
+    password: MOT_DE_PASSE,
+    firstName: input.firstName,
+    lastName: input.lastName,
   });
   return db.user.update({
     where: { email },
@@ -233,14 +231,11 @@ async function main() {
   // ── Second chef SCOUTS (cf. CHEF_RENFORT) ─────────────────────────────────
   let marc = await db.user.findUnique({ where: { email: CHEF_RENFORT.email } });
   if (!marc) {
-    await auth.api.signUpEmail({
-      body: {
-        email: CHEF_RENFORT.email,
-        password: CHEF_RENFORT.password,
-        name: `${CHEF_RENFORT.firstName} ${CHEF_RENFORT.lastName}`,
-        firstName: CHEF_RENFORT.firstName,
-        lastName: CHEF_RENFORT.lastName,
-      },
+    await createCredentialUser({
+      email: CHEF_RENFORT.email,
+      password: CHEF_RENFORT.password,
+      firstName: CHEF_RENFORT.firstName,
+      lastName: CHEF_RENFORT.lastName,
     });
     marc = await db.user.update({
       where: { email: CHEF_RENFORT.email },
@@ -264,14 +259,11 @@ async function main() {
   // ── Parent + lien familial ────────────────────────────────────────────────
   let parent = await db.user.findUnique({ where: { email: PARENT.email } });
   if (!parent) {
-    await auth.api.signUpEmail({
-      body: {
-        email: PARENT.email,
-        password: PARENT.password,
-        name: `${PARENT.firstName} ${PARENT.lastName}`,
-        firstName: PARENT.firstName,
-        lastName: PARENT.lastName,
-      },
+    await createCredentialUser({
+      email: PARENT.email,
+      password: PARENT.password,
+      firstName: PARENT.firstName,
+      lastName: PARENT.lastName,
     });
     parent = await db.user.update({
       where: { email: PARENT.email },

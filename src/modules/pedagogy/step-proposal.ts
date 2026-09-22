@@ -10,3 +10,21 @@ export function stepProposalError(
   if (step.archived) return "Cette étape est archivée : elle ne peut plus être proposée.";
   return null;
 }
+
+// #152 — la confirmation revérifie tout ce que la proposition a vérifié : entre
+// les deux, l'étape a pu être archivée, et une proposition hors branche créée
+// avant #100 ne doit pas devenir une étape validée.
+export function stepConfirmationError(
+  validation: { status: string; proposedById: string | null },
+  step: { unit: string; archived: boolean },
+  jeuneUnit: string | null,
+  confirmerId: string,
+): string | null {
+  if (validation.status === "CONFIRMED") return "Étape déjà validée.";
+  // Règle des 2 chefs : le confirmateur doit différer du proposeur. Combinée au
+  // périmètre d'unité, la 2e validation vient forcément d'un chef de la branche.
+  if (validation.proposedById === confirmerId) {
+    return "Un autre chef doit confirmer cette étape (validation à 2).";
+  }
+  return stepProposalError(step, jeuneUnit);
+}

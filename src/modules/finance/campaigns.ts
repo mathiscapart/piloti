@@ -147,6 +147,13 @@ export async function getCampaignDetail(id: string) {
       ...summarizeCollection(
         rows.map((r) => ({ expectedCents: r.expectedCents, paidCents: r.paidCents })),
       ),
+      // Encaissé : tous les paiements non annulés, y compris ceux d'un jeune
+      // sorti de la liste (inactif, changé d'unité) — même total que la liste
+      // des campagnes et le tableau de bord.
+      collectedCents: payments.reduce(
+        (sum, p) => (p.cancelledAt ? sum : sum + p.amountCents),
+        0,
+      ),
     },
   };
 }

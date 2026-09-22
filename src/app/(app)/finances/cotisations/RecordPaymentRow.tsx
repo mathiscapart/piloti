@@ -173,6 +173,7 @@ export function RecordPaymentRow(props: PaymentRowVM) {
             type="button"
             size="sm"
             variant="outline"
+            disabled={pending}
             onClick={() => {
               setOpen((v) => !v);
               setAmount(String(Math.max(0, props.expectedCents - props.paidCents) / 100));

@@ -122,6 +122,7 @@ export function EventPaymentRow(props: PaymentRowVM) {
             type="button"
             size="sm"
             variant="outline"
+            disabled={pending}
             onClick={() => {
               setOpen((v) => !v);
               setAmount(String(props.dueCents / 100));

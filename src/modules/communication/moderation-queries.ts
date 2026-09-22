@@ -27,9 +27,8 @@ export interface ReportQueueEntry {
   createdAt: Date;
   resolvedAt: Date | null;
   // #92 — copie prise au signalement (preuve de référence). null pour un
-  // signalement antérieur à la copie. `backfilled` : copie remplie après coup
-  // par migration (#150), pas prise au moment du signalement.
-  snapshot: { body: string; authorName: string; backfilled: boolean } | null;
+  // signalement antérieur à la copie.
+  snapshot: { body: string; authorName: string } | null;
   // État du message actuel par rapport à la copie ; null sans copie.
   targetState: ReportTargetState | null;
   // Message actuel. null = supprimé depuis (par son auteur, cf. #92).
@@ -157,7 +156,6 @@ export async function listReports(
       ? {
           body: rawSnapshot.body,
           authorName: authorNameById.get(rawSnapshot.authorId) ?? "Compte inconnu",
-          backfilled: rawSnapshot.backfilled === true,
         }
       : null;
 

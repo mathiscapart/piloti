@@ -123,9 +123,6 @@ export function selectReportRecipients(
 export interface ReportTargetSnapshot {
   body: string;
   authorId: string;
-  // #150 — copie remplie par migration pour un signalement antérieur : c'est
-  // le texte au moment de la migration, pas forcément celui qui a été signalé.
-  backfilled?: true;
 }
 
 // `null` pour un signalement antérieur à #92 (pas de copie) ou une copie
@@ -140,8 +137,8 @@ export function parseTargetSnapshot(raw: string | null): ReportTargetSnapshot | 
       typeof (parsed as ReportTargetSnapshot).body === "string" &&
       typeof (parsed as ReportTargetSnapshot).authorId === "string"
     ) {
-      const { body, authorId, backfilled } = parsed as ReportTargetSnapshot;
-      return backfilled === true ? { body, authorId, backfilled } : { body, authorId };
+      const { body, authorId } = parsed as ReportTargetSnapshot;
+      return { body, authorId };
     }
   } catch {
     // copie illisible : traitée comme absente

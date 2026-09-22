@@ -248,10 +248,4 @@ describe("auteur indéterminable et RG également chef (#150)", () => {
     expect(isGroupWideModerator(admin)).toBe(true);
     expect(isGroupWideModerator(chef)).toBe(false);
   });
-
-  it("parseTargetSnapshot garde la marque d'une copie remplie après coup", () => {
-    expect(
-      parseTargetSnapshot(JSON.stringify({ body: "x", authorId: "u-a", backfilled: true })),
-    ).toEqual({ body: "x", authorId: "u-a", backfilled: true });
-  });
 });

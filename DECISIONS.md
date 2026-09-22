@@ -623,11 +623,11 @@ Deux défauts laissés par #97.
 - **Limite acceptée** : un message modifié ou supprimé **avant** tout signalement n'est tracé que dans le journal d'audit.
 - Les signalements antérieurs n'ont pas de copie. Ils s'affichent comme avant, à partir du message actuel s'il existe encore.
 
-**Amendement #150 (2026-09-22)** — un signalement antérieur sans copie dont le message avait disparu n'avait plus d'auteur connu : l'auteur mis en cause le revoyait et pouvait le rejeter.
-- La migration `20260921130000_report_target_snapshot_backfill` remplit la copie des signalements antérieurs dont le message existe encore, salons et messages privés, au format de `reportMessage` plus `backfilled: true`. Ce texte est celui du jour de la migration, pas forcément celui qui a été signalé : la file l'affiche comme « copie reprise après le signalement ».
-- Auteur indéterminable (pas de copie, message disparu) : fail-closed, seuls l'ADMIN et le RG voient et traitent le signalement (`canModerateReport`). La file (`listReports`) et le compteur du tableau de bord appliquent désormais exactement la règle des actions.
+**Amendement #150 (2026-09-22)** — quand l'auteur d'un signalement est indéterminable (pas de copie ou copie illisible, message disparu), l'auteur mis en cause pouvait revoir et rejeter le signalement.
+- Fail-closed : seuls l'ADMIN et le RG voient et traitent un tel signalement (`canModerateReport`). La file (`listReports`) et le compteur du tableau de bord appliquent désormais exactement la règle des actions.
+- Pas de migration de remplissage : aucun signalement n'existe encore en production, il n'y a pas d'historique sans copie à rattraper.
 - Un compte RG + CHEF n'est plus borné à son unité dans la file (`isGroupWideModerator`), comme il ne l'était déjà pas dans les actions ni les notifications.
-- **Limite acceptée** : un RG auteur d'un tel message disparu voit le signalement. L'ADMIN aussi, par construction.
+- **Limite acceptée** : un RG auteur d'un message au signalement sans copie exploitable voit ce signalement. L'ADMIN aussi, par construction.
 
 ## D-035 — #147 : limite anti-bruteforce en mémoire, dans les hooks better-auth
 

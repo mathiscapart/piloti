@@ -46,9 +46,8 @@ export interface ReportQueueEntry {
 // Routage (raffinement SAFE-02) : un CHEF ne voit que les signalements de SON
 // unité (`Report.concernedUnit`, l'unité de l'auteur du message visé) ; un
 // signalement dont `concernedUnit` est null (auteur sans unité) lui reste
-// invisible — fail-closed. L'ADMIN voit tout. Le RESPONSABLE_GROUPE (lecture
-// seule, `moderation.view`) garde une vue globale, alignée sur le reste de
-// l'appli où RG = lecture seule sur tout (arbitrage à confirmer, cf. la tâche).
+// invisible — fail-closed. L'ADMIN et le RESPONSABLE_GROUPE voient tout le
+// groupe.
 // #91 : un signalement visant un contenu de `user` lui est toujours masqué —
 // il y verrait le signalant.
 // #150 : la file applique `canModerateReport`, la règle des actions — un RG

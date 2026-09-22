@@ -72,11 +72,12 @@ function isExcludedAsAuthor(
 }
 
 // Un modérateur peut traiter (masquer / résoudre / rejeter) un signalement
-// s'il a `moderation.review` (CHEF ou ADMIN, cf. `PERMISSIONS`) ET :
-//  - c'est un ADMIN (superutilisateur, toutes les unités) ;
+// s'il a `moderation.review` (CHEF, RG ou ADMIN, cf. `PERMISSIONS`) ET :
+//  - c'est un ADMIN ou un RG (toutes les unités) ;
 //  - OU c'est un CHEF de l'unité concernée par le signalement.
 // Un signalement dont `concernedUnit` est null (auteur sans unité) n'est
-// traitable que par un ADMIN — fail-closed plutôt que d'ouvrir à tous les CHEF.
+// traitable que par un ADMIN ou un RG — fail-closed plutôt que d'ouvrir à tous
+// les CHEF.
 // Jamais par l'auteur du contenu signalé (#91), ni par un CHEF quand cet auteur
 // est indéterminable (#150).
 export function canModerateReport(user: ModerationCtx, report: ReportUnitCtx): boolean {

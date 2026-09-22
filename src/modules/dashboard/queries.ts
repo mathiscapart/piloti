@@ -33,6 +33,8 @@ const pluriel = (n: number, singulier: string, pluriel: string) =>
  *
  * Les comptages partent en une seule transaction : sur SQLite, une dizaine de
  * requêtes séquentielles sur le chemin critique du tableau de bord se sentent.
+ * Seule exception, les signalements : ils passent par la file (`listReports`)
+ * pour en reprendre le filtrage, qu'un `count` ne sait pas exprimer (#150).
  * On ne demande QUE les compteurs autorisés — un `can()` faux ne coûte même pas
  * la requête.
  */

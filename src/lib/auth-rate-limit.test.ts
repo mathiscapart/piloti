@@ -7,11 +7,14 @@ import {
   authRateLimitPlan,
   classifyOutcome,
   clientIp,
+  emailKey,
   enforceAuthRateLimit,
+  enforcePasswordChangeLimit,
   isLimiterRejection,
   normalizeEmail,
   rateLimitMessage,
   recordAuthOutcome,
+  recordPasswordChangeOutcome,
 } from "./auth-rate-limit";
 
 // Les compteurs sont des singletons de module : chaque test prend une IP et un
@@ -71,17 +74,29 @@ describe("normalizeEmail", () => {
   });
 });
 
+describe("emailKey", () => {
+  it("ne dépend ni de la casse ni des espaces", () => {
+    expect(emailKey(" Admin@Piloti.FR ")).toBe(emailKey("admin@piloti.fr"));
+  });
+
+  it("distingue deux adresses qui ne diffèrent qu'au-delà de 254 caractères", () => {
+    const prefix = "a".repeat(260);
+    expect(emailKey(`${prefix}1@x.fr`)).not.toBe(emailKey(`${prefix}2@x.fr`));
+  });
+});
+
 describe("authRateLimitPlan", () => {
   const ip = "203.0.113.7";
 
-  it("connexion : compte les échecs par email+IP et par IP, remet email+IP à zéro au succès", () => {
+  it("connexion : compte les échecs par IP puis par email+IP, remet email+IP à zéro au succès", () => {
+    const byEmailAndIp = `${emailKey("admin@piloti.fr")}|203.0.113.7`;
     expect(authRateLimitPlan("/sign-in/email", "Admin@Piloti.fr", ip)).toEqual({
       everyRequest: [],
       failures: [
-        { limiter: "loginFailsByEmailAndIp", key: "admin@piloti.fr|203.0.113.7" },
         { limiter: "loginFailsByIp", key: ip },
+        { limiter: "loginFailsByEmailAndIp", key: byEmailAndIp },
       ],
-      resetOnSuccess: [{ limiter: "loginFailsByEmailAndIp", key: "admin@piloti.fr|203.0.113.7" }],
+      resetOnSuccess: [{ limiter: "loginFailsByEmailAndIp", key: byEmailAndIp }],
     });
   });
 
@@ -93,11 +108,11 @@ describe("authRateLimitPlan", () => {
     });
   });
 
-  it("mot de passe oublié : compte chaque demande par email ciblé et par IP", () => {
+  it("mot de passe oublié : compte chaque demande par IP puis par email ciblé", () => {
     expect(authRateLimitPlan("/request-password-reset", "a@b.fr", ip)).toEqual({
       everyRequest: [
-        { limiter: "resetRequestsByEmail", key: "a@b.fr" },
         { limiter: "resetRequestsByIp", key: ip },
+        { limiter: "resetRequestsByEmail", key: emailKey("a@b.fr") },
       ],
       failures: [],
       resetOnSuccess: [],
@@ -118,6 +133,18 @@ describe("authRateLimitPlan", () => {
       failures: [],
       resetOnSuccess: [],
     });
+  });
+
+  it("email très long : la clé garde une longueur bornée", () => {
+    const huge = `${"a".repeat(100_000)}@piloti.fr`;
+    const plan = authRateLimitPlan("/request-password-reset", huge, ip);
+    const key = plan?.everyRequest.find((c) => c.limiter === "resetRequestsByEmail")?.key;
+    expect(key).toBe(emailKey(huge));
+    expect(key!.length).toBeLessThanOrEqual(64);
+  });
+
+  it("changement de mot de passe : limité par sa propre fonction, pas par les hooks", () => {
+    expect(authRateLimitPlan("/change-password", null, ip)).toBeNull();
   });
 
   it("les autres routes ne sont pas concernées", () => {
@@ -232,6 +259,22 @@ describe("mot de passe oublié", () => {
     );
   });
 
+  it("une IP bloquée n'entame plus le quota de l'adresse visée", async () => {
+    const { email, headers } = fresh();
+    for (let i = 0; i < AUTH_RATE_LIMITS.resetRequestsByIp.points; i++) {
+      await enforceAuthRateLimit("/request-password-reset", { email: `leurre${seq}-${i}@piloti.fr` }, headers);
+    }
+    for (let i = 0; i < 5; i++) {
+      await expectRateLimited(enforceAuthRateLimit("/request-password-reset", { email }, headers));
+    }
+    // Le quota de l'adresse est intact : ses 3 demandes passent depuis d'autres IP.
+    for (let i = 0; i < AUTH_RATE_LIMITS.resetRequestsByEmail.points; i++) {
+      await expect(
+        enforceAuthRateLimit("/request-password-reset", { email }, fresh().headers),
+      ).resolves.toBeUndefined();
+    }
+  });
+
   it("n'affecte pas les autres adresses", async () => {
     const { email, headers } = fresh();
     for (let i = 0; i < AUTH_RATE_LIMITS.resetRequestsByEmail.points; i++) {
@@ -240,6 +283,81 @@ describe("mot de passe oublié", () => {
     await expect(
       enforceAuthRateLimit("/request-password-reset", { email: fresh().email }, headers),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("changement de mot de passe", () => {
+  let userSeq = 0;
+  const freshUser = () => `user-${++userSeq}`;
+
+  async function failChange(userId: string, headers: Headers, times: number) {
+    for (let i = 0; i < times; i++) {
+      await enforcePasswordChangeLimit(userId, headers);
+      await recordPasswordChangeOutcome(userId, headers, "failure");
+    }
+  }
+
+  it("bloque la tentative qui suit le 5e mot de passe actuel erroné", async () => {
+    const userId = freshUser();
+    const { headers } = fresh();
+    await failChange(userId, headers, AUTH_RATE_LIMITS.passwordChangeFailsByUser.points);
+    const err = await expectRateLimited(enforcePasswordChangeLimit(userId, headers));
+    expect(err.message).toMatch(/^Trop de tentatives\. Réessayez dans \d+ minutes?\.$/);
+  });
+
+  it("le blocage suit le compte, même depuis une autre IP", async () => {
+    const userId = freshUser();
+    await failChange(userId, fresh().headers, AUTH_RATE_LIMITS.passwordChangeFailsByUser.points);
+    await expectRateLimited(enforcePasswordChangeLimit(userId, fresh().headers));
+  });
+
+  it("un changement réussi remet à zéro les échecs du compte", async () => {
+    const userId = freshUser();
+    const { headers } = fresh();
+    await failChange(userId, headers, AUTH_RATE_LIMITS.passwordChangeFailsByUser.points - 1);
+    await enforcePasswordChangeLimit(userId, headers);
+    await recordPasswordChangeOutcome(userId, headers, "success");
+    await failChange(userId, headers, AUTH_RATE_LIMITS.passwordChangeFailsByUser.points - 1);
+    await expect(enforcePasswordChangeLimit(userId, headers)).resolves.toBeUndefined();
+  });
+
+  it("une erreur autre qu'un mot de passe faux rend le point", async () => {
+    const userId = freshUser();
+    const { headers } = fresh();
+    for (let i = 0; i < AUTH_RATE_LIMITS.passwordChangeFailsByUser.points + 2; i++) {
+      await enforcePasswordChangeLimit(userId, headers);
+      await recordPasswordChangeOutcome(userId, headers, "other");
+    }
+    await expect(enforcePasswordChangeLimit(userId, headers)).resolves.toBeUndefined();
+  });
+
+  it("des tentatives simultanées ne dépassent pas le seuil", async () => {
+    const userId = freshUser();
+    const { headers } = fresh();
+    const results = await Promise.allSettled(
+      Array.from({ length: 10 }, () => enforcePasswordChangeLimit(userId, headers)),
+    );
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(
+      AUTH_RATE_LIMITS.passwordChangeFailsByUser.points,
+    );
+  });
+
+  it("bloque une IP qui essaie sur beaucoup de comptes (sessions volées)", async () => {
+    const { headers } = fresh();
+    for (let i = 0; i < AUTH_RATE_LIMITS.passwordChangeFailsByIp.points; i++) {
+      await failChange(freshUser(), headers, 1);
+    }
+    const target = freshUser();
+    await expectRateLimited(enforcePasswordChangeLimit(target, headers));
+    // Refus par IP avant tout : le compteur du compte visé n'a pas été entamé.
+    await failChange(target, fresh().headers, AUTH_RATE_LIMITS.passwordChangeFailsByUser.points - 1);
+    await expect(enforcePasswordChangeLimit(target, fresh().headers)).resolves.toBeUndefined();
+  });
+
+  it("sans Cf-Connecting-Ip (dev), le compteur par compte s'applique quand même", async () => {
+    const userId = freshUser();
+    await failChange(userId, new Headers(), AUTH_RATE_LIMITS.passwordChangeFailsByUser.points);
+    await expectRateLimited(enforcePasswordChangeLimit(userId, new Headers()));
   });
 });
 

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { APIError } from "better-auth";
 import { isAPIError } from "better-auth/api";
 import { RateLimiterMemory, type RateLimiterRes } from "rate-limiter-flexible";
@@ -30,6 +32,12 @@ export const AUTH_RATE_LIMITS = {
   signUpsByIp: { points: 5, duration: 60 * 60 },
   // Réinitialisations par IP : le jeton n'est pas devinable, simple garde-fou.
   passwordResetsByIp: { points: 10, duration: 15 * 60 },
+  // #153 — mots de passe actuels erronés au changement de mot de passe, par
+  // compte : une session volée ne doit pas servir d'oracle pour retrouver le
+  // mot de passe en clair. Remis à zéro par un changement réussi.
+  passwordChangeFailsByUser: { points: 5, duration: 15 * 60 },
+  // Même chose par IP, tous comptes confondus (plusieurs sessions volées).
+  passwordChangeFailsByIp: { points: 30, duration: 60 * 60 },
   // Alertes « connexion bloquée » envoyées au titulaire : une par heure au plus,
   // pour qu'un attaquant qui change d'IP n'inonde pas sa boîte.
   signInAlertsByEmail: { points: 1, duration: 60 * 60 },
@@ -38,6 +46,9 @@ export const AUTH_RATE_LIMITS = {
 type LimiterName = keyof typeof AUTH_RATE_LIMITS;
 type Counter = { limiter: LimiterName; key: string };
 
+// Chaque liste est consommée dans l'ordre, et la première qui rejette arrête
+// les suivantes : les compteurs par IP viennent donc en tête (#153). Une IP
+// déjà bloquée n'entame ni ne crée alors aucun compteur par email ou compte.
 export interface AuthRateLimitPlan {
   // Consommés à chaque requête, avant l'endpoint.
   everyRequest: Counter[];
@@ -60,6 +71,14 @@ export function normalizeEmail(value: unknown): string | null {
   return value.trim().toLowerCase() || null;
 }
 
+// #153 — clé de compteur dérivée d'un email : sur le chemin HTTP, l'email vient
+// du corps brut, non validé, et peut être arbitrairement long. Un condensat
+// borne la clé en mémoire sans confondre deux adresses, contrairement à une
+// troncature.
+export function emailKey(email: string): string {
+  return createHash("sha256").update(email.trim().toLowerCase()).digest("base64url");
+}
+
 export function authRateLimitPlan(
   path: string,
   email: string | null,
@@ -69,19 +88,21 @@ export function authRateLimitPlan(
   const normalized = normalizeEmail(email);
   switch (path) {
     case "/sign-in/email":
+      plan.failures.push({ limiter: "loginFailsByIp", key: ip });
       if (normalized) {
         const byEmailAndIp: Counter = {
           limiter: "loginFailsByEmailAndIp",
-          key: `${normalized}|${ip}`,
+          key: `${emailKey(normalized)}|${ip}`,
         };
         plan.failures.push(byEmailAndIp);
         plan.resetOnSuccess.push(byEmailAndIp);
       }
-      plan.failures.push({ limiter: "loginFailsByIp", key: ip });
       return plan;
     case "/request-password-reset":
-      if (normalized) plan.everyRequest.push({ limiter: "resetRequestsByEmail", key: normalized });
       plan.everyRequest.push({ limiter: "resetRequestsByIp", key: ip });
+      if (normalized) {
+        plan.everyRequest.push({ limiter: "resetRequestsByEmail", key: emailKey(normalized) });
+      }
       return plan;
     case "/sign-up/email":
       plan.everyRequest.push({ limiter: "signUpsByIp", key: ip });
@@ -145,15 +166,7 @@ function planFor(path: string, body: unknown, headers: Headers | null | undefine
   return authRateLimitPlan(path, emailOf(body), clientIp(headers));
 }
 
-/** Hook `before` : lève une APIError 429 si un compteur est épuisé. */
-export async function enforceAuthRateLimit(
-  path: string,
-  body: unknown,
-  headers: Headers | null | undefined,
-): Promise<void> {
-  const plan = planFor(path, body, headers);
-  if (!plan) return;
-
+async function consumePlan(plan: AuthRateLimitPlan): Promise<void> {
   for (const { limiter, key } of [...plan.failures, ...plan.everyRequest]) {
     try {
       await limiters[limiter].consume(key);
@@ -162,6 +175,27 @@ export async function enforceAuthRateLimit(
       throw e;
     }
   }
+}
+
+async function settlePlan(
+  plan: AuthRateLimitPlan,
+  outcome: "success" | "failure" | "other",
+): Promise<void> {
+  if (outcome === "failure") return;
+  for (const { limiter, key } of plan.failures) await limiters[limiter].reward(key, 1);
+  if (outcome === "success") {
+    for (const { limiter, key } of plan.resetOnSuccess) await limiters[limiter].delete(key);
+  }
+}
+
+/** Hook `before` : lève une APIError 429 si un compteur est épuisé. */
+export async function enforceAuthRateLimit(
+  path: string,
+  body: unknown,
+  headers: Headers | null | undefined,
+): Promise<void> {
+  const plan = planFor(path, body, headers);
+  if (plan) await consumePlan(plan);
 }
 
 /**
@@ -180,11 +214,42 @@ export async function recordAuthOutcome(
 
   const outcome = classifyOutcome(returned);
   if (outcome === "failure") return ownerToAlert(plan, emailOf(body));
-  for (const { limiter, key } of plan.failures) await limiters[limiter].reward(key, 1);
-  if (outcome === "success") {
-    for (const { limiter, key } of plan.resetOnSuccess) await limiters[limiter].delete(key);
-  }
+  await settlePlan(plan, outcome);
   return null;
+}
+
+// #153 — le changement de mot de passe n'est pas limité dans les hooks : leur
+// `before` s'exécute avant `sensitiveSessionMiddleware`, sans session résolue,
+// donc sans le compte à qui imputer l'échec. La Server Action `changeOwnPassword`,
+// seul appelant (l'appel HTTP est refusé dans src/lib/auth.ts), encadre donc
+// `auth.api.changePassword` avec les deux fonctions ci-dessous.
+function passwordChangePlan(userId: string, headers: Headers | null | undefined): AuthRateLimitPlan {
+  const byUser: Counter = { limiter: "passwordChangeFailsByUser", key: userId };
+  return {
+    everyRequest: [],
+    failures: [{ limiter: "passwordChangeFailsByIp", key: clientIp(headers) }, byUser],
+    resetOnSuccess: [byUser],
+  };
+}
+
+/** Avant `auth.api.changePassword` : lève une APIError 429 si un compteur est épuisé. */
+export async function enforcePasswordChangeLimit(
+  userId: string,
+  headers: Headers | null | undefined,
+): Promise<void> {
+  await consumePlan(passwordChangePlan(userId, headers));
+}
+
+/**
+ * Après `auth.api.changePassword` : un mot de passe actuel erroné garde son
+ * point, toute autre issue le rend, un succès remet le compte à zéro.
+ */
+export async function recordPasswordChangeOutcome(
+  userId: string,
+  headers: Headers | null | undefined,
+  outcome: "success" | "failure" | "other",
+): Promise<void> {
+  await settlePlan(passwordChangePlan(userId, headers), outcome);
 }
 
 async function ownerToAlert(plan: AuthRateLimitPlan, email: string | null): Promise<string | null> {
@@ -195,7 +260,7 @@ async function ownerToAlert(plan: AuthRateLimitPlan, email: string | null): Prom
   // avant que ce hook ne le lise. Le limiteur d'alertes dédoublonne.
   if (!res || res.consumedPoints < AUTH_RATE_LIMITS.loginFailsByEmailAndIp.points) return null;
   try {
-    await limiters.signInAlertsByEmail.consume(email);
+    await limiters.signInAlertsByEmail.consume(emailKey(email));
     return email;
   } catch (e) {
     if (isLimiterRejection(e)) return null;

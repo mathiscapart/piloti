@@ -37,10 +37,11 @@ export async function alertBlockedSignIn(email: string): Promise<void> {
 }
 
 /**
- * #153 — prévient le titulaire qu'une session ouverte sur son compte a saisi
- * plusieurs mots de passe actuels erronés en voulant changer de mot de passe :
- * signe probable d'une session volée. Cette session vient d'être déconnectée.
- * Forcé, comme ci-dessus. Le titulaire a une session : son compte est actif.
+ * #153 — prévient le titulaire que plusieurs mots de passe actuels erronés ont
+ * été saisis sur son compte en voulant changer de mot de passe, toutes sessions
+ * confondues : signe probable d'une session volée. Seule la session qui a fait
+ * le dernier essai est fermée. Forcé, comme ci-dessus. Le compte a une session :
+ * il est actif.
  */
 export async function alertBlockedPasswordChange(userId: string): Promise<void> {
   await notify({
@@ -49,7 +50,7 @@ export async function alertBlockedPasswordChange(userId: string): Promise<void> 
     title: "Changement de mot de passe bloqué sur votre compte",
     body:
       "Plusieurs mots de passe erronés ont été saisis pour changer le mot de passe " +
-      "de votre compte Piloti. La session à l'origine des essais a été déconnectée, " +
+      "de votre compte Piloti. La session qui a fait le dernier essai a été fermée, " +
       "et le changement de mot de passe est bloqué temporairement. " +
       "Si c'était vous, patientez quelques minutes ou réinitialisez votre mot de passe. " +
       "Sinon, quelqu'un a peut-être accès à votre compte : réinitialisez votre mot " +

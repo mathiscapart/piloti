@@ -269,6 +269,9 @@ export async function recordPasswordChangeOutcome(
   const res = await limiters.passwordChangeFailsByUser.get(userId);
   // `>=` : des échecs simultanés au seuil voient tous le compteur plein, et
   // chacune de ces sessions insistait. Le limiteur d'alertes dédoublonne.
+  // Le compteur inclut les points des requêtes encore en cours : dans une
+  // course, une session peut être fermée après 4 échecs réels. Rare, et dans
+  // le sens de la prudence.
   if (!res || res.consumedPoints < AUTH_RATE_LIMITS.passwordChangeFailsByUser.points) {
     return notLocked;
   }

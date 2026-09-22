@@ -2,8 +2,9 @@
 
 import { APIError } from "better-auth";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { randomUUID } from "crypto";
@@ -278,10 +279,9 @@ export async function changeOwnPassword(
       wrongPassword ? "failure" : "other",
     );
     if (locked) {
-      // #153 — cette session vient d'atteindre le seuil : probablement volée.
-      // On la déconnecte, et le titulaire est prévenu. `deleteMany` : une
-      // requête simultanée a pu la supprimer déjà. Le proxy efface le cookie
-      // devenu invalide en arrivant sur /login.
+      // #153 — l'essai de cette session vient de bloquer le compte : elle est
+      // fermée, et le titulaire est prévenu. `deleteMany` : une requête
+      // simultanée a pu la supprimer déjà.
       await withAudit(
         (tx) => tx.session.deleteMany({ where: { id: session.session.id } }),
         {
@@ -290,11 +290,13 @@ export async function changeOwnPassword(
           metadata: { reason: "PASSWORD_CHANGE_LOCKED", targetUserId: user.id },
         },
       );
-      if (alertOwner) {
-        await alertBlockedPasswordChange(user.id).catch((err) =>
-          console.error("[changeOwnPassword] alerte de sécurité non envoyée:", err),
-        );
-      }
+      // Nom et attributs exacts de better-auth : en https, le cookie porte le
+      // préfixe `__Secure-`, que la suppression doit reprendre avec `secure`.
+      const { name, attributes } = (await auth.$context).authCookies.sessionToken;
+      const { path, domain, secure } = attributes;
+      (await cookies()).set(name, "", { path, domain, secure, httpOnly: true, maxAge: 0 });
+      // Après la réponse : un envoi d'email lent ne retarde pas la redirection.
+      if (alertOwner) after(() => alertBlockedPasswordChange(user.id));
       redirect("/login?locked=1");
     }
     if (wrongPassword) return { error: "Mot de passe actuel incorrect." };

@@ -649,3 +649,9 @@ Deux défauts laissés par #97.
 - Les compteurs repartent de zéro au redémarrage de l'application. Limite acceptée.
 - Une IP partagée (wifi d'un local ou d'un camp) partage le compteur par IP, d'où les seuils larges par IP.
 - Passer à plusieurs instances imposerait un stockage partagé (`RateLimiterRedis`…) : la même API, une autre classe.
+
+**Amendement (#153)** :
+- **Changement de mot de passe** : 5 mots de passe actuels erronés par compte en 15 min (remis à zéro par un changement réussi) et 30 par IP en 1 h. Sans limite, une session volée servait d'oracle pour retrouver le mot de passe en clair. Exception au « point unique » des hooks : leur `before` tourne avant `sensitiveSessionMiddleware`, sans session résolue, donc sans le compte à qui imputer l'échec. `changeOwnPassword` (`src/app/(app)/compte/actions.ts`), seul appelant (l'appel HTTP est refusé), encadre donc `auth.api.changePassword` avec `enforcePasswordChangeLimit` / `recordPasswordChangeOutcome`.
+- **`/verify-password` désactivée** (`disabledPaths`) : better-auth l'expose en HTTP à toute session et répond « mot de passe faux », le même oracle. L'application ne l'utilise pas.
+- **Compteurs par IP consommés en premier** : la consommation s'arrête au premier refus, donc une IP bloquée n'entame plus le quota d'une adresse ciblée et ne crée plus de clé par email.
+- **Clés par email hachées (SHA-256)** : sur le chemin HTTP, l'email vient du corps brut, non validé, et peut être arbitrairement long (vérifié : better-auth accepte un email de 200 000 caractères). Le condensat borne la clé sans confondre deux adresses, contrairement à une troncature.

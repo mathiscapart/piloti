@@ -16,7 +16,12 @@ import {
   newOwnerConsentToken,
   nextOwnerConsent,
   OWNER_CONSENT_REQUEST_DEFERRED,
+  OWNER_CONTACT_CHANGED,
   type OwnerContact,
+  OwnerContactChangedError,
+  nullIfOwnerContactChanged,
+  ownerContactUnchanged,
+  ownerContactVersion,
   type OwnerConsentReset,
   ownerConsentRequestTooSoon,
   sendOwnerConsentRequest,
@@ -200,6 +205,7 @@ export async function updatePlace(
       ownerPhone: true,
       ownerEmail: true,
       ownerConsentStatus: true,
+      ownerConsentDecidedAt: true,
     },
   });
   if (!place) return { error: "Lieu introuvable." };
@@ -217,6 +223,13 @@ export async function updatePlace(
   let contact: OwnerContact | null = null;
   let consentReset: OwnerConsentReset | null = null;
   if (contactMode.data === "replace") {
+    // #151 — le formulaire a-t-il été ouvert sur ce contact ? Sinon il le
+    // réécrirait tel qu'il l'affichait : un contact effacé ou refusé depuis
+    // reviendrait, et son titulaire recevrait une nouvelle demande.
+    const seen = fd.get("ownerContactVersion");
+    if (typeof seen !== "string") return { error: "Formulaire invalide." };
+    if (seen !== ownerContactVersion(place)) return { error: OWNER_CONTACT_CHANGED };
+
     // RGPD-09 / sécurité — cette adresse devient un destinataire d'envoi réel.
     // On refuse explicitement plutôt que d'enregistrer une valeur inexploitable :
     // un email silencieusement ignoré laisserait le chef croire le propriétaire
@@ -256,15 +269,18 @@ export async function updatePlace(
   if (latitude === null) latitude = place.latitude;
   if (longitude === null) longitude = place.longitude;
 
-  const { updated, deferred } = await withAudit(
+  const outcome = await withAudit(
     async (tx) => {
       // #137 — lu avant de poser le nouveau jeton, dans la même transaction.
       const deferred =
         consentReset?.token === "NEW" && contact?.email
           ? await ownerConsentRequestTooSoon(tx, contact.email)
           : false;
-      const row = await tx.campPlace.update({
-        where: { id: placeId },
+      // #151 — en « remplacer », l'écriture n'a lieu que si le contact est
+      // encore celui lu plus haut : un effacement ou un refus survenu entre
+      // les deux annule tout, l'audit compris.
+      const { count } = await tx.campPlace.updateMany({
+        where: { id: placeId, ...(contact ? ownerContactUnchanged(place) : {}) },
         data: {
           name,
           address,
@@ -282,6 +298,11 @@ export async function updatePlace(
             ? consentResetData(consentReset, deferred && contact?.email === place.ownerEmail)
             : {}),
         },
+      });
+      if (count === 0) throw new OwnerContactChangedError();
+      const row = await tx.campPlace.findUniqueOrThrow({
+        where: { id: placeId },
+        select: { ownerEmail: true, ownerConsentToken: true },
       });
       // Seconde entrée, même transaction : le retour en attente a sa propre
       // action pour se lire dans le journal sans ouvrir le détail du PLACE_UPDATED.
@@ -305,7 +326,9 @@ export async function updatePlace(
       return { updated: row, deferred };
     },
     { action: "PLACE_UPDATED", userId: user.id, metadata: { placeId, name } },
-  );
+  ).catch(nullIfOwnerContactChanged);
+  if (!outcome) return { error: OWNER_CONTACT_CHANGED };
+  const { updated, deferred } = outcome;
 
   // RGPD-09 — nouvelle personne, nouvelle demande. Hors transaction, comme à la
   // création : un envoi raté laisse simplement le contact en attente.
@@ -373,6 +396,7 @@ export async function erasePlaceOwnerContact(placeId: string): Promise<ActionRes
       ownerPhone: true,
       ownerEmail: true,
       ownerConsentStatus: true,
+      ownerConsentDecidedAt: true,
     },
   });
   if (!place) return { error: "Lieu introuvable." };
@@ -387,17 +411,23 @@ export async function erasePlaceOwnerContact(placeId: string): Promise<ActionRes
     return { error: "Ce lieu ne porte aucun contact de propriétaire." };
   }
 
-  await withAudit(
-    (tx) =>
-      tx.campPlace.update({
-        where: { id: placeId },
+  // #151 — n'efface que le contact lu ci-dessus. S'il a été remplacé entre-temps,
+  // le nouveau appartient peut-être à une autre personne, qui n'a rien demandé ;
+  // et l'audit décrirait un contact qui n'est plus celui effacé.
+  const erased = await withAudit(
+    async (tx) => {
+      const { count } = await tx.campPlace.updateMany({
+        where: { id: placeId, ...ownerContactUnchanged(place) },
         data: {
           ownerName: null,
           ownerPhone: null,
           ownerEmail: null,
           ...consentResetData(consentReset),
         },
-      }),
+      });
+      if (count === 0) throw new OwnerContactChangedError();
+      return true;
+    },
     {
       action: "PLACE_OWNER_CONTACT_ERASED",
       userId: user.id,
@@ -412,7 +442,8 @@ export async function erasePlaceOwnerContact(placeId: string): Promise<ActionRes
         previousStatus: place.ownerConsentStatus,
       },
     },
-  );
+  ).catch(nullIfOwnerContactChanged);
+  if (!erased) return { error: OWNER_CONTACT_CHANGED };
 
   revalidatePath(`/lieux/${placeId}`);
   revalidatePath("/lieux");

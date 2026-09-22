@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { withAudit } from "@/lib/audit";
@@ -11,6 +12,8 @@ import type { ActionResult } from "@/lib/types";
 import {
   isConsentLinkExpired,
   newOwnerConsentToken,
+  nullIfOwnerContactChanged,
+  OwnerContactChangedError,
   ownerConsentRequestTooSoon,
   sendOwnerConsentRequest,
 } from "./owner-consent";
@@ -77,6 +80,18 @@ export async function submitOwnerDecision(
     ownerConsentDecidedAt: new Date(),
     ...(erased ? { ownerName: null, ownerPhone: null, ownerEmail: null } : {}),
   };
+  // #151 — la décision ne s'applique qu'au contact que ce lien désigne encore.
+  // Un chef qui remplace le contact entre-temps émet un nouveau jeton : sans
+  // cette condition, l'accord ou le refus porterait sur la nouvelle personne.
+  const decide = async (tx: Pick<Prisma.TransactionClient, "campPlace">) => {
+    const { count } = await tx.campPlace.updateMany({
+      where: { id: place.id, ownerConsentToken: token, ownerConsentStatus: "PENDING" },
+      data,
+    });
+    if (count === 0) throw new OwnerContactChangedError();
+    return true;
+  };
+  const staleLink = { error: "Ce lien n'est plus valable. Rechargez la page." };
 
   // LIMITE CONNUE — `AuditLog.userId` est obligatoire et pointe vers un `User`.
   // L'auteur réel de cette décision est le propriétaire, qui n'est pas
@@ -86,7 +101,7 @@ export async function submitOwnerDecision(
   // un `userId` nullable ou un acteur système ; c'est un changement du socle
   // d'audit, hors périmètre de ce lot (cf. D-032).
   if (place.createdById) {
-    await withAudit((tx) => tx.campPlace.update({ where: { id: place.id }, data }), {
+    const decided = await withAudit(decide, {
       action: erased ? "PLACE_OWNER_CONSENT_REFUSED" : "PLACE_OWNER_CONSENT_GRANTED",
       userId: place.createdById,
       metadata: {
@@ -96,12 +111,14 @@ export async function submitOwnerDecision(
         decision,
         erased,
       },
-    });
+    }).catch(nullIfOwnerContactChanged);
+    if (!decided) return staleLink;
   } else {
     // Lieu dont le créateur a été supprimé : la décision du propriétaire prime
     // sur la traçabilité interne — on n'allait pas refuser un effacement RGPD
     // au motif qu'on ne sait pas à qui imputer la ligne d'audit.
-    await db.campPlace.update({ where: { id: place.id }, data });
+    const decided = await decide(db).catch(nullIfOwnerContactChanged);
+    if (!decided) return staleLink;
   }
 
   revalidatePath(`/lieux/${place.id}`);
@@ -132,6 +149,7 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
       ownerName: true,
       ownerEmail: true,
       ownerConsentStatus: true,
+      ownerConsentToken: true,
     },
   });
   if (!place) return { error: "Lieu introuvable." };
@@ -152,22 +170,37 @@ export async function resendOwnerConsentRequest(placeId: string): Promise<Action
   }
 
   const token = newOwnerConsentToken();
-  await withAudit(
-    (tx) =>
-      tx.campPlace.update({
-        where: { id: placeId },
+  // #151 — le jeton n'est remplacé que sur la fiche lue ci-dessus. Sans cette
+  // condition, un contact remplacé entre-temps recevrait son jeton, et le lien
+  // partirait vers l'ANCIENNE adresse. Deux relances simultanées : la seconde
+  // trouve un autre jeton et n'envoie rien.
+  const resent = await withAudit(
+    async (tx) => {
+      const { count } = await tx.campPlace.updateMany({
+        where: {
+          id: placeId,
+          ownerEmail: place.ownerEmail,
+          ownerConsentStatus: place.ownerConsentStatus,
+          ownerConsentToken: place.ownerConsentToken,
+        },
         data: {
           ownerConsentToken: token,
           ownerConsentRequestedAt: new Date(),
           ownerConsentStatus: "PENDING",
         },
-      }),
+      });
+      if (count === 0) throw new OwnerContactChangedError();
+      return true;
+    },
     {
       action: "PLACE_OWNER_CONSENT_RESENT",
       userId: user.id,
       metadata: { placeId, placeName: place.name, previousStatus: place.ownerConsentStatus },
     },
-  );
+  ).catch(nullIfOwnerContactChanged);
+  if (!resent) {
+    return { error: "La fiche a changé entre-temps (contact modifié ou demande déjà envoyée). Rechargez la page." };
+  }
 
   await sendOwnerConsentRequest({
       to: place.ownerEmail,

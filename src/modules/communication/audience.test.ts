@@ -83,6 +83,22 @@ describe("audienceUserIds", () => {
     expect(audienceUserIds(users, deux, "SCOUTS")).toContain("mere-elise");
   });
 
+  it("un enfant sans connexion n'est pas compté, son parent l'est", () => {
+    const farfadet = { ...user("farfadet", ["SCOUT"], "FARFADETS"), canLogin: false };
+    const chefFarfa = user("chef-farfa", ["CHEF"], "FARFADETS");
+    const ids = audienceUserIds(
+      [farfadet, chefFarfa, mereElise],
+      [{ parentId: "mere-elise", childId: "farfadet" }],
+      "FARFADETS",
+    );
+    expect(ids.sort()).toEqual(["chef-farfa", "mere-elise"]);
+  });
+
+  it("ALL exclut aussi les enfants sans connexion", () => {
+    const farfadet = { ...user("farfadet", ["SCOUT"], "FARFADETS"), canLogin: false };
+    expect(audienceUserIds([farfadet, mereElise], [], "ALL")).toEqual(["mere-elise"]);
+  });
+
   it("ALL : tout le monde ; PARENTS : les seuls parents", () => {
     expect(audienceUserIds(users, links, "ALL")).toHaveLength(users.length);
     expect(audienceUserIds(users, links, "PARENTS").sort()).toEqual([

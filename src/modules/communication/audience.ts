@@ -9,6 +9,9 @@ export interface AudienceUser {
   role: string;
   roles: string[] | string | null;
   unit: string | null;
+  // US-CM-01 — compte géré par un parent, sans connexion : il ne peut pas lire
+  // l'annonce, c'est son parent qui la reçoit (absent = compte normal).
+  canLogin?: boolean;
 }
 
 // Rattachement parent ↔ jeune (FamilyLink, US-36).
@@ -19,7 +22,8 @@ export interface FamilyEdge {
 
 // Ids de l'audience parmi une liste d'utilisateurs ACTIFS, en excluant
 // éventuellement l'auteur. Pour une branche : ses membres (jeunes +
-// encadrement) et les parents rattachés à ses jeunes.
+// encadrement) et les parents rattachés à ses jeunes. Un compte sans connexion
+// n'est jamais destinataire, mais son parent l'est.
 export function audienceUserIds(
   users: AudienceUser[],
   links: FamilyEdge[],
@@ -28,14 +32,14 @@ export function audienceUserIds(
 ): string[] {
   const ids = new Set<string>();
   if (audience === "ALL") {
-    for (const u of users) ids.add(u.id);
+    for (const u of users) if (u.canLogin !== false) ids.add(u.id);
   } else if (audience === "PARENTS") {
     for (const u of users) if (effectiveRoles(u).includes("PARENT")) ids.add(u.id);
   } else {
     const youthIds = new Set<string>();
     for (const u of users) {
       if (u.unit !== audience) continue;
-      ids.add(u.id);
+      if (u.canLogin !== false) ids.add(u.id);
       if (effectiveRoles(u).includes("SCOUT")) youthIds.add(u.id);
     }
     const activeIds = new Set(users.map((u) => u.id));

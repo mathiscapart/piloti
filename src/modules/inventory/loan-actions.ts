@@ -312,10 +312,20 @@ export async function returnLoan(
     return { error: `Quantité rendue invalide (max ${loan.quantity}).` };
   }
   const isPartial = returnedQty < loan.quantity;
+  const damaged = parsed.data.condition !== "BON";
 
   await withAudit(
-    (tx) =>
-      tx.loan.update({
+    async (tx) => {
+      // #123 — un retour abîmé / à réparer rend l'article non empruntable tout
+      // de suite, que le signalement d'incident soit rempli ou non. Un article
+      // déjà hors service le reste.
+      if (damaged) {
+        await tx.equipment.updateMany({
+          where: { id: loan.equipmentId, condition: { not: "HORS_SERVICE" } },
+          data: { condition: "A_REPARER" },
+        });
+      }
+      return tx.loan.update({
         where: { id: loanId },
         data: isPartial
           ? {
@@ -332,7 +342,8 @@ export async function returnLoan(
               returnWeightKg: parsed.data.returnWeightKg ?? undefined,
               notes: parsed.data.notes ?? undefined,
             },
-      }),
+      });
+    },
     {
       action: "LOAN_RETURNED",
       userId: user.id,
@@ -358,10 +369,14 @@ export async function returnLoan(
   revalidatePath("/dashboard");
 
   // Si abîmé / à réparer → on bascule vers le form incident préfilled.
-  if (parsed.data.condition !== "BON") {
-    redirect(
-      `/incidents/nouveau?equipmentId=${loan.equipmentId}&loanId=${loan.id}`,
-    );
+  // Les notes du retour préremplissent la description de l'incident.
+  if (damaged) {
+    const params = new URLSearchParams({
+      equipmentId: loan.equipmentId,
+      loanId: loan.id,
+    });
+    if (parsed.data.notes) params.set("notes", parsed.data.notes);
+    redirect(`/incidents/nouveau?${params}`);
   }
 
   redirect("/prets?notice=loan-returned");

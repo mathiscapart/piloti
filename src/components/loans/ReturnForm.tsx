@@ -92,8 +92,8 @@ export function ReturnForm({
         </div>
         {selected !== "BON" ? (
           <p className="rounded-md border border-fire/30 bg-fire-soft/40 px-3 py-2 text-xs font-medium text-fire-ink">
-            Tu seras redirigé(e) vers le formulaire de signalement d&apos;incident
-            après validation pour décrire le problème.
+            Le matériel est marqué à réparer. Décris le problème pour créer le
+            signalement.
           </p>
         ) : null}
       </div>

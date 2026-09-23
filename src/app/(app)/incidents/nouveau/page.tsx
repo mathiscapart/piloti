@@ -6,7 +6,11 @@ import { db } from "@/lib/db";
 import { requireCan } from "@/lib/require-can";
 
 interface PageProps {
-  searchParams: Promise<{ equipmentId?: string; loanId?: string }>;
+  searchParams: Promise<{
+    equipmentId?: string;
+    loanId?: string;
+    notes?: string;
+  }>;
 }
 
 export default async function NewIncidentPage({ searchParams }: PageProps) {
@@ -42,6 +46,7 @@ export default async function NewIncidentPage({ searchParams }: PageProps) {
         equipment={equipment}
         preselectedEquipmentId={params.equipmentId}
         loanId={params.loanId}
+        defaultNotes={params.notes}
       />
     </div>
   );

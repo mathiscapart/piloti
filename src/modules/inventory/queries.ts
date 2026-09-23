@@ -3,6 +3,8 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 
+import { blockingLoans, isOverdue } from "./availability";
+
 // Days ahead used to flag loans as "coming due soon" on the dashboard.
 const UPCOMING_DUE_DAYS = 3;
 
@@ -327,7 +329,8 @@ function normalizeSearch(s: string): string {
 // quantité disponible est nulle.
 // US-12 — si `period` est fourni, la disponibilité est calculée pour CETTE
 // période : seuls les prêts actifs qui chevauchent [start, end] consomment du
-// stock (un article rendu avant ou prêté après reste disponible). Sans période,
+// stock (un article rendu avant ou prêté après reste disponible). Un prêt en
+// retard non rendu bloque toute période (issue #73). Sans période,
 // on retombe sur "tous les prêts actifs" (comportement historique).
 export async function listBorrowableEquipment(
   search?: string,
@@ -345,14 +348,14 @@ export async function listBorrowableEquipment(
       photo: true,
       location: true,
       loans: {
-        where: period
-          ? {
-              status: { in: [...ACTIVE_LOAN_STATUSES] },
-              startDate: { lte: period.end },
-              expectedReturn: { gte: period.start },
-            }
-          : { status: { in: [...ACTIVE_LOAN_STATUSES] } },
-        select: { quantity: true },
+        where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
+        select: {
+          quantity: true,
+          startDate: true,
+          expectedReturn: true,
+          status: true,
+          borrower: { select: { firstName: true, lastName: true } },
+        },
       },
     },
   });
@@ -375,9 +378,16 @@ export async function listBorrowableEquipment(
     });
   }
 
+  const now = new Date();
   return rows.map((eq) => {
-    const loanedQty = eq.loans.reduce((sum, loan) => sum + loan.quantity, 0);
+    // Issue #73 — règle partagée avec `createLoan` (cf. ./availability).
+    const loans = period ? blockingLoans(eq.loans, period, now) : eq.loans;
+    const loanedQty = loans.reduce((sum, loan) => sum + loan.quantity, 0);
     const availableQty = Math.max(0, eq.totalQty - loanedQty);
+    const isDrying = loans.some((loan) => loan.status === "SECHAGE");
+    const lateLoan = loans.find(
+      (loan) => loan.status !== "SECHAGE" && isOverdue(loan, now),
+    );
     const isBroken =
       eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE";
     return {
@@ -395,9 +405,13 @@ export async function listBorrowableEquipment(
           ? "Hors service"
           : "À réparer"
         : availableQty <= 0
-          ? period
-            ? "Indispo ces dates"
-            : "Déjà prêté"
+          ? lateLoan
+            ? `Indispo : en retard chez ${lateLoan.borrower.firstName} ${lateLoan.borrower.lastName}`
+            : period
+              ? isDrying
+                ? "Indispo : en séchage"
+                : "Indispo ces dates"
+              : "Déjà prêté"
           : undefined,
     };
   });

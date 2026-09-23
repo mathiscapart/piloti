@@ -821,7 +821,10 @@ const updateAccountSchema = z.object({
   userId: z.string().min(1),
   firstName: z.string().trim().min(1, "Prénom requis."),
   lastName: z.string().trim().min(1, "Nom requis."),
-  email: z.string().trim().email("Email invalide."),
+  // #149 — better-auth cherche toujours `email.toLowerCase()` et SQLite compare
+  // en tenant compte de la casse : un email stocké avec une majuscule rendrait
+  // le compte introuvable à la connexion et au « mot de passe oublié ».
+  email: z.string().trim().toLowerCase().email("Email invalide."),
   phone: z
     .string()
     .trim()
@@ -864,7 +867,9 @@ export async function updateUserAccount(
   });
   if (
     targetBeforeUpdate?.canLogin === false &&
-    targetBeforeUpdate.email !== email &&
+    // #149 — sans tenir compte de la casse : un email stocké avant la mise en
+    // minuscules ne doit pas passer pour une nouvelle adresse.
+    targetBeforeUpdate.email.toLowerCase() !== email &&
     !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
     !canEnableLogin(targetBeforeUpdate.birthDate)
   ) {

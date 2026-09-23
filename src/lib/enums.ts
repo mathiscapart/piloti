@@ -309,7 +309,7 @@ export const NOTIFICATION_TYPES = [
   "REPORT_CREATED", // SAFE-02 — signalement créé (→ les modérateurs concernés : ADMIN + CHEF de l'unité)
   "REPORT_UPDATE", // SAFE-02 — signalement traité (résolu ou rejeté) → le signalant
   "ACCOUNT_UPDATE", // inscription validée ou refusée → le demandeur
-  "SECURITY_ALERT", // #147 — connexion bloquée après plusieurs mots de passe erronés → le titulaire
+  "SECURITY_ALERT", // #147 connexion / #153 changement de mot de passe bloqués après plusieurs mots de passe erronés → le titulaire
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -360,6 +360,8 @@ export const AUDIT_ACTIONS = [
   "USER_PROFILE_UPDATED",
   "USER_DELETED",
   "USER_PASSWORD_CHANGED",
+  // #153 — session déconnectée après trop de mots de passe actuels erronés.
+  "USER_SESSION_REVOKED",
   "USER_FAMILY_LINKED",
   "USER_FAMILY_UNLINKED",
   "EQUIPMENT_CREATED",

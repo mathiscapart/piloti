@@ -2,17 +2,28 @@
 
 import { APIError } from "better-auth";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { randomUUID } from "crypto";
 
 import { withAudit } from "@/lib/audit";
 import { auth } from "@/lib/auth";
+import {
+  enforcePasswordChangeLimit,
+  rateLimitMessage,
+  recordPasswordChangeOutcome,
+} from "@/lib/auth-rate-limit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { passwordSchema } from "@/lib/password-policy";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
+import {
+  alertBlockedPasswordChange,
+  alertRepeatedPasswordChangeFailures,
+} from "@/modules/notifications/security-alert";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -242,6 +253,16 @@ export async function changeOwnPassword(
   const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session) return { error: "Session expirée." };
 
+  // #153 — sans limite, une session volée permettrait d'essayer autant de mots
+  // de passe actuels que voulu, et de retrouver le mot de passe en clair.
+  try {
+    await enforcePasswordChangeLimit(user.id, requestHeaders);
+  } catch (e) {
+    const limited = rateLimitMessage(e);
+    if (limited) return { error: limited };
+    throw e;
+  }
+
   try {
     // Pas de `revokeOtherSessions` : il remplace aussi la session courante, et
     // le re-rendu de /compte qui suit l'action, lancé avec l'ancien cookie,
@@ -254,12 +275,41 @@ export async function changeOwnPassword(
       headers: requestHeaders,
     });
   } catch (e) {
-    if (e instanceof APIError && e.body?.code === "INVALID_PASSWORD") {
-      return { error: "Mot de passe actuel incorrect." };
+    const wrongPassword = e instanceof APIError && e.body?.code === "INVALID_PASSWORD";
+    const { locked, alertOwner } = await recordPasswordChangeOutcome(
+      user.id,
+      requestHeaders,
+      wrongPassword ? "failure" : "other",
+    );
+    if (locked) {
+      // #153 — l'essai de cette session vient de bloquer le compte : elle est
+      // fermée, et le titulaire est prévenu. `deleteMany` : une requête
+      // simultanée a pu la supprimer déjà.
+      await withAudit(
+        (tx) => tx.session.deleteMany({ where: { id: session.session.id } }),
+        {
+          action: "USER_SESSION_REVOKED",
+          userId: user.id,
+          metadata: { reason: "PASSWORD_CHANGE_LOCKED", targetUserId: user.id },
+        },
+      );
+      // Nom et attributs exacts de better-auth : en https, le cookie porte le
+      // préfixe `__Secure-`, que la suppression doit reprendre avec `secure`.
+      const { name, attributes } = (await auth.$context).authCookies.sessionToken;
+      const { path, domain, secure } = attributes;
+      (await cookies()).set(name, "", { path, domain, secure, httpOnly: true, maxAge: 0 });
+      // Après la réponse : un envoi d'email lent ne retarde pas la redirection.
+      // Enregistrée ici, une fois la session fermée : l'alerte l'affirme.
+      if (alertOwner) after(() => alertBlockedPasswordChange(user.id));
+      redirect("/login?locked=1");
     }
+    // #153 — échecs répétés sur 24 h, sous le seuil : alerte seule.
+    if (alertOwner) after(() => alertRepeatedPasswordChangeFailures(user.id));
+    if (wrongPassword) return { error: "Mot de passe actuel incorrect." };
     console.error("[changeOwnPassword]", e);
     return { error: "Impossible de changer le mot de passe." };
   }
+  await recordPasswordChangeOutcome(user.id, requestHeaders, "success");
 
   // Le hash est écrit par better-auth, hors de notre transaction. La révocation
   // des autres sessions et l'audit (sans le mot de passe) sont atomiques.

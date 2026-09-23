@@ -201,6 +201,9 @@ export const auth = betterAuth({
   // (dispatchAuthEndpoint), contrairement au `rateLimit` ci-dessous qui ne voit
   // que le HTTP : c'est ici que les Server Actions de connexion, inscription et
   // mot de passe oublié/réinitialisation sont limitées (src/lib/auth-rate-limit.ts).
+  // #153 — sauf le changement de mot de passe : ce hook tourne avant la
+  // résolution de la session, il ignore donc le compte visé. `changeOwnPassword`
+  // le limite elle-même.
   hooks: {
     before: createAuthMiddleware(async (ctx) => {
       await enforceAuthRateLimit(ctx.path, ctx.body, ctx.headers);
@@ -234,6 +237,11 @@ export const auth = betterAuth({
       }
     }),
   },
+
+  // #153 — POST /api/auth/verify-password répond « mot de passe faux » à toute
+  // session, sans autre limite que la limite globale par IP : le même oracle
+  // que le changement de mot de passe. L'application ne s'en sert pas.
+  disabledPaths: ["/verify-password"],
 
   // Rate limit anti-bruteforce + anti-flood — routes HTTP /api/auth seulement ;
   // les appels `auth.api.*` des Server Actions sont limités par les hooks.

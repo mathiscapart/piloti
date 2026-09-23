@@ -266,7 +266,7 @@ export async function returnLoan(
       equipmentId: true,
       status: true,
       quantity: true,
-      equipment: { select: { category: true } },
+      equipment: { select: { category: true, condition: true } },
     },
   });
   if (!loan) return { error: "Prêt introuvable." };
@@ -313,6 +313,11 @@ export async function returnLoan(
   }
   const isPartial = returnedQty < loan.quantity;
   const damaged = parsed.data.condition !== "BON";
+  const previousCondition = loan.equipment.condition;
+  const nextCondition =
+    damaged && previousCondition !== "HORS_SERVICE"
+      ? "A_REPARER"
+      : previousCondition;
 
   await withAudit(
     async (tx) => {
@@ -354,6 +359,7 @@ export async function returnLoan(
         returnedQuantity: returnedQty,
         partial: isPartial,
         returnWeightKg: parsed.data.returnWeightKg,
+        equipmentCondition: { from: previousCondition, to: nextCondition },
       },
     },
   );
@@ -375,7 +381,8 @@ export async function returnLoan(
       equipmentId: loan.equipmentId,
       loanId: loan.id,
     });
-    if (parsed.data.notes) params.set("notes", parsed.data.notes);
+    // Tronquée : une note très longue ferait dépasser la taille d'URL admise.
+    if (parsed.data.notes) params.set("notes", parsed.data.notes.slice(0, 1000));
     redirect(`/incidents/nouveau?${params}`);
   }
 

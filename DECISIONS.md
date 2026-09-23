@@ -708,7 +708,9 @@ Deux défauts laissés par #97.
 **Conséquences** :
 - La politique de confidentialité le dit (`PRIVACY_VERSION` 2026-09-22) : supprimer un message le retire des salons, pas du journal.
 - À l'anonymisation de l'auteur, `previousBody` et `body` sont retirés par `redactAuditMetadata` (liste blanche, #94).
-- Aucune durée de conservation n'est fixée pour ces textes : le journal d'audit n'est jamais purgé. Suivi dans #163.
+- ~~Aucune durée de conservation n'est fixée pour ces textes : le journal d'audit n'est jamais purgé. Suivi dans #163.~~
+
+**Amendement (2026-09-23, #163)** : le texte (`previousBody`, `body`) est retiré des lignes `MESSAGE_EDITED` / `MESSAGE_DELETED` de plus d'**1 an** par le planificateur. La ligne reste (qui, quoi, quand) et porte `redacted: true`. Durée fixe, non configurable : elle laisse le temps d'un signalement tardif sur une année scoute. Détail dans D-040.
 
 ## D-038 — migration de données : emails mis en minuscules, audit sans acteur humain
 
@@ -735,3 +737,22 @@ Deux défauts laissés par #97.
 **Conséquences** :
 - Un parent dont le compte n'est pas actif n'est plus notifié.
 - `markAnnouncementsRead` ignore les annonces hors audience : un chef qui ouvre `/annonces` ne se compte plus comme lecteur des autres unités. Les anciennes lectures hors audience restent en base, mais le compteur les filtre.
+
+## D-040 — #163 : durée de conservation du journal d'audit, réglable par instance
+
+**Contexte** : le journal d'audit n'était jamais purgé (RGPD art. 5-1-e) et `/confidentialite` n'en donnait pas la durée (art. 13-2-a). Il contient en outre, depuis #92, le texte des messages de salon modifiés ou supprimés (D-037).
+
+**Choix** (décision du 2026-09-23) :
+- **Texte des messages** : retiré après 1 an (`MESSAGE_TEXT_RETENTION_YEARS`, `src/lib/audit-retention.ts`), durée fixe.
+- **Journal entier** : supprimé après `AUDIT_RETENTION_YEARS` années. C'est une **variable d'environnement**, 10 par défaut (historique comptable). Elle accepte un entier de 1 à 100 ; toute autre valeur empêche le démarrage (`src/instrumentation.ts`). Le minimum de 1 garantit que le journal n'est jamais purgé avant le texte des messages.
+- Les deux purges tournent dans le planificateur (`src/modules/admin/audit-purge.ts`), par lots de 500 sur `createdAt` (indexé). Chaque lot est une transaction `withAudit` qui écrit une ligne récapitulative (`AUDIT_MESSAGE_TEXT_REDACTED` ou `AUDIT_LOG_PURGED` : nombre de lignes, date seuil).
+- Frontière : une ligne créée **strictement avant** `maintenant − N ans` (années calendaires, UTC) est expirée. Une ligne qui a exactement l'âge limite attend le passage suivant (6 h plus tard).
+- `/confidentialite` lit la durée de l'instance au rendu (page déjà `force-dynamic`), jamais une valeur codée en dur.
+
+**Option écartée** : un réglage en base, modifiable depuis l'admin. Aucun mécanisme de réglage d'instance n'existe en base. L'identité légale de l'instance vit déjà dans l'environnement (`ORG_*`, cf. `organization.ts`) et la durée de conservation est de même nature : une décision du responsable de traitement, pas une opération courante.
+
+**Conséquences** :
+- Pas d'acteur système (limite connue, cf. D-032) : la ligne récapitulative est attribuée au plus ancien ADMIN actif, avec `metadata.actor = "SCHEDULER"`. Sans ADMIN actif, aucune purge n'a lieu (pas de mutation sans trace).
+- Les lignes récapitulatives sont elles-mêmes purgées au bout de la même durée.
+- Modifier `AUDIT_RETENTION_YEARS` modifie le texte publié de `/confidentialite` : à faire avec le référent RGPD.
+

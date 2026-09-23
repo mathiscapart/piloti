@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { MESSAGE_TEXT_RETENTION_YEARS, auditRetentionYears } from "@/lib/audit-retention";
 import {
   ORG_GROUP,
   ORG_HOSTING_PROVIDER,
@@ -20,6 +21,8 @@ export const dynamic = "force-dynamic";
 // de l'application (cf. src/lib/auth.ts, docker-compose.yml). L'identité du
 // groupe et de l'hébergeur vient de l'environnement (organization.ts).
 export default function ConfidentialitePage() {
+  // #163 — durée propre à l'instance (AUDIT_RETENTION_YEARS), lue au rendu.
+  const auditYears = auditRetentionYears();
   return (
     <article className="prose prose-sm max-w-none space-y-6 text-earth">
       <h1 className="text-3xl font-black text-forest">Politique de confidentialité</h1>
@@ -154,12 +157,25 @@ export default function ConfidentialitePage() {
           l&apos;effacement de son auteur.
         </p>
         <p>
+          Le journal d&apos;audit, qui conserve l&apos;auteur et la date des
+          opérations de gestion du groupe, est conservé{" "}
+          <strong>
+            {auditYears} an{auditYears > 1 ? "s" : ""}
+          </strong>
+          . Ses entrées plus anciennes sont supprimées automatiquement.
+        </p>
+        <p>
           Quand un message de salon est modifié ou supprimé, son texte
           d&apos;origine est conservé dans le journal d&apos;audit, consultable
           par le responsable de groupe et l&apos;administrateur, au titre de la
           modération et de la protection des mineurs. Supprimer un message le
-          retire donc des salons, mais pas de ce journal. Ce texte en est
-          retiré lors de l&apos;anonymisation du compte de son auteur.
+          retire donc des salons, mais pas immédiatement de ce journal. Ce
+          texte en est retiré automatiquement au bout de{" "}
+          <strong>
+            {MESSAGE_TEXT_RETENTION_YEARS} an{MESSAGE_TEXT_RETENTION_YEARS > 1 ? "s" : ""}
+          </strong>
+          , ou plus tôt lors de l&apos;anonymisation du compte de son auteur ;
+          seule reste la trace de l&apos;opération (qui, quoi, quand).
         </p>
         <p>
           Une demande d&apos;inscription refusée est conservée 30 jours (le

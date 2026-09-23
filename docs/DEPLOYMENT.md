@@ -138,6 +138,7 @@ Noms de variables imposés par `docker-compose.staging.yml` (préfixe `STAGING_`
 | `STAGING_DOMAIN` | Sous-domaine staging, utilisé par le label Traefik `Host(...)` |
 | `STAGING_RESEND_API_KEY` / `STAGING_RESEND_FROM_EMAIL` | Optionnels. Si vides, le flux « mot de passe oublié » est désactivé en staging |
 | `STAGING_VAPID_PUBLIC_KEY` / `STAGING_VAPID_PRIVATE_KEY` / `STAGING_VAPID_SUBJECT` | Optionnels. Générer avec `npx web-push generate-vapid-keys`, des clés dédiées au staging |
+| `STAGING_AUDIT_RETENTION_YEARS` | Optionnel. Même rôle que `AUDIT_RETENTION_YEARS` en prod (vide = 10 ans) |
 
 **Ne jamais** réutiliser une valeur de production pour l'une de ces
 variables — l'isolation staging/prod (RGPD, sécurité) en dépend directement.
@@ -155,6 +156,7 @@ manuellement) :
 | `TRAEFIK_DOMAIN` | Domaine public de prod, existant, inchangé |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Optionnels, existants |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` | Optionnels, existants |
+| `AUDIT_RETENTION_YEARS` | Optionnel. Durée de conservation du journal d'audit, en années entières de 1 à 100 (vide = 10, historique comptable). Au-delà, le planificateur supprime les lignes. Une valeur invalide empêche l'app de démarrer. La durée est publiée dans `/confidentialite` : la modifier impose de relire ce texte. Le texte des messages de salon est, lui, retiré du journal après 1 an quel que soit ce réglage |
 
 Si la prod tourne déjà avec un fichier `.env` à un autre emplacement, copier
 son contenu vers `<root>\prod\.env.production` lors de la première mise en

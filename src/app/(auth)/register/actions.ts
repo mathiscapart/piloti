@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
-import { rateLimitMessage } from "@/lib/auth-rate-limit";
+import { clientIp, rateLimitMessage } from "@/lib/auth-rate-limit";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
@@ -102,6 +102,8 @@ export async function signUpAction(
   const isParent = parsed.data.profileType === "PARENT";
   const minor = requiresParentalConsent(parsed.data.birthDate);
   const requestHeaders = await headers();
+  // D-035 — X-Forwarded-For porte l'IP du conteneur cloudflared en prod.
+  const ip = clientIp(requestHeaders);
 
   // Même réponse que l'email soit libre ou déjà inscrit : dire « un compte
   // existe déjà » révélerait qu'une adresse est inscrite (énumération). L'écran
@@ -160,7 +162,7 @@ export async function signUpAction(
             privacyVersion: PRIVACY_VERSION,
             termsVersion: TERMS_VERSION,
             guardianName: minor ? parsed.data.guardianName : undefined,
-            ipAddress: requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+            ipAddress: ip === "unknown" ? null : ip,
             userAgent: requestHeaders.get("user-agent"),
           },
         }),

@@ -154,6 +154,14 @@ export default function ConfidentialitePage() {
           l&apos;effacement de son auteur.
         </p>
         <p>
+          Quand un message de salon est modifié ou supprimé, son texte
+          d&apos;origine est conservé dans le journal d&apos;audit, consultable
+          par le responsable de groupe et l&apos;administrateur, au titre de la
+          modération et de la protection des mineurs. Supprimer un message le
+          retire donc des salons, mais pas de ce journal. Ce texte en est
+          retiré lors de l&apos;anonymisation du compte de son auteur.
+        </p>
+        <p>
           Une demande d&apos;inscription refusée est conservée 30 jours (le
           temps d&apos;un recours ou d&apos;une nouvelle demande), puis
           anonymisée automatiquement selon les mêmes principes.

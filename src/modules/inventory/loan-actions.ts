@@ -13,6 +13,7 @@ import { publishChannelEvent } from "@/lib/realtime";
 import { postLoanToEventChannel } from "@/modules/planning/event-hooks";
 
 import type { ActionResult } from "@/lib/types";
+import { availableQtyForPeriod } from "./availability";
 import { resolveOverdueNotifications } from "./overdue";
 import {
   createLoanSchema,
@@ -85,6 +86,7 @@ export async function createLoan(
   });
   const byId = new Map(equipments.map((eq) => [eq.id, eq]));
   const start = parsed.data.startDate;
+  const now = new Date();
 
   for (const item of parsed.data.items) {
     const eq = byId.get(item.equipmentId);
@@ -100,11 +102,13 @@ export async function createLoan(
         error: `« ${eq.name} » : la date de retour doit être postérieure au départ.`,
       };
     }
-    // Deux périodes se chevauchent ssi start1 <= end2 && start2 <= end1.
-    const loaned = eq.loans
-      .filter((l) => l.startDate <= itemEnd && l.expectedReturn >= start)
-      .reduce((sum, l) => sum + l.quantity, 0);
-    const available = Math.max(0, eq.totalQty - loaned);
+    // Issue #73 — un prêt en retard non rendu bloque l'article indéfiniment.
+    const available = availableQtyForPeriod(
+      eq.totalQty,
+      eq.loans,
+      { start, end: itemEnd },
+      now,
+    );
     if (item.quantity > available) {
       return {
         error: `« ${eq.name} » : ${available} disponible(s) sur cette période, ${item.quantity} demandé(s).`,

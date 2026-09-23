@@ -328,6 +328,15 @@ Non borné après examen : le rattachement d'un **prêt** à un événement (`lo
 
 `prisma/seed-branches.ts` refuse désormais de s'exécuter si `NODE_ENV === "production"` : contrairement à `seed.ts` dont le `deleteMany` initial le cantonne de lui-même au développement, il est additif et se serait exécuté sans signal sur une base de production, y créant des comptes ACTIVE dont les mots de passe sont en clair dans un dépôt public.
 
+**Amendement — rattachement familial, pointage et annonces (#83, #99, #112).** Trois écritures échappaient encore au périmètre, toutes reproduites en recette :
+- **Rattachement familial** (`family/actions.ts`) : le lien parent ↔ jeune ouvre des droits sur un mineur (progression, inscriptions, messagerie privée). `linkFamily` et `unlinkFamily` passent par `canActOnUnit(actor, "member.family.manage", child.unit)`. La limite porte sur la branche **du jeune** de chaque lien : sur la fiche d'un parent, un chef ne voit le bouton « Retirer » que pour les enfants de sa branche. Secrétaire, RG et ADMIN restent non bornés. S'y ajoutent trois contrôles serveur (SAFE-01, recette du 2026-09-11) : pas de rattachement de soi-même, rôle `PARENT` exigé du parent, rôle `SCOUT` exigé de l'enfant. Un chef pouvait en effet se déclarer parent d'un enfant, puis lui écrire en privé. Le refus vaut pour tous les rôles, y compris dans le cas légitime, courant dans un groupe scout, d'un chef parent d'un jeune du groupe : le rattachement passe alors par un autre gestionnaire (secrétaire ou RG), et le message d'erreur l'indique. Pas de contrôle d'âge : `birthDate` est facultative, et refuser faute de date bloquerait des parents légitimes.
+- **Pointage** (`setAttendance`) : l'action vérifiait le droit sur l'événement, jamais que la personne pointée figure sur la feuille. La règle « jeune actif concerné par l'événement » est nommée une fois (`isOnAttendanceSheet`, `planning/audience.ts`), partagée avec `addRegistration`.
+- **Annonces** (`createAnnouncement`) : `canPublishAnnouncementTo` (`communication/audience.ts`) ramène l'audience à une branche et appelle `canActOnUnit`. Un chef publie vers **sa** branche, en urgent compris (arbitrage du responsable). « Tout le groupe » et « Tous les parents » n'ont pas de branche : fail-closed pour le chef, ouverts au RG et à l'ADMIN. Le formulaire ne propose que les audiences autorisées.
+
+Aucune de ces gardes ne compare `user.unit` en dur. Le périmètre de l'acteur passe par `canActOnUnit` ; l'appartenance de la personne ciblée passe par `isConcernedByEvent`. Le passage à l'appartenance multiple (#128) ne touchera donc que ces deux fonctions.
+
+**Amendement — les notes de suivi sensibles font exception à la lecture ouverte (#98).** La progression d'un jeune reste lisible par tout l'encadrement et le RG (`pedago.view`), mais les **notes de suivi** (US-S07) ne l'étaient qu'en apparence : la page les chargeait pour tout `pedago.view` et ne les affichait qu'aux chefs de la branche. Elles partaient donc dans le HTML et le payload RSC d'un chef d'une autre branche et du RG, lisibles par « Afficher la source ». Désormais une seule règle, `canReadPedagoNotes(user, jeuneUnit)` (`src/lib/permissions.ts`, alias de `canActOnUnit(user, "pedago.manage", …)`), décide à la fois du chargement et de l'affichage : **chefs de la branche du jeune et ADMIN**. Sans ce droit, `getProgression` ne requête pas les notes et renvoie `notes: null`. **Le RG ne les lit pas** — tranché par défaut (notes sensibles sur des mineurs, comportement déjà affiché), à revoir si le responsable en décide autrement : il suffirait alors d'élargir `canReadPedagoNotes`, sans toucher aux pages.
+
 ---
 
 ## D-025 — On ne s'inscrit qu'aux événements qui nous concernent
@@ -547,3 +556,168 @@ La tâche relit le `.env.production` du répertoire de **déploiement** à chaqu
 Elle journalise chaque passage dans `piloti-backups/journal-<env>.log`, succès comme échec. Ce détail compte autant que la sauvegarde : une tâche planifiée qui cesse de fonctionner ne prévient personne, et c'est la panne la plus dangereuse — on continue de se croire protégé. Une ligne datée par jour rend le silence détectable.
 
 **Résidu connu** : la clé privée reste sur la machine sauvegardée tant que son propriétaire ne l'a pas déplacée. Tant qu'elle y est, la protection contre un rançongiciel est théorique — l'attaquant obtient la base ET de quoi déchiffrer les archives, y compris celles répliquées hors-site.
+
+**Amendement 2026-09-21 — l'accord vaut pour une personne, pas pour une fiche (#97)** :
+
+L'accord `GRANTED` survivait à toute modification du contact. Un chef qui remplaçait le propriétaire par une autre personne la faisait apparaître aussitôt comme ayant consenti ; un contact effacé puis ressaisi héritait de l'accord précédent ; un contact qui avait refusé pouvait être ressaisi à l'identique.
+
+- **Email ou téléphone modifié** → retour à `PENDING`, **nouveau jeton**, contact masqué, nouvelle demande si un email existe. Ce sont eux qui désignent la personne jointe. Le jeton est renouvelé même si l'accord était déjà en attente : l'ancien lien montrerait sinon le nouveau contact à l'ancien destinataire.
+- **Nom seul modifié** → statut inchangé. Corriger une faute de frappe ne justifie pas de solliciter à nouveau le propriétaire.
+- **Contact vidé** (bouton d'effacement ou formulaire) → `PENDING` **sans jeton** : plus de contact, plus de lien.
+- **Ressaisie après un refus : avertissement, pas interdiction.** Le refus vide les champs. Reconnaître ensuite la même personne supposerait de conserver une empreinte de ses coordonnées, par exemple un hachage de l'email. On s'y refuse : une empreinte d'email reste une donnée personnelle, facile à retrouver par dictionnaire, et la garder contredirait l'effacement demandé. Le formulaire affiche donc « Le précédent contact a refusé le JJ/MM. N'enregistrez pas à nouveau ses coordonnées. », et toute nouvelle saisie repasse en `PENDING` avec un nouveau jeton. Si c'est la même personne, elle reçoit une nouvelle demande et peut refuser de nouveau. Aucun contact n'est jamais affiché sans son accord.
+- La transition est une fonction pure (`nextOwnerConsent`, `src/modules/camp/owner-consent.ts`), testée. Chaque retour en attente est tracé par `PLACE_OWNER_CONSENT_RESET` (statut précédent et motif, jamais les coordonnées), dans la même transaction que la modification.
+
+**Résidu connu** : les fiches déjà modifiées avant ce correctif peuvent porter un `GRANTED` donné par une autre personne. Rien ne permet de les distinguer après coup. Elles se corrigent à la prochaine modification de l'email ou du téléphone, ou en effaçant le contact (la relance est refusée sur un accord `GRANTED`).
+
+**Amendement 2026-09-21 — le formulaire ne montre pas le contact en attente, et la demande est limitée par adresse (#136, #137)** :
+
+Deux défauts laissés par #97.
+
+- **Le formulaire « Modifier le lieu » pré-remplissait le contact en attente** (#136), alors que la fiche le masque. Sans accord `GRANTED`, les trois valeurs ne sont plus transmises au navigateur — ni en props, ni donc dans le payload RSC. Le formulaire affiche « Un contact est enregistré, en attente de l'accord du propriétaire » et propose **conserver** (par défaut) ou **remplacer**. Ne pas pré-remplir ne suffisait pas : `updatePlace` enregistre ce qu'il reçoit, et des champs vides auraient effacé le contact à la moindre modification du lieu. Le choix passe donc par un champ explicite, `ownerContact` (`keep` | `replace`), validé par Zod et **obligatoire** en modification. `keep` n'écrit aucune colonne de contact : ni le statut ni le jeton ne bougent. `replace` reprend #97. Des champs vides ne valent jamais « conserver ».
+- **La demande pouvait partir en boucle** (#137). Seule la relance respectait le délai de 15 minutes. La modification renvoyait une demande à chaque changement de téléphone, et la création en envoyait une par lieu. La règle vit désormais dans une fonction pure testée (`isOwnerConsentRequestTooSoon`, `owner-consent.ts`). Création, modification et relance l'appliquent toutes. Elle vaut **par adresse, tous lieux confondus** : appliquée par lieu, la création en série la contournerait. Envoi différé : le contact reste `PENDING`, et le chef voit « Une demande a déjà été envoyée récemment à cette adresse ». Il peut relancer plus tard. Si l'email n'a pas changé (correction du téléphone), le jeton **n'est pas renouvelé**. Sinon, le lien que le propriétaire vient de recevoir cesserait de fonctionner, et aucun autre ne lui parviendrait avant la relance. C'est le même destinataire, et la page lit le contact à jour à partir du jeton. Si l'accord avait déjà été donné, le lien qui a servi à le donner redevient actif tant qu'il n'a pas expiré, et le propriétaire peut accepter ou refuser le contact corrigé. Le délai d'expiration n'est pas repoussé : il court toujours depuis la date où le lien a été émis. Si l'email a changé, un nouveau jeton est émis comme le prévoit #97, sans être envoyé : l'ancien lien montrerait sinon le nouveau contact à l'ancien destinataire.
+- **Pas de nouvelle colonne.** La trace d'une demande est `ownerConsentRequestedAt`, la date d'émission du jeton, lue sur tous les lieux qui portent l'adresse. Un envoi différé émet quand même un jeton, et il compte donc comme une demande. Cette approximation est conservatrice : en éditant sans cesse, on repousse l'envoi, on ne le multiplie pas (hormis le résidu ci-dessous). La lecture se fait dans la transaction qui pose le jeton, pour que deux enregistrements simultanés ne passent pas ensemble. La relance lit hors transaction, comme avant.
+- L'audit indique si l'envoi a été différé (`ownerConsentRequestDeferred` sur `PLACE_CREATED`, `requestDeferred` sur `PLACE_OWNER_CONSENT_RESET`). Il ne contient jamais l'adresse.
+
+**Hors périmètre** : l'admin, qui n'a pas `place.owner_contact.view`, voit toujours le contact pré-rempli dans le formulaire quand l'accord est `GRANTED`. Le comportement est conservé en attendant une décision.
+
+**Résidu connu** : la règle repose sur l'adresse que porte **aujourd'hui** chaque fiche. Si un chef alterne deux **emails** sur une même fiche (x → y → x), l'envoi vers x n'est plus visible une fois la fiche passée à y, et x peut recevoir une deuxième demande avant la fin des 15 minutes. Même effet en vidant le contact puis en ressaisissant x (x → vide → x), par le formulaire ou par le bouton d'effacement : sans contact, la fiche perd son jeton et sa date de demande, donc toute trace de l'envoi. Il faut deux enregistrements par envoi, et chacun laisse un `PLACE_OWNER_CONSENT_RESET` dans l'audit. Pour fermer ce trou, il faudrait garder une trace des adresses sollicitées, c'est-à-dire une empreinte, ce qu'on s'interdit (amendement #97). La seule autre option serait de limiter aussi par fiche, mais cela différerait la correction légitime d'une faute de frappe dans l'email.
+
+**Amendement 2026-09-22 — un formulaire resté ouvert ne ressuscite plus un contact effacé ou refusé (#151)** :
+
+`updatePlace` lisait l'état du contact au moment de l'enregistrement, sans savoir sur quel état le formulaire avait été ouvert. Scénario : un chef ouvre « Modifier le lieu » sur un contact `GRANTED` (mode « remplacer », champs pré-remplis). Pendant ce temps, le RG efface le contact à la demande du propriétaire, ou le propriétaire refuse par son lien. Le chef enregistre pour changer la capacité, et les anciennes coordonnées sont réécrites avec un nouveau jeton. Un email repart alors vers la personne qui venait de demander l'effacement. C'est contraire au principe ci-dessus : un refus ou un effacement est définitif pour ces coordonnées.
+
+- **Empreinte du contact dans le formulaire.** La page de modification calcule `ownerContactFingerprint` (`src/modules/camp/owner-consent.ts`), un HMAC-SHA256 du statut, des trois coordonnées et de la date de décision. La clé est `BETTER_AUTH_SECRET`. Le formulaire la renvoie dans `ownerContactVersion`. En mode « remplacer », `updatePlace` la recalcule sur la ligne actuelle : si elle est absente, l'enregistrement est refusé (« Formulaire invalide. ») ; si elle diffère, le chef voit « Le contact du propriétaire a changé entre-temps. Rechargez la page. ». Le jeton n'entre pas dans l'empreinte : une relance ne change pas la personne jointe. La date de décision y entre : sans elle, deux refus successifs (fiche vide dans les deux cas) seraient indiscernables.
+- **Pourquoi un HMAC et pas un simple hachage ni `updatedAt`.** Un hachage sans clé recalculable à partir d'une adresse devinée ferait sortir le contact en attente vers le navigateur, ce que #136 interdit. `updatedAt` bloquerait aussi une modification concurrente en mode « conserver », que ce correctif ne doit pas gêner. L'empreinte n'est **jamais stockée** : elle ne contredit pas l'interdiction de garder une trace des contacts refusés (amendement #97).
+- **Écriture conditionnelle dans la transaction.** L'empreinte prouve que le formulaire a vu l'état lu par l'action. Il reste à garantir que cet état tient jusqu'à l'écriture, et le géocodage s'intercale entre les deux. L'écriture est donc un `updateMany` filtré sur les colonnes de contact lues (`ownerContactUnchanged`). Si `count === 0`, la transaction est annulée, audit compris. En mode « conserver », aucune colonne de contact n'est écrite et aucun filtre n'est posé.
+- **Actions sœurs.** La même garde s'applique à toutes les écritures sur le contact : `erasePlaceOwnerContact` n'efface que le contact affiché (un contact remplacé entre-temps appartient peut-être à une autre personne) ; `submitOwnerDecision` ne décide que si la fiche porte encore **ce** jeton en `PENDING`, sinon un accord ou un refus s'appliquerait au nouveau contact ; `resendOwnerConsentRequest` ne remplace le jeton que si l'email, le statut et le jeton lus sont inchangés, sinon le lien du nouveau contact partirait vers l'ancienne adresse. La création n'est pas concernée : il n'y a pas d'état antérieur.
+- **Données existantes** : l'empreinte se calcule à partir des colonnes existantes, donc aucune migration n'est nécessaire. Un formulaire ouvert avant le déploiement n'envoie pas d'empreinte. En « remplacer », il est refusé avec « Formulaire invalide. » : il suffit de recharger la page.
+
+**Résidu connu** : la page publique du propriétaire n'envoie pas d'empreinte. Si le chef corrige le téléphone sans changer l'email pendant que la page est ouverte, et qu'une demande est déjà partie vers cette adresse il y a moins de 15 minutes, l'envoi est différé et le jeton conservé (amendement #137). Le propriétaire accepte alors un contact dont il a vu l'ancienne version. Le correctif serait la même empreinte sur la page publique, et il sort du périmètre de #151.
+
+## D-033 — RGPD-05 : un compte refusé est anonymisé après 30 jours, et l'anonymisation expurge l'audit
+
+**Contexte** : refuser une inscription passait le compte en `REJECTED` sans rien effacer (#124). Nom, email, date de naissance, IP et navigateur du consentement restaient en base sans finalité ni durée, parfois pour des mineurs de 15 à 17 ans. Le compte n'apparaissait dans aucune liste, et seule une URL tapée à la main permettait de le supprimer. Par ailleurs, l'anonymisation d'un compte laissait des données personnelles en clair dans `AuditLog.metadata` (#94) : la date de naissance avant et après correction (`USER_BIRTHDATE_CHANGED`) et le motif de refus (`USER_REJECTED`).
+
+**Options écartées** :
+- **Anonymiser dès le refus.** C'est l'option la plus simple, mais elle efface le motif que la personne lit à sa tentative de connexion, et elle ne laisse aucun délai pour un recours ou pour corriger un refus par erreur.
+- **90 jours.** Aucun besoin identifié ne justifie une fenêtre aussi longue.
+- **Liste noire des clés d'audit à expurger** (`from`, `to`, `reason`). Chaque nouvelle action qui écrirait une donnée personnelle sous un autre nom passerait au travers sans que personne s'en aperçoive.
+
+**Choix** :
+- `User.rejectedAt` date le refus. Un compte refusé depuis **30 jours** est anonymisé par le scheduler interne (`src/lib/scheduler.ts`) avec `anonymizeUserInTx`. L'`AuditLog` `USER_DELETED` porte `trigger: "retention"`. Aucun utilisateur système n'existe, donc l'auteur de l'entrée est le compte lui-même.
+- `/admin/utilisateurs` ajoute un filtre « Refusés », avec la date d'anonymisation prévue et un bouton « Supprimer maintenant ». `/confidentialite` indique la durée.
+- `anonymizeUserInTx` repasse, dans la même transaction, sur les entrées d'audit qui référencent la personne. Il ne garde que les clés d'une **liste blanche** (identifiants et valeurs structurelles), puis marque l'entrée `redacted: true`. L'entrée elle-même (action, date, auteur) est conservée : la trace « date corrigée par X le J » suffit comme preuve.
+
+**Conséquences** :
+- Le scheduler tourne dans le process Node : la purge a lieu au premier passage après un redémarrage. Si l'app reste arrêtée, la durée de 30 jours est dépassée d'autant.
+- **Au déploiement**, la migration remplit `rejectedAt` avec `updatedAt` pour les refus existants. Un compte refusé il y a plus de 30 jours est donc anonymisé au premier passage, sans délai de grâce. C'est voulu : ces données n'avaient déjà plus de raison d'être conservées.
+- Un compte refusé ne sort de `REJECTED` que par l'effacement. `suspendUser` n'accepte qu'un compte `ACTIVE`, et `reactivateUser` qu'un compte `SUSPENDED`. Sans ces verrous, le passage « Suspendre » puis « Réactiver » faisait entrer un inscrit refusé sans `user.approve`, et le soustrayait à la purge.
+- Toute nouvelle clé de `metadata` d'audit dont la valeur est une **chaîne** non personnelle doit être ajoutée à la liste blanche, sinon elle disparaît à l'anonymisation. Le défaut est donc protecteur. Les nombres et les booléens sont toujours conservés : montants, quantités, présences et exonérations relèvent de l'historique comptable et n'identifient personne.
+- **Limite connue** : seules les entrées d'audit dont une valeur de premier niveau vaut l'id de la personne sont expurgées. Un texte libre qui la nomme sans porter son id (note d'incident, `Equipment.notes`…) n'est pas nettoyé, dans la continuité des résidus déjà consignés en D-011.
+- `deleteUser` refuse un compte déjà `DELETED` : un second effacement réécrirait l'audit et ferait disparaître la mention de la purge automatique.
+- Les actions continuent d'écrire des données personnelles brutes dans l'audit tant que la personne existe. Ne plus les écrire du tout est une piste distincte, non traitée ici.
+
+## D-034 — #92 : la preuve d'un message signalé est une copie prise au signalement
+
+**Contexte** : l'auteur d'un message de salon signalé pouvait le modifier puis le supprimer (suppression en dur). La modération perdait alors le contenu, et le signalement devenait intraitable : la page n'affichait « Résoudre » et « Rejeter » que si le message existait encore. `editMessage` et `deleteMessage` échappaient en outre à `withAudit()`.
+
+**Options écartées** :
+- **Bloquer la modification et la suppression d'un message signalé.** Le message offensant resterait visible des jeunes jusqu'au traitement. Laisser l'auteur le retirer réduit le mal fait.
+- **Suppression logique.** Inutile une fois la copie en place.
+
+**Choix** (modèle Discord, décision du 2026-09-18 sur l'issue) :
+- `Report.targetSnapshot` (JSON `{ body, authorId }`) est rempli par `reportMessage`, pour les salons comme pour les messages privés. L'auteur est un id, jamais un nom : le nom se résout à la lecture, pour que l'anonymisation s'applique.
+- L'auteur n'est jamais bloqué. `editMessage` et `deleteMessage` passent par `withAudit()` (`MESSAGE_EDITED` avec l'ancien texte, `MESSAGE_DELETED` avec le texte supprimé). Agir sur le message d'un autre exige `can(user, "message.manage_any")`, réservé à l'ADMIN.
+- La file de modération affiche la copie et l'état actuel (« Modifié depuis le signalement » / « Supprimé depuis le signalement » — amendé par #150 : l'ADMIN peut aussi supprimer). « Résoudre » et « Rejeter » restent disponibles quand la cible a disparu. L'exclusion de l'auteur (#91) lit l'auteur dans la copie.
+
+**Conséquences** :
+- `anonymizeUserInTx` ne touche pas `Report` : la copie survit à l'effacement de l'auteur, comme les messages signalés (D-028). L'ancien texte présent dans l'audit, lui, est expurgé (clé `authorId`, cf. D-033).
+- **Limite acceptée** : un message modifié ou supprimé **avant** tout signalement n'est tracé que dans le journal d'audit.
+- Les signalements antérieurs n'ont pas de copie. Ils s'affichent comme avant, à partir du message actuel s'il existe encore (sauf auteur indéterminable, cf. amendement #150).
+
+**Amendement #150 (2026-09-22)** — quand l'auteur d'un signalement est indéterminable (pas de copie ou copie illisible, message disparu), l'auteur mis en cause pouvait revoir et rejeter le signalement.
+- Fail-closed : seuls l'ADMIN et le RG voient et traitent un tel signalement (`canModerateReport`). La file (`listReports`) et le compteur du tableau de bord appliquent désormais exactement la règle des actions.
+- Pas de migration de remplissage : aucun signalement n'existe encore en production, il n'y a pas d'historique sans copie à rattraper. Le fail-closed est donc une défense en profondeur : depuis D-034, `reportMessage` prend toujours la copie, un auteur indéterminable ne vient plus que d'une copie illisible ou d'une base de dev ancienne.
+- Un compte RG + CHEF n'est plus borné à son unité dans la file (`isGroupWideModerator`), comme il ne l'était déjà pas dans les actions ni les notifications.
+- **Limite acceptée** : un RG auteur d'un message au signalement sans copie exploitable voit ce signalement. L'ADMIN aussi, par construction.
+
+## D-035 — #147 : limite anti-bruteforce en mémoire, dans les hooks better-auth
+
+**Contexte** : le limiteur intégré de better-auth ne s'applique qu'aux requêtes HTTP (`/api/auth/*`). La doc le dit : « Server-side requests made using `auth.api` are not affected by rate limiting ». Or la connexion, l'inscription, « mot de passe oublié » et la réinitialisation passent par des Server Actions qui appellent `auth.api.*`. Reproduit : 10 échecs de connexion puis une connexion réussie par le formulaire, et 10 emails de réinitialisation en rafale. En prod, ce limiteur voyait de plus une seule IP pour tout le groupe : Traefik réécrit `X-Forwarded-For` avec l'IP du conteneur cloudflared.
+
+**Options écartées** :
+- **Compteur en base (`rateLimit.storage: "database"` ou table dédiée).** Chaque tentative ferait une écriture SQLite. Une attaque deviendrait un ralentissement de toute l'application, dont la base n'accepte qu'un écrivain à la fois. Une seule instance tourne : la mémoire suffit.
+- **fail2ban ou limite au niveau de Traefik.** Aucun des deux ne connaît l'issue d'une connexion (échec ou succès) ni l'email visé. Traefik garde sa limite large par IP (`middlewares.yml`), contre l'abus de volume.
+- **Contrôle dans chaque Server Action.** Quatre points à tenir alignés, et la route HTTP resterait couverte par une autre règle. Les hooks better-auth s'exécutent pour le routeur HTTP **et** pour `auth.api.*` (`dispatchAuthEndpoint`) : un seul point couvre les deux chemins.
+- **Faire passer les Server Actions par `auth.handler(new Request(...))`.** Le limiteur intégré s'appliquerait, mais le plugin `nextCookies` ne pose plus le cookie sur ce chemin. Et la clé reste IP + route : aucune limite par email.
+
+**Choix** :
+- `rate-limiter-flexible`, `RateLimiterMemory`, branché dans `hooks.before` / `hooks.after` de `src/lib/auth.ts`. Logique dans `src/lib/auth-rate-limit.ts`, testée par Vitest. Les compteurs suivent le modèle « Login endpoint protection » de la librairie :
+  - connexion : 5 échecs consécutifs par email + IP en 15 min, remis à zéro par une connexion réussie ; 30 échecs par IP en 1 h. Le point est consommé **avant** la vérification du mot de passe, puis rendu si ce n'était pas un échec : sinon des requêtes simultanées passeraient toutes le contrôle (vérifié : 10 requêtes parallèles, 5 essais réels) ;
+  - mot de passe oublié : 3 demandes par email ciblé en 1 h, et 10 par IP en 1 h, toutes adresses confondues ;
+  - inscription : 5 par IP en 1 h ;
+  - réinitialisation : 10 par IP en 15 min.
+- Dépassement : `APIError` 429 (code `RATE_LIMITED`), message français identique que le compte existe ou non.
+- Connexion bloquée : le formulaire propose « Réinitialiser mon mot de passe ». Le titulaire du compte est prévenu (notification `SECURITY_ALERT`, forcée : email, push et in-app quelles que soient ses préférences) quand une série d'échecs atteint le seuil. Au plus une alerte par compte et par heure, pour qu'un attaquant qui change d'IP n'inonde pas sa boîte. L'alerte part sans être attendue par la réponse : une réponse plus lente quand le compte existe trahirait son existence.
+- IP lue dans `Cf-Connecting-Ip`, posé par l'edge Cloudflare, seul point d'entrée en prod. `advanced.ipAddress.ipAddressHeaders: ["cf-connecting-ip"]` pour que le limiteur intégré voie aussi la vraie IP.
+- Limiteurs rangés dans `globalThis`, **aussi en prod** : Next peut charger le module dans plusieurs bundles, qui doivent partager les mêmes compteurs.
+
+**Conséquences** :
+- Aucun verrouillage définitif : chaque compteur expire à la fin de sa fenêtre. Un attaquant depuis une autre IP ne bloque pas la connexion du titulaire (clé email + IP). Il peut en revanche rendre « mot de passe oublié » indisponible pour une adresse aussi longtemps qu'il renouvelle 3 demandes par heure : c'est le prix d'une limite par adresse contre l'inondation d'emails. Chaque fenêtre expire, mais l'attaquant peut la relancer. Recours : un ADMIN change le mot de passe du compte (`changeUserPassword`).
+- Les compteurs repartent de zéro au redémarrage de l'application. Limite acceptée.
+- Une IP partagée (wifi d'un local ou d'un camp) partage le compteur par IP, d'où les seuils larges par IP.
+- Passer à plusieurs instances imposerait un stockage partagé (`RateLimiterRedis`…) : la même API, une autre classe.
+
+**Amendement (#153)** :
+- **Changement de mot de passe** : 5 mots de passe actuels erronés par compte en 15 min (remis à zéro par un changement réussi) et 30 par IP en 1 h. Sans limite, une session volée servait d'oracle pour retrouver le mot de passe en clair. Exception au « point unique » des hooks : leur `before` tourne avant `sensitiveSessionMiddleware`, sans session résolue, donc sans le compte à qui imputer l'échec. `changeOwnPassword` (`src/app/(app)/compte/actions.ts`), seul appelant (l'appel HTTP est refusé), encadre donc `auth.api.changePassword` avec `enforcePasswordChangeLimit` / `recordPasswordChangeOutcome`.
+- **`/verify-password` désactivée** (`disabledPaths`) : better-auth l'expose en HTTP à toute session et répond « mot de passe faux », le même oracle. L'application ne l'utilise pas.
+- **Compteurs par IP consommés en premier, et une requête refusée ne coûte que sur le compteur qui refuse** : la consommation s'arrête au premier refus, donc une IP bloquée n'entame plus le quota d'une adresse ciblée et ne crée plus de clé par email ; les points déjà pris par la requête refusée sont rendus, donc un compte bloqué qui insiste n'épuise pas le compteur de son IP (wifi partagé).
+- **Clés par email hachées (SHA-256)** : sur le chemin HTTP, l'email vient du corps brut, non validé, et peut être arbitrairement long (vérifié : better-auth accepte un email de 200 000 caractères). Le condensat borne la clé sans confondre deux adresses, contrairement à une troncature.
+- **Au seuil du changement de mot de passe, la session qui fait le dernier essai est fermée et le titulaire prévenu** (choix produit validé le 2026-09-22). Cinq mots de passe actuels faux sur un compte en 15 min, toutes sessions confondues, sont un signal fort de session volée : refuser ne suffit pas, l'attaquant garderait ses droits. La session est supprimée dans la même transaction que son audit (`USER_SESSION_REVOKED`), son cookie est effacé (nom exact de better-auth, préfixe `__Secure-` compris en https), puis redirection vers `/login?locked=1`. Le titulaire reçoit une `SECURITY_ALERT` forcée, au plus une par heure et par compte, envoyée après la réponse (`after()`). Les autres sessions du compte restent ouvertes, pour épargner le titulaire connecté ailleurs. Conséquence acceptée : si une session volée fait 4 essais et que le titulaire se trompe au 5e, c'est la session du titulaire qui est fermée. L'alerte le prévient alors, et il peut réinitialiser son mot de passe, ce qui ferme toutes les autres sessions. Une autre session qui essaie pendant le blocage est refusée sans être fermée. La fenêtre étant fixe (15 min), une session volée qui s'arrête à 4 échecs par fenêtre n'atteint jamais le seuil : son débit est borné (environ 384 essais par jour), mais elle agirait en silence. D'où un second compteur par compte, sur 24 h, qui **ne bloque jamais** : au 10e échec en 24 h, le titulaire reçoit une `SECURITY_ALERT` « essais répétés » (au plus une par 24 h), sans fermeture de session (choix produit validé le 2026-09-22). Un changement réussi remet ce compteur à zéro. Risques acceptés : un titulaire qui se trompe 10 fois en 24 h reçoit une alerte pour rien ; et cette fenêtre est fixe, comptée depuis le premier échec, donc un attaquant qui s'arrête à 9 échecs par fenêtre de 24 h passe encore en silence, avec un débit résiduel d'environ 9 essais par jour.
+
+**Amendement (#155)** : les hooks couvrant aussi `auth.api.*`, la limite frappait les scripts de jeu de données. `prisma/seed.ts` et `prisma/seed-branches.ts` créaient leurs comptes par `auth.api.signUpEmail`, dans un seul processus et sans en-tête : au-delà de 5 comptes, tout tombait sur la clé IP `unknown` et `db:seed`, `db:reset` et le déploiement du staging échouaient. Ces comptes ne sont pas des inscriptions publiques. Ils sont désormais créés par `prisma/seed-account.ts`, qui reprend le chemin de l'endpoint d'inscription (`password.hash`, `internalAdapter.createUser`, `linkAccount`) sans passer par ses hooks. Écartés : une variable d'environnement ou un en-tête qui désactiverait la limite, activable en prod ; une IP fictive par compte, qui simule un client au lieu de dire ce qu'est l'appel. La limite des inscriptions reste entière pour `/register` et `/api/auth/sign-up/email`.
+
+## D-036 — #121 : trop-perçu confirmé, paiement annulé plutôt que compensé
+
+**Contexte** : un paiement supérieur au reste dû était accepté sans alerte. Le « Reste » d'une campagne se calculait globalement (`attendu − encaissé`), si bien qu'un trop-perçu chez un jeune masquait ce que devaient les autres. Aucune saisie ne pouvait être corrigée, ni sur une cotisation ni sur un événement.
+
+**Options écartées** :
+- **Refuser tout trop-perçu.** Un parent peut régler deux enfants d'un seul chèque : le refus bloquerait un cas réel.
+- **Paiement négatif de régularisation.** L'historique devient une suite d'écritures qui s'annulent, difficile à relire pour un trésorier bénévole.
+- **Table `EventPayment` pour le détail des encaissements d'événement.** Cela impose une migration et une reprise des cumuls existants, pour un besoin que la correction du cumul couvre.
+
+**Choix** :
+- Le reste, le trop-perçu et le pourcentage se calculent **jeune par jeune**, puis se somment (`summarizeCollection`, `src/modules/finance/collection.ts`). Le pourcentage est plafonné à 100 %, et le trop-perçu s'affiche à part.
+- Un paiement au-delà du reste dû est **refusé côté serveur tant qu'il n'est pas confirmé** : l'action renvoie `overpaymentCents`, et l'interface propose « Confirmer le trop-perçu de X € ».
+- **Cotisation** : annulation logique d'un `CampaignPayment` (`cancelledAt`, `cancelledById`, `cancelReason`), avec motif obligatoire et audit `CAMPAIGN_PAYMENT_CANCELLED`. Le paiement reste visible, barré, dans l'historique du jeune.
+- **Événement** : `EventRegistration` ne garde qu'un cumul (`paidCents`). On corrige donc ce cumul, avec motif obligatoire et audit `EVENT_PAYMENT_CORRECTED`, qui garde l'ancienne valeur.
+
+**Conséquences** :
+- Toute lecture de `CampaignPayment` qui somme des montants doit filtrer `cancelledAt: null` (détail et liste des campagnes, relances, tableau de bord).
+- Le bouton « Paiement » disparaît d'une ligne soldée. Pour corriger, on annule le paiement fautif, puis on ressaisit le bon montant.
+- Côté événement, le détail des encaissements n'existe que dans l'audit. Si ce détail devient nécessaire à l'écran, il faudra la table écartée ci-dessus.
+
+## D-037 — le texte d'un message de salon modifié ou supprimé reste dans le journal d'audit
+
+**Contexte** : depuis #92, `editMessage` et `deleteMessage` (`src/modules/communication/actions.ts`) recopient le texte d'origine dans `AuditLog.metadata` (`previousBody`, `body`), pour tous les messages de salon, signalés ou non. La revue avant promotion vers `main` a relevé deux effets : le RG, qui a `audit.view`, lit dans `/admin/audit` le texte de salons qui lui sont fermés, et un message supprimé par son auteur reste lisible dans le journal.
+
+**Option écartée** : ne tracer que les identifiants (`messageId`, `channelId`, `authorId`). La copie du signalement (D-034) suffit comme preuve pour un message signalé, mais un message problématique supprimé **avant** tout signalement ne laisserait alors aucune trace.
+
+**Choix** : on garde le texte dans l'audit, au titre de la modération et de la protection des mineurs. Le RG et l'ADMIN, qui lisent le journal, sont les responsables du groupe : qu'ils voient le texte d'un salon restreint est accepté.
+
+**Conséquences** :
+- La politique de confidentialité le dit (`PRIVACY_VERSION` 2026-09-22) : supprimer un message le retire des salons, pas du journal.
+- À l'anonymisation de l'auteur, `previousBody` et `body` sont retirés par `redactAuditMetadata` (liste blanche, #94).
+- Aucune durée de conservation n'est fixée pour ces textes : le journal d'audit n'est jamais purgé. Suivi dans #163.
+
+## D-038 — migration de données : emails mis en minuscules, audit sans acteur humain
+
+**Contexte** : avant #149, `updateUserAccount` enregistrait l'email saisi par l'admin tel quel. better-auth cherche `email.toLowerCase()` et SQLite compare en tenant compte de la casse : un compte dont l'email contient une majuscule ne peut plus se connecter ni réinitialiser son mot de passe. La saisie est désormais normalisée, mais des comptes déjà en prod peuvent être touchés.
+
+**Choix** : une migration SQL (`20260923120000_lowercase_user_email`) met ces emails en minuscules au démarrage. Elle écrit d'abord une ligne `AuditLog` `USER_EMAIL_LOWERCASED` par compte modifié, avec le même filtre, pour respecter l'invariant « aucune mutation sans trace ». Faute d'acteur humain, `userId` est le compte lui-même. L'adresse n'est pas recopiée dans `metadata`.
+
+**Option écartée** : laisser les admins réenregistrer chaque fiche. Cela suppose de connaître les comptes touchés, et le titulaire reste bloqué d'ici là.
+
+**Conséquences** :
+- Deux comptes qui ne diffèrent que par la casse ne sont **pas** modifiés : l'index unique ferait échouer la migration et donc le démarrage de la prod. Ils restent à traiter à la main (requête de contrôle en tête du fichier SQL).
+- `lower()` de SQLite ne traite que l'ASCII, contrairement à `toLowerCase()`. C'est sans effet ici : la validation Zod refuse déjà les adresses non ASCII.

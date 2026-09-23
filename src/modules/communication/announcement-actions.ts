@@ -14,7 +14,7 @@ import type { ActionResult } from "@/lib/types";
 import { resolveUnitAudience } from "@/modules/audience/unit-audience";
 import { notifyMany } from "@/modules/notifications/notify";
 
-import { audienceUserIds } from "./audience";
+import { audienceUserIds, canPublishAnnouncementTo } from "./audience";
 import { getAnnouncementReaders, type ReaderEntry } from "./announcement-queries";
 
 const createSchema = z.object({
@@ -66,6 +66,11 @@ export async function createAnnouncement(
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
   const { title, body, audience, urgent, attachments } = parsed.data;
+  // Périmètre d'unité (D-024, #112) : un chef publie vers SA branche, en
+  // urgent compris ; le groupe entier reste au RG et à l'ADMIN.
+  if (!canPublishAnnouncementTo(user, audience)) {
+    return { error: "Tu ne peux publier que vers ta branche." };
+  }
 
   const announcement = await withAudit(
     (tx) =>

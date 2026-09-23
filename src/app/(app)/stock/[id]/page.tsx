@@ -42,11 +42,17 @@ const DATETIME_FMT = new Intl.DateTimeFormat("fr-FR", {
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }
 
-export default async function EquipmentDetailPage({ params }: PageProps) {
+export default async function EquipmentDetailPage({
+  params,
+  searchParams,
+}: PageProps) {
   await requireCan("equipment.view");
   const { id } = await params;
+  // Issue #107 — le lien « Voir l'incident » du wizard de prêt ouvre cet onglet.
+  const { tab } = await searchParams;
   const [eq, categories] = await Promise.all([
     getEquipmentDetail(id),
     listCategories(),
@@ -206,7 +212,10 @@ export default async function EquipmentDetailPage({ params }: PageProps) {
 
       {/* Tabs */}
       <section>
-        <Tabs defaultValue="historique" className="space-y-4">
+        <Tabs
+          defaultValue={tab === "incidents" ? "incidents" : "historique"}
+          className="space-y-4"
+        >
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="historique">Historique</TabsTrigger>
             <TabsTrigger value="prets">Prêts</TabsTrigger>

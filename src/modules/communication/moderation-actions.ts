@@ -14,7 +14,13 @@ import type { ActionResult } from "@/lib/types";
 import { notify, notifyMany } from "@/modules/notifications/notify";
 
 import { canAccessChannel } from "./access";
-import { canModerateReport, resolveConcernedUnit, selectReportRecipients } from "./moderation-policy";
+import {
+  canModerateReport,
+  parseTargetSnapshot,
+  resolveConcernedUnit,
+  selectReportRecipients,
+  type ReportTargetSnapshot,
+} from "./moderation-policy";
 
 const reportSchema = z.object({
   targetType: z.enum(REPORT_TARGET_TYPES),
@@ -41,22 +47,35 @@ export async function reportMessage(
   // message visé, figée sur le signalement pour router/filtrer la file sans
   // re-résoudre l'auteur à chaque lecture (cf. Report.concernedUnit).
   let concernedUnit: string | null = null;
+  let targetAuthorId: string;
+  // #92 — copie du message au signalement : l'auteur reste libre de le
+  // modifier ou de le supprimer ensuite, la preuve est ici.
+  let snapshot: ReportTargetSnapshot;
 
   if (parsed.data.targetType === "CHANNEL_MESSAGE") {
     const message = await db.message.findUnique({
       where: { id: parsed.data.targetId },
-      select: { channel: true, author: { select: { unit: true } } },
+      select: {
+        body: true,
+        channel: true,
+        authorId: true,
+        author: { select: { unit: true } },
+      },
     });
     if (!message) return { error: "Message introuvable." };
     if (!canAccessChannel(user, message.channel)) {
       return { error: "Accès refusé." };
     }
     concernedUnit = resolveConcernedUnit(message.author);
+    targetAuthorId = message.authorId;
+    snapshot = { body: message.body, authorId: message.authorId };
   } else {
     const dm = await db.directMessage.findUnique({
       where: { id: parsed.data.targetId },
       select: {
+        body: true,
         conversation: { select: { userAId: true, userBId: true } },
+        senderId: true,
         sender: { select: { unit: true } },
       },
     });
@@ -65,6 +84,8 @@ export async function reportMessage(
       return { error: "Accès refusé." };
     }
     concernedUnit = resolveConcernedUnit(dm.sender);
+    targetAuthorId = dm.senderId;
+    snapshot = { body: dm.body, authorId: dm.senderId };
   }
 
   // Pas de doublon : un signalement déjà en attente sur le même contenu par le
@@ -89,6 +110,7 @@ export async function reportMessage(
           reporterId: user.id,
           reason: parsed.data.reason ?? null,
           concernedUnit,
+          targetSnapshot: JSON.stringify(snapshot),
         },
       }),
     {
@@ -98,21 +120,25 @@ export async function reportMessage(
     },
   );
 
-  after(() => notifyModerators(concernedUnit, parsed.data.reason));
+  after(() => notifyModerators(concernedUnit, targetAuthorId, parsed.data.reason));
 
   return { error: null };
 }
 
 // Notifie à la CRÉATION du signalement les modérateurs concernés : tous les
-// ADMIN + les CHEF de l'unité de l'auteur du message visé (pas tous les
-// chefs — cf. `selectReportRecipients`). Le signalant n'est notifié qu'à la
-// clôture (cf. `closeReport`), pas ici.
-async function notifyModerators(concernedUnit: string | null, reason?: string): Promise<void> {
+// ADMIN et RG + les CHEF de l'unité de l'auteur du message visé (pas tous les
+// chefs), jamais l'auteur lui-même — cf. `selectReportRecipients`. Le
+// signalant n'est notifié qu'à la clôture (cf. `closeReport`), pas ici.
+async function notifyModerators(
+  concernedUnit: string | null,
+  targetAuthorId: string,
+  reason?: string,
+): Promise<void> {
   const candidates = await db.user.findMany({
     where: { status: "ACTIVE" },
     select: { id: true, role: true, roles: true, unit: true },
   });
-  const recipients = selectReportRecipients(candidates, concernedUnit);
+  const recipients = selectReportRecipients(candidates, concernedUnit, targetAuthorId);
   if (recipients.length === 0) return;
 
   await notifyMany(recipients, (userId) => ({
@@ -122,6 +148,31 @@ async function notifyModerators(concernedUnit: string | null, reason?: string): 
     body: reason ? `Motif : ${reason}` : "Un message a été signalé, à traiter.",
     link: "/moderation",
   }));
+}
+
+// Auteur du contenu signalé (#91), pour écarter la personne mise en cause du
+// traitement. Lu dans la copie (#92) : le message a pu être supprimé depuis ;
+// à défaut (signalement antérieur à la copie), sur le message lui-même.
+// `null` si ni l'un ni l'autre n'existe plus.
+async function resolveTargetAuthorId(report: {
+  targetType: string;
+  targetId: string;
+  targetSnapshot: string | null;
+}): Promise<string | null> {
+  const snapshot = parseTargetSnapshot(report.targetSnapshot);
+  if (snapshot) return snapshot.authorId;
+  if (report.targetType === "CHANNEL_MESSAGE") {
+    const message = await db.message.findUnique({
+      where: { id: report.targetId },
+      select: { authorId: true },
+    });
+    return message?.authorId ?? null;
+  }
+  const dm = await db.directMessage.findUnique({
+    where: { id: report.targetId },
+    select: { senderId: true },
+  });
+  return dm?.senderId ?? null;
 }
 
 // Masque le message visé (soft-hide, jamais de suppression en dur : garde la
@@ -141,14 +192,15 @@ export async function hideMessage(reportId: string): Promise<ActionResult> {
   // d'unité ci-dessous portait sur un objet différent de celui qu'on masquait.
   const report = await db.report.findUnique({
     where: { id: reportId },
-    select: { concernedUnit: true, targetType: true, targetId: true },
+    select: { concernedUnit: true, targetType: true, targetId: true, targetSnapshot: true },
   });
   if (!report) return { error: "Signalement introuvable." };
-  if (!canModerateReport(user, report)) {
-    return { error: "Réservé aux modérateurs de cette unité." };
-  }
   const targetType = report.targetType as ReportTargetType;
   const targetId = report.targetId;
+  const targetAuthorId = await resolveTargetAuthorId(report);
+  if (!canModerateReport(user, { concernedUnit: report.concernedUnit, targetAuthorId })) {
+    return { error: "Réservé aux modérateurs de cette unité." };
+  }
 
   if (targetType === "CHANNEL_MESSAGE") {
     const message = await db.message.findUnique({
@@ -235,8 +287,9 @@ async function closeReport(
     return { error: "Ce signalement a déjà été traité." };
   }
   // Routage SAFE-02 : un CHEF ne traite que les signalements de son unité ;
-  // l'ADMIN traite tout (cf. `canModerateReport`).
-  if (!canModerateReport(moderator, report)) {
+  // l'ADMIN traite tout, et jamais l'auteur du contenu (cf. `canModerateReport`).
+  const targetAuthorId = await resolveTargetAuthorId(report);
+  if (!canModerateReport(moderator, { concernedUnit: report.concernedUnit, targetAuthorId })) {
     return { error: "Réservé aux modérateurs de cette unité." };
   }
 

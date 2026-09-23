@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
+import { clientIp, rateLimitMessage } from "@/lib/auth-rate-limit";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
@@ -101,6 +102,14 @@ export async function signUpAction(
   const isParent = parsed.data.profileType === "PARENT";
   const minor = requiresParentalConsent(parsed.data.birthDate);
   const requestHeaders = await headers();
+  // D-035 — X-Forwarded-For porte l'IP du conteneur cloudflared en prod.
+  const ip = clientIp(requestHeaders);
+
+  // Même réponse que l'email soit libre ou déjà inscrit : dire « un compte
+  // existe déjà » révélerait qu'une adresse est inscrite (énumération). L'écran
+  // de succès renvoie vers « Mot de passe oublié » pour le second cas.
+  const success =
+    "Demande enregistrée ! Elle est en attente de validation par un administrateur.";
 
   let createdUserId: string | null = null;
 
@@ -116,7 +125,16 @@ export async function signUpAction(
       },
       headers: requestHeaders,
     });
-    createdUserId = result.user.id;
+
+    // Email déjà inscrit : avec `autoSignIn: false`, better-auth ne lève pas
+    // d'erreur mais renvoie un utilisateur synthétique, jamais écrit en base
+    // (anti-énumération). Rien à compléter : même réponse qu'un succès.
+    const created = await db.user.findUnique({
+      where: { id: result.user.id },
+      select: { id: true },
+    });
+    if (!created) return { error: null, success };
+    createdUserId = created.id;
 
     // SEC-08 (Vuln 2) — `unit` et `birthDate` sont `input: false` côté
     // better-auth (déterminent l'accès aux salons par branche et SAFE-01) :
@@ -144,7 +162,7 @@ export async function signUpAction(
             privacyVersion: PRIVACY_VERSION,
             termsVersion: TERMS_VERSION,
             guardianName: minor ? parsed.data.guardianName : undefined,
-            ipAddress: requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+            ipAddress: ip === "unknown" ? null : ip,
             userAgent: requestHeaders.get("user-agent"),
           },
         }),
@@ -172,22 +190,13 @@ export async function signUpAction(
         );
       });
     }
-    const msg = e instanceof Error ? e.message.toLowerCase() : "";
-    if (msg.includes("already") || msg.includes("exist")) {
-      return {
-        error: "Un compte existe déjà avec cet email.",
-        success: null,
-      };
-    }
+    const limited = rateLimitMessage(e);
+    if (limited) return { error: limited, success: null };
     return {
       error: "Erreur lors de l'inscription. Réessayez dans un instant.",
       success: null,
     };
   }
 
-  return {
-    error: null,
-    success:
-      "Compte créé ! Votre inscription est en attente de validation par un administrateur.",
-  };
+  return { error: null, success };
 }

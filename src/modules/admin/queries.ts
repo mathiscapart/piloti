@@ -28,6 +28,14 @@ export async function listPendingUsers() {
       phone: true,
       requestedRole: true,
       createdAt: true,
+      // #122 — âge et responsable légal affichés à la validation.
+      birthDate: true,
+      consents: {
+        where: { type: "PARENTAL" },
+        orderBy: { acceptedAt: "desc" },
+        take: 1,
+        select: { guardianName: true },
+      },
     },
   });
 }
@@ -44,8 +52,9 @@ const USER_ORDER_BY: Record<UserSort, Prisma.UserOrderByWithRelationInput[]> = {
 };
 
 
-// Utilisateurs gérables (tout sauf PENDING/REJECTED — ces deux états sont gérés
-// via /admin/inscriptions). On expose ACTIVE et SUSPENDED ici.
+// Utilisateurs gérables (tout sauf PENDING — géré via /admin/inscriptions).
+// Par défaut ACTIVE et SUSPENDED ; REJECTED reste accessible via `?status=`
+// pour retrouver un compte refusé avant sa purge automatique (30 j).
 export async function listManageableUsers(filters: ManageableUserFilters = {}) {
   return db.user.findMany({
     where: buildManageableUserWhere(filters),
@@ -61,6 +70,8 @@ export async function listManageableUsers(filters: ManageableUserFilters = {}) {
       unit: true,
       phone: true,
       createdAt: true,
+      // RGPD — sert à afficher la date d'anonymisation automatique (REJECTED).
+      rejectedAt: true,
       // US-CM-01 — compte enfant sans connexion propre.
       canLogin: true,
     },

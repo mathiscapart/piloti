@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ const ACTION_LABEL: Record<string, string> = {
   USER_ROLE_CHANGED: "Rôle modifié",
   USER_UNIT_CHANGED: "Unité modifiée",
   USER_BIRTHDATE_CHANGED: "Date de naissance corrigée",
+  USER_SESSION_REVOKED: "Session déconnectée (sécurité)",
   EQUIPMENT_CREATED: "Article créé",
   EQUIPMENT_UPDATED: "Article modifié",
   EQUIPMENT_ARCHIVED: "Article archivé",
@@ -52,6 +54,15 @@ const ACTION_LABEL: Record<string, string> = {
   LOAN_DRYING_STARTED: "Mis en séchage",
   INCIDENT_REPORTED: "Incident signalé",
   INCIDENT_RESOLVED: "Incident résolu",
+  PEDAGO_NOTE_DELETED: "Note supprimée",
+  STEP_VALIDATION_CANCELLED: "Validation d'étape annulée",
+  MESSAGE_EDITED: "Message modifié",
+  MESSAGE_DELETED: "Message supprimé",
+  PLACE_OWNER_CONSENT_GRANTED: "Accord du propriétaire",
+  PLACE_OWNER_CONSENT_REFUSED: "Refus du propriétaire",
+  PLACE_OWNER_CONSENT_RESENT: "Relance du propriétaire",
+  PLACE_OWNER_CONSENT_RESET: "Accord du propriétaire annulé",
+  PLACE_OWNER_CONTACT_ERASED: "Contact du propriétaire effacé",
 };
 
 const ACTION_ICON: Record<string, LucideIcon> = {
@@ -241,6 +252,11 @@ export default async function AdminAuditPage({ searchParams }: PageProps) {
                     <details className="mt-2 text-xs">
                       <summary className="cursor-pointer text-trail">
                         Détails
+                        {isRedacted(it.metadata) ? (
+                          <Badge variant="secondary" className="ml-2 align-middle">
+                            Expurgé (RGPD)
+                          </Badge>
+                        ) : null}
                       </summary>
                       <pre className="mt-1 overflow-x-auto rounded-lg bg-sand p-2 font-mono text-[11px] text-earth">
                         {prettyJson(it.metadata)}
@@ -285,5 +301,16 @@ function prettyJson(raw: string): string {
     return JSON.stringify(JSON.parse(raw), null, 2);
   } catch {
     return raw;
+  }
+}
+
+// Issue #94 — `anonymize.ts` marque `redacted: true` dès qu'il retire de la
+// PII de cette metadata (cf. src/lib/audit-redaction.ts).
+function isRedacted(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "object" && parsed !== null && parsed.redacted === true;
+  } catch {
+    return false;
   }
 }

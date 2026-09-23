@@ -13,6 +13,7 @@ import { publishChannelEvent } from "@/lib/realtime";
 import { postLoanToEventChannel } from "@/modules/planning/event-hooks";
 
 import type { ActionResult } from "@/lib/types";
+import { availableQtyForPeriod, incidentAvailability } from "./availability";
 import { resolveOverdueNotifications } from "./overdue";
 import {
   createLoanSchema,
@@ -81,10 +82,15 @@ export async function createLoan(
         where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
         select: { quantity: true, startDate: true, expectedReturn: true },
       },
+      incidents: {
+        where: { resolvedAt: null },
+        select: { severity: true, resolvedAt: true },
+      },
     },
   });
   const byId = new Map(equipments.map((eq) => [eq.id, eq]));
   const start = parsed.data.startDate;
+  const now = new Date();
 
   for (const item of parsed.data.items) {
     const eq = byId.get(item.equipmentId);
@@ -94,17 +100,23 @@ export async function createLoan(
     if (eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE") {
       return { error: `« ${eq.name} » n'est pas empruntable (en réparation / hors service).` };
     }
+    // Issue #107 — un incident Bloquant ouvert rend l'article non empruntable.
+    if (incidentAvailability(eq.incidents).blocked) {
+      return { error: `« ${eq.name} » n'est pas empruntable (incident bloquant ouvert).` };
+    }
     const itemEnd = item.expectedReturn ?? parsed.data.expectedReturn;
     if (itemEnd < start) {
       return {
         error: `« ${eq.name} » : la date de retour doit être postérieure au départ.`,
       };
     }
-    // Deux périodes se chevauchent ssi start1 <= end2 && start2 <= end1.
-    const loaned = eq.loans
-      .filter((l) => l.startDate <= itemEnd && l.expectedReturn >= start)
-      .reduce((sum, l) => sum + l.quantity, 0);
-    const available = Math.max(0, eq.totalQty - loaned);
+    // Issue #73 — un prêt en retard non rendu bloque l'article indéfiniment.
+    const available = availableQtyForPeriod(
+      eq.totalQty,
+      eq.loans,
+      { start, end: itemEnd },
+      now,
+    );
     if (item.quantity > available) {
       return {
         error: `« ${eq.name} » : ${available} disponible(s) sur cette période, ${item.quantity} demandé(s).`,

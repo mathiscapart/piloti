@@ -53,6 +53,7 @@ export const ACTIONS = [
   "donation.review",
   // Communication
   "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
+  "message.manage_any", // #92 — modifier / supprimer le message d'un autre (l'auteur, lui, gère les siens)
   // SAFE-02 — signalement & modération de contenu (salons + messagerie privée).
   "moderation.view", // consulter la file de modération (CHEF + RG, lecture)
   "moderation.review", // traiter la file : masquer un message, résoudre/rejeter
@@ -87,6 +88,7 @@ export const ACTIONS = [
   // Suivi pédagogique (US-S01…S10)
   "pedago.view", // consulter la progression / fiches (encadrement + RG)
   "pedago.manage", // valider étape, attribuer badge, objectifs, notes (chef)
+  "pedago.validation.cancel", // #100 — annuler une étape CONFIRMÉE (RG + ADMIN)
   "pedago.referential", // gérer le référentiel d'étapes & le catalogue de badges
 ] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -170,6 +172,9 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "donation.review": [MAT],
   // Communication — publier une annonce / diffusion urgente : encadrants.
   "announcement.publish": [CHEF, RG],
+  // #92 — l'auteur modifie / supprime ses propres messages (contrôle dans
+  // l'action) ; le message d'un autre : ADMIN seul.
+  "message.manage_any": [],
   // SAFE-02 — la file de modération se consulte ET se traite par les chefs et le
   // responsable de groupe (masquer, résoudre, rejeter). Un CHEF est limité à son
   // unité (cf. canModerateReport) ; RG et ADMIN voient et traitent toutes les unités.
@@ -211,6 +216,11 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // page (pas par `can()`), hors notes sensibles (US-S07/S10).
   "pedago.view": [CHEF, RG],
   "pedago.manage": [CHEF],
+  // #100 — une étape confirmée par deux chefs ne se défait pas par un seul :
+  // l'annulation est réservée au RG (déroge à « RG = lecture seule », c'est un
+  // arbitrage, pas une gestion courante) et à l'ADMIN. Une proposition non
+  // confirmée reste retirable par les chefs de la branche (`pedago.manage`).
+  "pedago.validation.cancel": [RG],
   "pedago.referential": [CHEF],
 };
 
@@ -323,6 +333,17 @@ export function canActOnUnit(
   );
   if (viaRoleTransverse) return true;
   return inUnitScope(user, targetUnit);
+}
+
+/**
+ * US-S07 — notes de suivi sensibles d'un jeune (#98). Contrairement au reste de
+ * la progression (`pedago.view`, lecture ouverte à l'encadrement et au RG), elles
+ * ne se lisent que là où elles s'écrivent : chefs de la branche du jeune et
+ * ADMIN. Le RG ne les lit pas. Condition unique pour CHARGER et pour AFFICHER :
+ * une note qu'on n'a pas le droit de lire n'est jamais envoyée au navigateur.
+ */
+export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
+  return canActOnUnit(user, "pedago.manage", jeuneUnit);
 }
 
 /**

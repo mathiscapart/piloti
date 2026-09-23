@@ -1,6 +1,8 @@
 import { UserPlus } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { computeAge, isMinor } from "@/lib/legal/age";
+import { UNIT_LABEL, type Unit } from "@/lib/enums";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { listPendingUsers } from "@/modules/admin/queries";
@@ -44,37 +46,54 @@ export default async function AdminInscriptionsPage() {
         />
       ) : (
         <ul className="space-y-3">
-          {users.map((u) => (
-            <li
-              key={u.id}
-              className="flex flex-col gap-3 rounded-2xl bg-snow p-5 shadow-card md:flex-row md:items-start md:justify-between"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-bold text-earth">
-                  {u.firstName} {u.lastName}
-                </p>
-                <p className="text-sm text-trail">{u.email}</p>
-                <p className="mt-1 text-xs text-trail">
-                  Demande le {DATE_FMT.format(u.createdAt)}
-                  {u.requestedRole === "PARENT" ? " · 👪 Parent" : ""}
-                  {u.unit ? ` · unité ${u.unit}` : ""}
-                  {u.phone ? ` · ${u.phone}` : ""}
-                </p>
-              </div>
-              <div className="flex gap-2 md:flex-shrink-0">
-                <RejectDialog
-                  userId={u.id}
-                  fullName={`${u.firstName} ${u.lastName}`}
-                />
-                <ApproveDialog
-                  userId={u.id}
-                  fullName={`${u.firstName} ${u.lastName}`}
-                  allowPrivileged={canAssignPrivileged}
-                  requestedRole={u.requestedRole}
-                />
-              </div>
-            </li>
-          ))}
+          {users.map((u) => {
+            const age = computeAge(u.birthDate);
+            const minor = isMinor(u.birthDate);
+            const guardianName = u.consents[0]?.guardianName ?? null;
+            return (
+              <li
+                key={u.id}
+                className="flex flex-col gap-3 rounded-2xl bg-snow p-5 shadow-card md:flex-row md:items-start md:justify-between"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-earth">
+                    {u.firstName} {u.lastName}
+                    {minor ? (
+                      <span className="ml-2 inline-flex items-center rounded-full bg-brick-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brick-ink">
+                        Mineur
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="text-sm text-trail">{u.email}</p>
+                  <p className="mt-1 text-xs text-trail">
+                    Demande le {DATE_FMT.format(u.createdAt)}
+                    {age !== null ? ` · ${age} ans` : ""}
+                    {u.requestedRole === "PARENT" ? " · 👪 Parent" : ""}
+                    {u.unit ? ` · ${UNIT_LABEL[u.unit as Unit] ?? u.unit}` : ""}
+                    {u.phone ? ` · ${u.phone}` : ""}
+                  </p>
+                  {guardianName ? (
+                    <p className="mt-1 text-xs text-trail">
+                      Responsable légal : {guardianName}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex gap-2 md:flex-shrink-0">
+                  <RejectDialog
+                    userId={u.id}
+                    fullName={`${u.firstName} ${u.lastName}`}
+                  />
+                  <ApproveDialog
+                    userId={u.id}
+                    fullName={`${u.firstName} ${u.lastName}`}
+                    allowPrivileged={canAssignPrivileged}
+                    requestedRole={u.requestedRole}
+                    minor={minor}
+                  />
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

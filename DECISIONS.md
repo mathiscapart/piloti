@@ -756,3 +756,18 @@ Deux défauts laissés par #97.
 - Les lignes récapitulatives sont elles-mêmes purgées au bout de la même durée.
 - Modifier `AUDIT_RETENTION_YEARS` modifie le texte publié de `/confidentialite` : à faire avec le référent RGPD.
 
+## D-041 — #143 : droit à l'image dans la politique de confidentialité
+
+**Contexte** : Piloti enregistre l'autorisation de droit à l'image des jeunes (US-C08, `Consent` de type `IMAGE_RIGHTS`), mais `/confidentialite` n'en disait rien (RGPD art. 13).
+
+**Choix** (décision du 2026-09-23) :
+- « Autorisé » (`OUI`) couvre la communication interne (Piloti, annonces aux familles) **et** les publications externes (site du groupe, réseaux sociaux, presse locale, supports SGDF). « Usage interne uniquement » (`RESTREINT_INTERNE`) couvre la seule communication interne. « Refusé » (`NON`) exclut toute diffusion. La page tire ses libellés de `IMAGE_RIGHTS_LABEL`, comme le formulaire.
+- Au retrait : plus aucune nouvelle diffusion, et les photos déjà publiées sont retirées des supports numériques que le groupe maîtrise (site, réseaux sociaux).
+- Base légale : consentement (art. 6-1-a), retirable aussi simplement qu'il est donné (art. 7-3). L'accord comme le retrait sont enregistrés par le RG ou la secrétaire sur la fiche du jeune (`member.image_rights.manage`), à la demande de la famille.
+- Sans réponse enregistrée (« Non renseigné »), le jeune est réputé ne pas avoir donné son autorisation.
+
+**Conséquences** :
+- `PRIVACY_VERSION` passe à `2026-09-23` pour #143 et #163 ensemble. Aucun ré-consentement (D-014).
+- `IMAGE_RIGHTS_VERSION` ne change pas : le formulaire sur lequel les autorisations ont été recueillies est inchangé.
+- Piloti ne fait qu'enregistrer la réponse : rien n'empêche techniquement de publier la photo d'un jeune dans une annonce ou un salon. Le respect du statut repose sur les encadrants, qui le voient sur la fiche.
+- Une famille ne peut pas modifier l'autorisation elle-même dans Piloti : elle passe par le RG, la secrétaire ou le référent RGPD. Un parent qui est aussi chef voit le statut de son enfant (`member.view`) sans pouvoir le modifier.

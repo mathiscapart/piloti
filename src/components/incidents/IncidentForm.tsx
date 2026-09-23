@@ -32,12 +32,14 @@ interface IncidentFormProps {
   equipment: EquipmentOption[];
   preselectedEquipmentId?: string;
   loanId?: string;
+  defaultNotes?: string;
 }
 
 export function IncidentForm({
   equipment,
   preselectedEquipmentId,
   loanId,
+  defaultNotes,
 }: IncidentFormProps) {
   const [state, formAction, pending] = useActionState(
     createIncident,
@@ -121,6 +123,7 @@ export function IncidentForm({
           id="notes"
           name="notes"
           rows={4}
+          defaultValue={defaultNotes}
           placeholder="Que s'est-il passé ? Où ? Détails utiles pour la réparation…"
         />
       </div>

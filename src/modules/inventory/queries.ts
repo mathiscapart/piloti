@@ -178,7 +178,11 @@ export async function getEquipmentDetail(id: string) {
     ACTIVE_LOAN_STATUSES.includes(l.status as (typeof ACTIVE_LOAN_STATUSES)[number]),
   );
   const loanedQty = activeLoans.reduce((sum, loan) => sum + loan.quantity, 0);
-  const inRepairQty = eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE" ? eq.totalQty : 0;
+  // Les exemplaires encore prêtés ne sont pas comptés deux fois (#123).
+  const inRepairQty =
+    eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE"
+      ? Math.max(0, eq.totalQty - loanedQty)
+      : 0;
   const availableQty = Math.max(0, eq.totalQty - loanedQty - inRepairQty);
 
   return {

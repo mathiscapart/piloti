@@ -95,24 +95,40 @@ export async function resolveIncident(
   if (incident.resolvedAt) return { error: "Incident déjà résolu." };
 
   await withAudit(
-    (tx) =>
-      tx.incident.update({
+    async (tx) => {
+      await tx.incident.update({
         where: { id: incidentId },
         data: {
           resolvedAt: new Date(),
           resolvedById: user.id,
           resolvedNote: parsed.data.resolvedNote,
         },
-      }),
-    {
+      });
+      // #123 — un article « à réparer » revient en service quand son dernier
+      // incident ouvert est résolu. Un article hors service le reste. Décidé
+      // dans la transaction pour ne pas dépendre d'une lecture périmée.
+      const open = await tx.incident.count({
+        where: { equipmentId: incident.equipmentId, resolvedAt: null },
+      });
+      if (open > 0) return { backInService: false };
+      const { count } = await tx.equipment.updateMany({
+        where: { id: incident.equipmentId, condition: "A_REPARER" },
+        data: { condition: "BON" },
+      });
+      return { backInService: count > 0 };
+    },
+    ({ backInService }) => ({
       action: "INCIDENT_RESOLVED",
       userId: user.id,
       incidentId,
       equipmentId: incident.equipmentId,
-      metadata: parsed.data.resolvedNote
-        ? { note: parsed.data.resolvedNote }
-        : {},
-    },
+      metadata: {
+        ...(parsed.data.resolvedNote ? { note: parsed.data.resolvedNote } : {}),
+        ...(backInService
+          ? { equipmentCondition: { from: "A_REPARER", to: "BON" } }
+          : {}),
+      },
+    }),
   );
 
   revalidatePath("/incidents");

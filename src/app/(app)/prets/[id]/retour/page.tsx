@@ -75,8 +75,9 @@ export default async function ReturnLoanPage({ params }: PageProps) {
         </Link>
         <h1 className="text-3xl font-black text-earth">Retour de matériel</h1>
         <p className="text-trail">
-          Indique l&apos;état du matériel. S&apos;il est abîmé, un signalement
-          sera créé automatiquement à la suite.
+          Indique l&apos;état du matériel. S&apos;il est abîmé ou à réparer, il
+          est marqué à réparer et tu décris ensuite le problème pour créer le
+          signalement.
         </p>
       </header>
 

@@ -34,7 +34,9 @@ export function audienceUserIds(
   if (audience === "ALL") {
     for (const u of users) if (u.canLogin !== false) ids.add(u.id);
   } else if (audience === "PARENTS") {
-    for (const u of users) if (effectiveRoles(u).includes("PARENT")) ids.add(u.id);
+    for (const u of users) {
+      if (u.canLogin !== false && effectiveRoles(u).includes("PARENT")) ids.add(u.id);
+    }
   } else {
     const youthIds = new Set<string>();
     for (const u of users) {

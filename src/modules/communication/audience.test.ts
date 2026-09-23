@@ -99,6 +99,13 @@ describe("audienceUserIds", () => {
     expect(audienceUserIds([farfadet, mereElise], [], "ALL")).toEqual(["mere-elise"]);
   });
 
+  it("PARENTS exclut aussi un compte sans connexion", () => {
+    const parentSansConnexion = { ...user("sans-co", ["PARENT"]), canLogin: false };
+    expect(audienceUserIds([parentSansConnexion, mereElise], [], "PARENTS")).toEqual([
+      "mere-elise",
+    ]);
+  });
+
   it("ALL : tout le monde ; PARENTS : les seuls parents", () => {
     expect(audienceUserIds(users, links, "ALL")).toHaveLength(users.length);
     expect(audienceUserIds(users, links, "PARENTS").sort()).toEqual([

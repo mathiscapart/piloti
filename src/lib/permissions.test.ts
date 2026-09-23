@@ -202,6 +202,19 @@ describe("can — message.manage_any (#92)", () => {
   });
 });
 
+describe("can — announcement.manage_any (#111)", () => {
+  it("seul l'ADMIN gère l'annonce d'un autre (lecteurs, relance, suppression)", () => {
+    expect(
+      can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "announcement.manage_any"),
+    ).toBe(true);
+    for (const role of ["CHEF", "RESPONSABLE_GROUPE", "PARENT", "SCOUT"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "announcement.manage_any")).toBe(
+        false,
+      );
+    }
+  });
+});
+
 describe("hasRole", () => {
   it("détecte un rôle additionnel comme un rôle principal", () => {
     const user = { role: "PARENT", roles: ["PARENT", "TRESORIER"] };

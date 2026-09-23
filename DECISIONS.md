@@ -721,3 +721,17 @@ Deux défauts laissés par #97.
 **Conséquences** :
 - Deux comptes qui ne diffèrent que par la casse ne sont **pas** modifiés : l'index unique ferait échouer la migration et donc le démarrage de la prod. Ils restent à traiter à la main (requête de contrôle en tête du fichier SQL).
 - `lower()` de SQLite ne traite que l'ASCII, contrairement à `toLowerCase()`. C'est sans effet ici : la validation Zod refuse déjà les adresses non ASCII.
+
+## D-039 — #111 : une seule audience d'annonce, sans les comptes sans connexion
+
+**Contexte** : une annonce d'unité notifiait les parents des jeunes, mais la page `/annonces` ne la leur montrait pas (visibilité comparée à `user.unit`, vide pour un parent). Le compteur « N/M lu » comptait au numérateur des lecteurs hors audience (encadrement d'autres unités, qui voit tout) et au dénominateur des comptes qui ne peuvent pas lire (enfants gérés, `canLogin: false`).
+
+**Choix** (décision du 2026-09-23) :
+- Une seule fonction pure, `audienceUserIds` (`src/modules/communication/audience.ts`), sert aux destinataires, à la relance, à la visibilité, au marquage « lu », au compteur et à la liste des lecteurs. Pour une unité : ses membres et les parents actifs rattachés à ses jeunes.
+- Un compte sans connexion n'est jamais destinataire, quelle que soit l'audience. Il reste compté comme jeune pour inclure son parent, qui reçoit l'annonce à sa place.
+- Le compteur affiche un seul total (jeunes, parents et encadrement de l'unité, auteur exclu), sans séparer jeunes et parents.
+- Gérer l'annonce d'un autre (lecteurs, relance, suppression, statistiques) exige `can(user, "announcement.manage_any")`, réservé à l'ADMIN, sur le modèle de `message.manage_any` (D-034). L'auteur gère les siennes.
+
+**Conséquences** :
+- Un parent dont le compte n'est pas actif n'est plus notifié.
+- `markAnnouncementsRead` ignore les annonces hors audience : un chef qui ouvre `/annonces` ne se compte plus comme lecteur des autres unités. Les anciennes lectures hors audience restent en base, mais le compteur les filtre.

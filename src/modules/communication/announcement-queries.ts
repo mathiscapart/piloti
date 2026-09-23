@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 
-import { audienceMatches, audienceUserIds } from "./audience";
+import { audienceUserIds, type AudienceUser, type FamilyEdge } from "./audience";
 
 interface ViewerUser {
   id: string;
@@ -26,6 +26,41 @@ export interface AnnouncementItem {
   stats: { read: number; total: number } | null;
 }
 
+// Comptes actifs + rattachements familiaux : entrée de `audienceUserIds`.
+export async function loadAudienceContext(): Promise<{
+  users: AudienceUser[];
+  links: FamilyEdge[];
+}> {
+  const [users, links] = await Promise.all([
+    db.user.findMany({
+      where: { status: "ACTIVE" },
+      select: { id: true, role: true, roles: true, unit: true, canLogin: true },
+    }),
+    db.familyLink.findMany({ select: { parentId: true, childId: true } }),
+  ]);
+  return { users, links };
+}
+
+// L'utilisateur fait-il partie de l'audience ? Un parent l'est pour la branche
+// de ses enfants (#111) — on ne charge que ses propres enfants actifs.
+export async function viewerAudienceFilter(
+  user: ViewerUser,
+): Promise<(audience: string) => boolean> {
+  const links = await db.familyLink.findMany({
+    where: { parentId: user.id, child: { status: "ACTIVE" } },
+    select: {
+      parentId: true,
+      childId: true,
+      child: { select: { id: true, role: true, roles: true, unit: true, canLogin: true } },
+    },
+  });
+  const users: AudienceUser[] = [
+    { id: user.id, role: user.role, roles: user.roles ?? null, unit: user.unit ?? null },
+    ...links.map((l) => l.child),
+  ];
+  return (audience) => audienceUserIds(users, links, audience).includes(user.id);
+}
+
 // US-C01/C03 — annonces visibles par l'utilisateur. Un encadrant (publish) ou
 // ADMIN voit tout (gestion) ; sinon visibilité selon l'audience. Les annonces
 // gérables portent leur taux de lecture (lu / audience).
@@ -40,40 +75,31 @@ export async function listAnnouncementsForUser(
     },
   });
 
-  const roles = effectiveRoles(user);
   const isStaff = can(user, "announcement.publish");
-  const isAdmin = roles.includes("ADMIN");
+  const manageAny = can(user, "announcement.manage_any");
 
-  const visible = (audience: string) => {
-    if (isStaff || isAdmin) return true;
-    if (audience === "ALL") return true;
-    if (audience === "PARENTS") return roles.includes("PARENT");
-    return user.unit === audience;
-  };
+  const inAudience = isStaff ? () => true : await viewerAudienceFilter(user);
 
-  const items = rows.filter((a) => visible(a.audience));
-  const managed = items.filter((a) => isAdmin || a.authorId === user.id);
+  const items = rows.filter((a) => inAudience(a.audience));
+  const managed = items.filter((a) => manageAny || a.authorId === user.id);
 
-  // Stats de lecture (US-C03) — calculées seulement s'il y a des annonces gérées.
+  // Stats de lecture (US-C03) — calculées seulement s'il y a des annonces
+  // gérées. Seuls les lecteurs de l'audience comptent (#111).
   const statsById = new Map<string, { read: number; total: number }>();
   if (managed.length > 0) {
-    const [activeUsers, readGroups] = await Promise.all([
-      db.user.findMany({
-        where: { status: "ACTIVE" },
-        select: { id: true, role: true, roles: true, unit: true },
-      }),
-      db.announcementRead.groupBy({
-        by: ["announcementId"],
+    const [{ users, links }, reads] = await Promise.all([
+      loadAudienceContext(),
+      db.announcementRead.findMany({
         where: { announcementId: { in: managed.map((a) => a.id) } },
-        _count: { _all: true },
+        select: { announcementId: true, userId: true },
       }),
     ]);
-    const readCountById = new Map(
-      readGroups.map((g) => [g.announcementId, g._count._all]),
-    );
     for (const a of managed) {
-      const total = audienceUserIds(activeUsers, a.audience, a.authorId).length;
-      statsById.set(a.id, { read: readCountById.get(a.id) ?? 0, total });
+      const audience = new Set(audienceUserIds(users, links, a.audience, a.authorId));
+      const read = reads.filter(
+        (r) => r.announcementId === a.id && audience.has(r.userId),
+      ).length;
+      statsById.set(a.id, { read, total: audience.size });
     }
   }
 
@@ -87,7 +113,7 @@ export async function listAnnouncementsForUser(
     createdAt: a.createdAt,
     authorId: a.authorId,
     authorName: `${a.author.firstName} ${a.author.lastName}`,
-    canManage: isAdmin || a.authorId === user.id,
+    canManage: manageAny || a.authorId === user.id,
     stats: statsById.get(a.id) ?? null,
   }));
 }
@@ -108,24 +134,26 @@ export async function getAnnouncementReaders(
   });
   if (!announcement) return [];
 
-  const [activeUsers, reads] = await Promise.all([
-    db.user.findMany({
-      where: { status: "ACTIVE" },
-      select: { id: true, role: true, roles: true, unit: true, firstName: true, lastName: true },
-    }),
+  const [{ users, links }, reads] = await Promise.all([
+    loadAudienceContext(),
     db.announcementRead.findMany({
       where: { announcementId },
       select: { userId: true },
     }),
   ]);
   const readers = new Set(reads.map((r) => r.userId));
+  const audienceIds = audienceUserIds(
+    users,
+    links,
+    announcement.audience,
+    announcement.authorId,
+  );
+  const members = await db.user.findMany({
+    where: { id: { in: audienceIds } },
+    select: { id: true, firstName: true, lastName: true },
+  });
 
-  return activeUsers
-    .filter(
-      (u) =>
-        u.id !== announcement.authorId &&
-        audienceMatches(u, announcement.audience),
-    )
+  return members
     .map((u) => ({
       id: u.id,
       name: `${u.firstName} ${u.lastName}`,

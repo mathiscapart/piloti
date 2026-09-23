@@ -8,14 +8,17 @@ import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { ANNOUNCEMENT_AUDIENCES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { UNITS } from "@/lib/enums";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
-import { resolveUnitAudience } from "@/modules/audience/unit-audience";
 import { notifyMany } from "@/modules/notifications/notify";
 
 import { audienceUserIds, canPublishAnnouncementTo } from "./audience";
-import { getAnnouncementReaders, type ReaderEntry } from "./announcement-queries";
+import {
+  getAnnouncementReaders,
+  loadAudienceContext,
+  type ReaderEntry,
+  viewerAudienceFilter,
+} from "./announcement-queries";
 
 const createSchema = z.object({
   title: z.string().trim().min(1, "Titre requis.").max(140),
@@ -25,23 +28,14 @@ const createSchema = z.object({
   attachments: z.array(z.string()).default([]),
 });
 
-// Résout les destinataires d'une annonce selon son audience (ACTIVE, hors auteur).
-// Pour une branche précise, on inclut désormais les PARENTS des jeunes de la
-// branche (via le rattachement familial US-36) en plus de ses membres.
+// Résout les destinataires d'une annonce selon son audience (ACTIVE, hors
+// auteur). Même fonction que la visibilité et le compteur de lecture (#111).
 async function resolveRecipients(
   audience: string,
   excludeUserId: string,
 ): Promise<string[]> {
-  if ((UNITS as readonly string[]).includes(audience)) {
-    const { allIds } = await resolveUnitAudience(audience);
-    return allIds.filter((id) => id !== excludeUserId);
-  }
-  // "ALL" / "PARENTS" : logique historique (sur la liste des comptes actifs).
-  const users = await db.user.findMany({
-    where: { status: "ACTIVE" },
-    select: { id: true, role: true, roles: true, unit: true },
-  });
-  return audienceUserIds(users, audience, excludeUserId);
+  const { users, links } = await loadAudienceContext();
+  return audienceUserIds(users, links, audience, excludeUserId);
 }
 
 // US-C01 / US-C05 — publie une annonce et notifie les destinataires (in-app +
@@ -124,8 +118,7 @@ export async function deleteAnnouncement(
   });
   if (!announcement) return { error: "Annonce introuvable." };
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (announcement.authorId !== user.id && !isAdmin) {
+  if (announcement.authorId !== user.id && !can(user, "announcement.manage_any")) {
     return { error: "Tu ne peux supprimer que tes propres annonces." };
   }
 
@@ -144,21 +137,32 @@ export async function deleteAnnouncement(
 
 // US-C03 — marque comme lues les annonces affichées à l'utilisateur (appelé au
 // chargement du fil). Idempotent (skipDuplicates). Non audité (volume, dérivé).
+// Seules les annonces dont l'utilisateur fait partie de l'audience sont
+// marquées : l'encadrement qui voit tout ne fausse pas le compteur (#111).
 export async function markAnnouncementsRead(ids: string[]): Promise<void> {
   if (!Array.isArray(ids) || ids.length === 0) return;
   const user = await getCurrentUser();
+  const [announcements, inAudience] = await Promise.all([
+    db.announcement.findMany({
+      where: { id: { in: ids.slice(0, 100).map(String) } },
+      select: { id: true, audience: true },
+    }),
+    viewerAudienceFilter(user),
+  ]);
   // SQLite ne supporte pas `createMany(skipDuplicates)` via Prisma → upserts
   // idempotents (l'`update` vide préserve le `readAt` de la 1re lecture).
   await Promise.all(
-    ids.slice(0, 100).map((announcementId) =>
-      db.announcementRead
-        .upsert({
-          where: { announcementId_userId: { announcementId, userId: user.id } },
-          create: { announcementId, userId: user.id },
-          update: {},
-        })
-        .catch(() => {}),
-    ),
+    announcements
+      .filter((a) => inAudience(a.audience))
+      .map(({ id: announcementId }) =>
+        db.announcementRead
+          .upsert({
+            where: { announcementId_userId: { announcementId, userId: user.id } },
+            create: { announcementId, userId: user.id },
+            update: {},
+          })
+          .catch(() => {}),
+      ),
   );
 }
 
@@ -172,8 +176,7 @@ export async function fetchAnnouncementReaders(
     select: { authorId: true },
   });
   if (!announcement) return [];
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (announcement.authorId !== user.id && !isAdmin) return [];
+  if (announcement.authorId !== user.id && !can(user, "announcement.manage_any")) return [];
   return getAnnouncementReaders(announcementId);
 }
 
@@ -189,8 +192,7 @@ export async function remindUnreadAnnouncement(
   });
   if (!announcement) return { error: "Annonce introuvable." };
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (announcement.authorId !== user.id && !isAdmin) {
+  if (announcement.authorId !== user.id && !can(user, "announcement.manage_any")) {
     return { error: "Tu ne peux relancer que tes propres annonces." };
   }
 

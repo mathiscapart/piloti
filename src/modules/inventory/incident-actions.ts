@@ -89,29 +89,55 @@ export async function resolveIncident(
 
   const incident = await db.incident.findUnique({
     where: { id: incidentId },
-    select: { id: true, equipmentId: true, resolvedAt: true },
+    select: {
+      id: true,
+      equipmentId: true,
+      resolvedAt: true,
+      equipment: {
+        select: {
+          condition: true,
+          _count: { select: { incidents: { where: { resolvedAt: null } } } },
+        },
+      },
+    },
   });
   if (!incident) return { error: "Incident introuvable." };
   if (incident.resolvedAt) return { error: "Incident déjà résolu." };
 
+  // #123 — un article « à réparer » revient en service quand son dernier
+  // incident ouvert est résolu. Un article hors service le reste.
+  const backInService =
+    incident.equipment.condition === "A_REPARER" &&
+    incident.equipment._count.incidents === 1;
+
   await withAudit(
-    (tx) =>
-      tx.incident.update({
+    async (tx) => {
+      if (backInService) {
+        await tx.equipment.update({
+          where: { id: incident.equipmentId },
+          data: { condition: "BON" },
+        });
+      }
+      return tx.incident.update({
         where: { id: incidentId },
         data: {
           resolvedAt: new Date(),
           resolvedById: user.id,
           resolvedNote: parsed.data.resolvedNote,
         },
-      }),
+      });
+    },
     {
       action: "INCIDENT_RESOLVED",
       userId: user.id,
       incidentId,
       equipmentId: incident.equipmentId,
-      metadata: parsed.data.resolvedNote
-        ? { note: parsed.data.resolvedNote }
-        : {},
+      metadata: {
+        ...(parsed.data.resolvedNote ? { note: parsed.data.resolvedNote } : {}),
+        ...(backInService
+          ? { equipmentCondition: { from: "A_REPARER", to: "BON" } }
+          : {}),
+      },
     },
   );
 

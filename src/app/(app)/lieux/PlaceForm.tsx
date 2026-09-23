@@ -34,6 +34,8 @@ export interface PlaceFormValues {
   ownerRefusedOn?: string;
   /** #136 — un contact attend l'accord du propriétaire ; ses valeurs ne sont pas transmises. */
   ownerContactPending?: boolean;
+  /** #151 — empreinte du contact affiché, vérifiée par `updatePlace` en « remplacer ». */
+  ownerContactVersion?: string;
 }
 
 export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
@@ -122,7 +124,12 @@ export function PlaceForm({ initial }: { initial?: PlaceFormValues }) {
       {photos.map((url) => (
         <input key={url} type="hidden" name="photo" value={url} />
       ))}
-      {isEdit ? <input type="hidden" name="ownerContact" value={contactMode} /> : null}
+      {isEdit ? (
+        <>
+          <input type="hidden" name="ownerContact" value={contactMode} />
+          <input type="hidden" name="ownerContactVersion" value={initial?.ownerContactVersion} />
+        </>
+      ) : null}
 
       <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
         <div className="space-y-1.5">

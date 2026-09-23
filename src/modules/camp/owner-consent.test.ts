@@ -6,6 +6,7 @@ import {
   nextOwnerConsent,
   OWNER_CONSENT_LINK_TTL_DAYS,
   OWNER_CONSENT_REQUEST_INTERVAL_MINUTES,
+  ownerContactFingerprint,
 } from "./owner-consent";
 
 const JOUR_MS = 24 * 60 * 60 * 1000;
@@ -158,5 +159,90 @@ describe("isOwnerConsentRequestTooSoon", () => {
 
   it("aucune demande antérieure → accepté", () => {
     expect(isOwnerConsentRequestTooSoon("jean@ferme.fr", [], now)).toBe(false);
+  });
+});
+
+// #151 — un formulaire resté ouvert ne doit pas réécrire un contact qui a changé
+// depuis son ouverture (effacement par le RG, refus par le lien du propriétaire).
+describe("ownerContactFingerprint", () => {
+  const CLE = "cle-de-test";
+  const accorde = {
+    ownerConsentStatus: "GRANTED",
+    ownerName: "Jean Dupont",
+    ownerPhone: "06 12 34 56 78",
+    ownerEmail: "jean@exemple.fr",
+    ownerConsentDecidedAt: new Date("2026-09-01T08:00:00Z"),
+  };
+  const empreinte = (etat: typeof accorde | Record<string, unknown>) =>
+    ownerContactFingerprint(etat as typeof accorde, CLE);
+
+  it("même état → même empreinte", () => {
+    expect(empreinte({ ...accorde })).toBe(empreinte(accorde));
+  });
+
+  it("effacé par le RG → empreinte différente", () => {
+    expect(
+      empreinte({
+        ...accorde,
+        ownerConsentStatus: "PENDING",
+        ownerName: null,
+        ownerPhone: null,
+        ownerEmail: null,
+        ownerConsentDecidedAt: null,
+      }),
+    ).not.toBe(empreinte(accorde));
+  });
+
+  it("refusé par le lien du propriétaire → empreinte différente", () => {
+    const enAttente = { ...accorde, ownerConsentStatus: "PENDING", ownerConsentDecidedAt: null };
+    const refuse = {
+      ownerConsentStatus: "REFUSED",
+      ownerName: null,
+      ownerPhone: null,
+      ownerEmail: null,
+      ownerConsentDecidedAt: new Date("2026-09-21T10:00:00Z"),
+    };
+    expect(empreinte(refuse)).not.toBe(empreinte(enAttente));
+  });
+
+  it("un second refus, fiche vide dans les deux cas, se distingue du premier par sa date", () => {
+    const refuse = (iso: string) => ({
+      ownerConsentStatus: "REFUSED",
+      ownerName: null,
+      ownerPhone: null,
+      ownerEmail: null,
+      ownerConsentDecidedAt: new Date(iso),
+    });
+    expect(empreinte(refuse("2026-09-21T10:00:00Z"))).not.toBe(
+      empreinte(refuse("2026-09-21T11:00:00Z")),
+    );
+  });
+
+  it("contact en attente effacé, sans date ni changement de statut → empreinte différente", () => {
+    // Fiche antérieure à RGPD-09 : PENDING, sans décision. Seul le contact bouge.
+    const avant = { ...accorde, ownerConsentStatus: "PENDING", ownerConsentDecidedAt: null };
+    const apres = { ...avant, ownerName: null, ownerPhone: null, ownerEmail: null };
+    expect(empreinte(apres)).not.toBe(empreinte(avant));
+  });
+
+  it("chaque coordonnée compte, le nom compris", () => {
+    for (const champ of ["ownerName", "ownerPhone", "ownerEmail"] as const) {
+      expect(empreinte({ ...accorde, [champ]: "autre" })).not.toBe(empreinte(accorde));
+    }
+  });
+
+  it("les frontières entre champs ne se confondent pas", () => {
+    expect(empreinte({ ...accorde, ownerName: "a", ownerPhone: "bc" })).not.toBe(
+      empreinte({ ...accorde, ownerName: "ab", ownerPhone: "c" }),
+    );
+  });
+
+  it("n'expose aucune coordonnée et dépend de la clé du serveur", () => {
+    // Le contact en attente ne doit pas atteindre le navigateur (#136) : ni en
+    // clair, ni sous une empreinte recalculable sans le secret du serveur.
+    const e = empreinte(accorde);
+    expect(e).not.toContain("jean");
+    expect(e).not.toContain("06");
+    expect(ownerContactFingerprint(accorde, "autre-cle")).not.toBe(e);
   });
 });

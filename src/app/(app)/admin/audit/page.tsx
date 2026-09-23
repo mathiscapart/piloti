@@ -44,6 +44,7 @@ const ACTION_LABEL: Record<string, string> = {
   USER_ROLE_CHANGED: "Rôle modifié",
   USER_UNIT_CHANGED: "Unité modifiée",
   USER_BIRTHDATE_CHANGED: "Date de naissance corrigée",
+  USER_SESSION_REVOKED: "Session déconnectée (sécurité)",
   EQUIPMENT_CREATED: "Article créé",
   EQUIPMENT_UPDATED: "Article modifié",
   EQUIPMENT_ARCHIVED: "Article archivé",

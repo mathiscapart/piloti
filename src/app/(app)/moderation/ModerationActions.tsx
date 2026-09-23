@@ -17,10 +17,10 @@ import {
 // signalement (résolu ou rejeté), avec un motif facultatif.
 export function ModerationActions({
   reportId,
-  alreadyHidden,
+  canHide,
 }: {
   reportId: string;
-  alreadyHidden: boolean;
+  canHide: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [closing, setClosing] = useState<"resolve" | "dismiss" | null>(null);
@@ -73,7 +73,7 @@ export function ModerationActions({
 
   return (
     <div className="flex flex-wrap gap-2">
-      {!alreadyHidden ? (
+      {canHide ? (
         <Button
           variant="outline"
           size="sm"

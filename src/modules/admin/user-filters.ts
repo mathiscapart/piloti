@@ -25,7 +25,7 @@ export interface ManageableUserFilters {
   // Rôle recherché parmi User.roles (rôle principal comme casquette).
   role?: string;
   unit?: string;
-  // "ACTIVE" | "SUSPENDED" ; absent = les deux.
+  // "ACTIVE" | "SUSPENDED" | "REJECTED" ; absent = ACTIVE + SUSPENDED.
   status?: string;
   sort?: string;
 }
@@ -85,10 +85,14 @@ export function buildManageableUserWhere(
 ): Prisma.UserWhereInput {
   const where: Prisma.UserWhereInput = {
     // Le garde-fou important : /admin/utilisateurs ne montre jamais les comptes
-    // PENDING ni REJECTED (ils vivent dans /admin/inscriptions). Un `?status=`
-    // inconnu retombe sur les deux états autorisés au lieu d'être transmis.
+    // PENDING (ils vivent dans /admin/inscriptions). REJECTED est accepté ici
+    // pour permettre à un admin de retrouver un compte refusé avant sa purge
+    // automatique (cf. rejected-purge.ts). Un `?status=` inconnu retombe sur
+    // les deux états par défaut au lieu d'être transmis.
     status:
-      filters.status === "ACTIVE" || filters.status === "SUSPENDED"
+      filters.status === "ACTIVE" ||
+      filters.status === "SUSPENDED" ||
+      filters.status === "REJECTED"
         ? filters.status
         : { in: ["ACTIVE", "SUSPENDED"] },
   };

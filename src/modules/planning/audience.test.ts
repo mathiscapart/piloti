@@ -3,7 +3,7 @@
 // d'une autre branche, ou l'en empêche à tort.
 
 import { describe, expect, it } from "vitest";
-import { isConcernedByEvent } from "./audience";
+import { isConcernedByEvent, isOnAttendanceSheet } from "./audience";
 
 describe("isConcernedByEvent", () => {
   it("un événement de groupe (unit null) concerne tout le monde", () => {
@@ -23,5 +23,34 @@ describe("isConcernedByEvent", () => {
     // Cas du parent qui tenterait de s'inscrire lui-même à la sortie de son
     // enfant : c'est l'ENFANT qui doit être concerné, pas lui.
     expect(isConcernedByEvent("LOUVETEAUX", null)).toBe(false);
+  });
+});
+
+describe("isOnAttendanceSheet (#99)", () => {
+  const jeune = (unit: string | null, status = "ACTIVE") => ({
+    status,
+    roles: '["SCOUT"]',
+    unit,
+  });
+
+  it("feuille d'un événement de branche : seuls les jeunes actifs de la branche", () => {
+    expect(isOnAttendanceSheet("PIONNIERS", jeune("PIONNIERS"))).toBe(true);
+    expect(isOnAttendanceSheet("PIONNIERS", jeune("SCOUTS"))).toBe(false);
+  });
+
+  it("exclut un parent, même rattaché à la branche", () => {
+    expect(
+      isOnAttendanceSheet("PIONNIERS", { status: "ACTIVE", roles: '["PARENT"]', unit: "PIONNIERS" }),
+    ).toBe(false);
+    expect(isOnAttendanceSheet(null, { status: "ACTIVE", roles: ["PARENT"], unit: null })).toBe(false);
+  });
+
+  it("exclut un compte non actif", () => {
+    expect(isOnAttendanceSheet("PIONNIERS", jeune("PIONNIERS", "SUSPENDED"))).toBe(false);
+  });
+
+  it("événement de groupe : tous les jeunes actifs, y compris sans branche", () => {
+    expect(isOnAttendanceSheet(null, jeune("SCOUTS"))).toBe(true);
+    expect(isOnAttendanceSheet(null, jeune(null))).toBe(true);
   });
 });

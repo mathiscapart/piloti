@@ -6,7 +6,7 @@ import {
   ORG_NAME,
   ORG_PRIVACY_EMAIL,
 } from "@/lib/legal/organization";
-import { PRIVACY_VERSION } from "@/lib/legal/versions";
+import { PRIVACY_VERSION, legalVersionDate } from "@/lib/legal/versions";
 
 export const metadata: Metadata = { title: "Politique de confidentialité — Piloti" };
 
@@ -23,7 +23,7 @@ export default function ConfidentialitePage() {
   return (
     <article className="prose prose-sm max-w-none space-y-6 text-earth">
       <h1 className="text-3xl font-black text-forest">Politique de confidentialité</h1>
-      <p className="text-sm text-trail">Dernière mise à jour : {PRIVACY_VERSION}</p>
+      <p className="text-sm text-trail">Dernière mise à jour : {legalVersionDate(PRIVACY_VERSION)}</p>
 
       <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Responsable de traitement</h2>
@@ -153,6 +153,19 @@ export default function ConfidentialitePage() {
           mineurs : la preuve d&apos;un dossier de modération doit survivre à
           l&apos;effacement de son auteur.
         </p>
+        <p>
+          Quand un message de salon est modifié ou supprimé, son texte
+          d&apos;origine est conservé dans le journal d&apos;audit, consultable
+          par le responsable de groupe et l&apos;administrateur, au titre de la
+          modération et de la protection des mineurs. Supprimer un message le
+          retire donc des salons, mais pas de ce journal. Ce texte en est
+          retiré lors de l&apos;anonymisation du compte de son auteur.
+        </p>
+        <p>
+          Une demande d&apos;inscription refusée est conservée 30 jours (le
+          temps d&apos;un recours ou d&apos;une nouvelle demande), puis
+          anonymisée automatiquement selon les mêmes principes.
+        </p>
       </section>
 
       <section className="space-y-2">
@@ -166,17 +179,93 @@ export default function ConfidentialitePage() {
         <ul className="list-disc space-y-1 pl-5">
           <li>
             <strong>Resend</strong> — envoi des emails transactionnels (ex.
-            réinitialisation de mot de passe) ;
+            réinitialisation de mot de passe) : adresse email et contenu du
+            message. Les données sont hébergées dans l&apos;Union européenne
+            (Irlande) ;
           </li>
           <li>
             <strong>Cloudflare</strong> — tunnel sécurisé et protection réseau
-            (CDN/WAF), sans exposition directe du serveur sur Internet ;
+            (CDN/WAF), sans exposition directe du serveur sur Internet : le
+            trafic transite par son réseau mondial, y compris aux États-Unis.
+            Le chiffrement de la connexion s&apos;arrête chez Cloudflare, qui
+            voit donc votre adresse IP, les requêtes et les contenus échangés
+            avec l&apos;application ;
+          </li>
+          <li>
+            <strong>Service de notification de votre navigateur</strong>{" "}
+            (par exemple Google, Microsoft, Mozilla ou Apple) — acheminement des
+            notifications push, uniquement si vous les activez sur un appareil,
+            ce qui reste facultatif. Leur contenu est chiffré entre le serveur
+            et votre appareil : ce service le transmet sans pouvoir le lire.
+            Piloti conserve l&apos;adresse d&apos;abonnement fournie par le
+            navigateur et les clés de chiffrement associées. Elles sont
+            supprimées lorsque vous cliquez sur « Désactiver le push sur cet
+            appareil », lorsque le service de notification signale que
+            l&apos;abonnement n&apos;est plus valide, et lors de la suppression
+            de votre compte. L&apos;interrupteur « Push (navigateur) » de vos
+            préférences coupe les notifications courantes mais conserve
+            l&apos;abonnement : les messages urgents du groupe et les alertes
+            de sécurité de votre compte restent envoyés tant qu&apos;il existe ;
           </li>
           <li>
             <strong>{ORG_HOSTING_PROVIDER}</strong> —
             hébergement du serveur applicatif et de la base de données.
           </li>
         </ul>
+        <p>
+          Resend et Cloudflare sont des sociétés de droit américain. Les
+          transferts de données vers les États-Unis — y compris un éventuel
+          accès depuis ce pays à des données hébergées dans l&apos;Union
+          européenne (support, maison mère) — sont encadrés par leur
+          certification au <strong>Data Privacy Framework</strong>{" "}
+          UE–États-Unis, reconnu par la décision d&apos;adéquation de la
+          Commission européenne du 10 juillet 2023 ; leurs contrats de
+          sous-traitance prévoient en outre les clauses contractuelles types de
+          la Commission européenne. Les services de notification des
+          navigateurs peuvent également être opérés hors de l&apos;Union
+          européenne. C&apos;est votre navigateur, et non Piloti, qui choisit
+          ce service : ces transferts ne font l&apos;objet d&apos;aucun
+          encadrement particulier, la seule garantie étant le chiffrement de
+          bout en bout du contenu des notifications.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Sécurité</h2>
+        <p>
+          Des mesures techniques et organisationnelles protègent vos données
+          contre l&apos;accès non autorisé, la perte ou l&apos;altération :
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            L&apos;application n&apos;est accessible que par une connexion
+            chiffrée, et le serveur n&apos;est pas exposé directement sur
+            Internet ;
+          </li>
+          <li>
+            Chaque utilisateur n&apos;accède qu&apos;aux données nécessaires à
+            son rôle dans le groupe ;
+          </li>
+          <li>Les mots de passe ne sont jamais conservés en clair ;</li>
+          <li>Les tentatives de connexion répétées sont bloquées ;</li>
+          <li>
+            Les opérations de gestion du groupe (matériel, finances, planning,
+            suivi pédagogique…) sont enregistrées dans un journal qui en
+            conserve l&apos;auteur et la date ;
+          </li>
+          <li>
+            Des protections du navigateur limitent l&apos;injection de contenu
+            malveillant dans les pages ;
+          </li>
+          <li>Les sauvegardes de la base de données sont chiffrées.</li>
+        </ul>
+        <p>
+          En cas de violation de données présentant un risque pour vos droits
+          et libertés, <strong>{ORG_NAME}</strong>{" "}
+          la notifie à la CNIL dans les 72 heures suivant sa découverte et, si
+          le risque est élevé, en informe également les personnes concernées
+          dans les meilleurs délais.
+        </p>
       </section>
 
       <section className="space-y-2">

@@ -12,6 +12,7 @@ import {
   canAccessAdminZone,
   canActOnUnit,
   canAssignRole,
+  canReadPedagoNotes,
   effectiveRoles,
   hasRole,
   inUnitScope,
@@ -187,6 +188,17 @@ describe("can — SAFE-02 modération de contenu", () => {
     const parent = { role: "PARENT", roles: ["PARENT"], status: "ACTIVE" as const };
     expect(can(parent, "moderation.view")).toBe(false);
     expect(can(parent, "moderation.review")).toBe(false);
+  });
+});
+
+describe("can — message.manage_any (#92)", () => {
+  it("seul l'ADMIN modifie ou supprime le message d'un autre", () => {
+    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "message.manage_any")).toBe(
+      true,
+    );
+    for (const role of ["CHEF", "RESPONSABLE_GROUPE", "PARENT", "SCOUT"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "message.manage_any")).toBe(false);
+    }
   });
 });
 
@@ -419,6 +431,100 @@ describe("can — member.family.manage", () => {
   it("refuse un CHEF dont le compte n'est pas ACTIVE", () => {
     expect(
       can({ role: "CHEF", roles: ["CHEF"], status: "PENDING" }, "member.family.manage"),
+    ).toBe(false);
+  });
+});
+
+describe("canActOnUnit — rattachement familial borné à la branche du jeune (#83)", () => {
+  const chef = (unit: string | null) =>
+    ({ role: "CHEF", roles: ["CHEF"], unit, status: "ACTIVE" as const });
+  const active = (roles: string[]) =>
+    ({ role: roles[0], roles, unit: null, status: "ACTIVE" as const });
+
+  it("autorise un chef sur un jeune de sa branche", () => {
+    expect(canActOnUnit(chef("PIONNIERS"), "member.family.manage", "PIONNIERS")).toBe(true);
+  });
+
+  it("refuse un chef sur un jeune d'une autre branche", () => {
+    expect(canActOnUnit(chef("PIONNIERS"), "member.family.manage", "COMPAGNONS")).toBe(false);
+  });
+
+  it("fail-closed : chef sans branche, ou jeune sans branche", () => {
+    expect(canActOnUnit(chef(null), "member.family.manage", "PIONNIERS")).toBe(false);
+    expect(canActOnUnit(chef("PIONNIERS"), "member.family.manage", null)).toBe(false);
+  });
+
+  it.each([["SECRETAIRE"], ["RESPONSABLE_GROUPE"], ["ADMIN"]])(
+    "ne borne pas %s, quelle que soit la branche",
+    (role) => {
+      expect(canActOnUnit(active([role]), "member.family.manage", "COMPAGNONS")).toBe(true);
+      expect(canActOnUnit(active([role]), "member.family.manage", null)).toBe(true);
+    },
+  );
+
+  it("ne borne pas un compte CHEF + SECRÉTAIRE", () => {
+    const chefSec = { role: "CHEF", roles: ["CHEF", "SECRETAIRE"], unit: "PIONNIERS", status: "ACTIVE" as const };
+    expect(canActOnUnit(chefSec, "member.family.manage", "COMPAGNONS")).toBe(true);
+  });
+});
+
+describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => {
+  const user = (roles: string[], unit: string | null = null, status = "ACTIVE" as const) =>
+    ({ role: roles[0], roles, unit, status });
+
+  it("autorise un chef de la branche du jeune", () => {
+    expect(canReadPedagoNotes(user(["CHEF"], "PIONNIERS"), "PIONNIERS")).toBe(true);
+  });
+
+  it("refuse un chef d'une autre branche", () => {
+    expect(canReadPedagoNotes(user(["CHEF"], "SCOUTS"), "PIONNIERS")).toBe(false);
+  });
+
+  it("fail-closed : chef sans branche, ou jeune sans branche", () => {
+    expect(canReadPedagoNotes(user(["CHEF"], null), "PIONNIERS")).toBe(false);
+    expect(canReadPedagoNotes(user(["CHEF"], "PIONNIERS"), null)).toBe(false);
+  });
+
+  it("autorise l'ADMIN quelle que soit la branche", () => {
+    expect(canReadPedagoNotes(user(["ADMIN"]), "PIONNIERS")).toBe(true);
+  });
+
+  it("refuse le RG, qui a pourtant pedago.view", () => {
+    expect(can(user(["RESPONSABLE_GROUPE"]), "pedago.view")).toBe(true);
+    expect(canReadPedagoNotes(user(["RESPONSABLE_GROUPE"]), "PIONNIERS")).toBe(false);
+  });
+
+  it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"]])("refuse %s", (role) => {
+    expect(canReadPedagoNotes(user([role], "PIONNIERS"), "PIONNIERS")).toBe(false);
+  });
+
+  it("refuse un chef de la branche dont le compte n'est pas actif", () => {
+    expect(
+      canReadPedagoNotes({ role: "CHEF", roles: ["CHEF"], unit: "PIONNIERS", status: "SUSPENDED" }, "PIONNIERS"),
+    ).toBe(false);
+  });
+});
+
+describe("pedago.validation.cancel — annuler une étape confirmée (#100)", () => {
+  const user = (roles: string[], unit: string | null = null) =>
+    ({ role: roles[0], roles, unit, status: "ACTIVE" as const });
+
+  it.each([["RESPONSABLE_GROUPE"], ["ADMIN"]])("autorise %s", (role) => {
+    expect(can(user([role]), "pedago.validation.cancel")).toBe(true);
+  });
+
+  it("refuse un chef, même de la branche (il a pourtant pedago.manage)", () => {
+    expect(can(user(["CHEF"], "PIONNIERS"), "pedago.manage")).toBe(true);
+    expect(can(user(["CHEF"], "PIONNIERS"), "pedago.validation.cancel")).toBe(false);
+  });
+
+  it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"]])("refuse %s", (role) => {
+    expect(can(user([role]), "pedago.validation.cancel")).toBe(false);
+  });
+
+  it("refuse un RG dont le compte n'est pas actif", () => {
+    expect(
+      can({ role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "SUSPENDED" }, "pedago.validation.cancel"),
     ).toBe(false);
   });
 });

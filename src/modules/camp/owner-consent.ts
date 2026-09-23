@@ -1,4 +1,6 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
+
+import type { Prisma } from "@prisma/client";
 
 import { escapeHtml, sendEmail } from "@/lib/email";
 import { db } from "@/lib/db";
@@ -59,6 +61,190 @@ export function isConsentLinkExpired(requestedAt: Date | null | undefined): bool
   if (!requestedAt) return true;
   const ageMs = Date.now() - requestedAt.getTime();
   return ageMs > OWNER_CONSENT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Délai minimal entre deux demandes vers une même adresse, en minutes.
+ *
+ * SÉCURITÉ — anti-harcèlement. Le destinataire n'est pas utilisateur : il n'a
+ * aucun moyen de se désabonner de nos envois, et l'application en porterait la
+ * réputation d'expéditeur. L'auto-limitation est sa seule protection.
+ */
+export const OWNER_CONSENT_REQUEST_INTERVAL_MINUTES = 15;
+
+/** Une demande déjà émise : l'adresse d'un lieu et la date de son dernier jeton. */
+export interface OwnerConsentRequestTrace {
+  email: string | null;
+  requestedAt: Date | null;
+}
+
+/**
+ * #137 — une demande vers `to` serait-elle trop rapprochée de la précédente ?
+ *
+ * La règle vaut par ADRESSE, tous lieux confondus : par lieu, créer des lieux
+ * en série ou alterner deux téléphones sur une fiche la contournerait. Création,
+ * modification et relance passent toutes par elle.
+ */
+export function isOwnerConsentRequestTooSoon(
+  to: string,
+  previous: OwnerConsentRequestTrace[],
+  now: number = Date.now(),
+): boolean {
+  const target = to.toLowerCase();
+  const since = now - OWNER_CONSENT_REQUEST_INTERVAL_MINUTES * 60 * 1000;
+  return previous.some(
+    (p) =>
+      p.email?.toLowerCase() === target &&
+      p.requestedAt !== null &&
+      p.requestedAt.getTime() > since,
+  );
+}
+
+/**
+ * Lit les demandes récentes et applique la règle. À appeler DANS la transaction
+ * qui pose le nouveau jeton, et avant de le poser : sinon le lieu se trouverait
+ * lui-même, et deux enregistrements simultanés passeraient tous les deux.
+ */
+export async function ownerConsentRequestTooSoon(
+  tx: Pick<Prisma.TransactionClient, "campPlace">,
+  to: string,
+): Promise<boolean> {
+  const now = Date.now();
+  const recent = await tx.campPlace.findMany({
+    where: {
+      ownerEmail: { not: null },
+      ownerConsentRequestedAt: {
+        gt: new Date(now - OWNER_CONSENT_REQUEST_INTERVAL_MINUTES * 60 * 1000),
+      },
+    },
+    select: { ownerEmail: true, ownerConsentRequestedAt: true },
+  });
+  return isOwnerConsentRequestTooSoon(
+    to,
+    recent.map((r) => ({ email: r.ownerEmail, requestedAt: r.ownerConsentRequestedAt })),
+    now,
+  );
+}
+
+/** Message affiché au chef quand l'envoi est différé. */
+export const OWNER_CONSENT_REQUEST_DEFERRED =
+  "Une demande a déjà été envoyée récemment à cette adresse. Vous pourrez la relancer depuis la fiche dans quelques minutes.";
+
+/** Les trois coordonnées du propriétaire, telles que stockées sur la fiche. */
+export interface OwnerContact {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+}
+
+/** Remise en attente de l'accord, et ce qu'il advient du jeton. */
+export interface OwnerConsentReset {
+  status: "PENDING";
+  /** `NEW` : un nouveau lien est émis ; `NONE` : plus aucun contact, plus aucun lien. */
+  token: "NEW" | "NONE";
+  reason: "CONTACT_CHANGED" | "CONTACT_ERASED";
+}
+
+function isEmptyContact(c: OwnerContact): boolean {
+  return !c.name && !c.phone && !c.email;
+}
+
+/**
+ * #97 — nouveau statut d'accord quand le chef modifie ou efface le contact.
+ * `null` : rien ne change.
+ *
+ * L'accord vaut pour une PERSONNE, pas pour une fiche. Il tombe dès que
+ * l'email ou le téléphone change : ce sont eux qui désignent la personne
+ * jointe. Le nom seul ne la désigne pas — le corriger (faute de frappe) ne
+ * redemande rien.
+ *
+ * Le jeton est renouvelé même si l'accord était déjà en attente : l'ancien lien
+ * montrerait sinon le NOUVEAU contact à l'ANCIEN destinataire.
+ *
+ * Après un refus, les champs ont été vidés : toute saisie est un nouveau
+ * contact, qu'on ne peut pas comparer à celui qui a refusé sans en avoir gardé
+ * une empreinte — ce qu'on s'interdit (D-032, amendement #97).
+ */
+export function nextOwnerConsent(
+  status: string,
+  before: OwnerContact,
+  after: OwnerContact,
+): OwnerConsentReset | null {
+  if (isEmptyContact(after)) {
+    return isEmptyContact(before)
+      ? null
+      : { status: "PENDING", token: "NONE", reason: "CONTACT_ERASED" };
+  }
+  const samePerson =
+    !isEmptyContact(before) && before.email === after.email && before.phone === after.phone;
+  if (samePerson && status !== "REFUSED") return null;
+  return { status: "PENDING", token: "NEW", reason: "CONTACT_CHANGED" };
+}
+
+/**
+ * #151 — état du contact tel qu'un formulaire ou une action l'a lu. Le jeton
+ * n'en fait pas partie : une relance ne change pas la personne jointe.
+ */
+export interface OwnerContactState {
+  ownerConsentStatus: string;
+  ownerName: string | null;
+  ownerPhone: string | null;
+  ownerEmail: string | null;
+  ownerConsentDecidedAt: Date | null;
+}
+
+/** Message affiché quand le contact a changé depuis sa lecture. */
+export const OWNER_CONTACT_CHANGED =
+  "Le contact du propriétaire a changé entre-temps. Rechargez la page.";
+
+/** Levée dans une transaction pour l'annuler quand le contact a changé. */
+export class OwnerContactChangedError extends Error {}
+
+/** `.catch` d'une transaction annulée par `OwnerContactChangedError` : rend `null`. */
+export function nullIfOwnerContactChanged(e: unknown): null {
+  if (e instanceof OwnerContactChangedError) return null;
+  throw e;
+}
+
+/**
+ * #151 — empreinte de l'état du contact, envoyée avec le formulaire de
+ * modification et recalculée à l'enregistrement : un formulaire ouvert avant
+ * un effacement ou un refus ne peut plus ressusciter le contact.
+ *
+ * HMAC par la clé du serveur : le contact en attente n'atteint pas le
+ * navigateur (#136), pas même sous une forme qu'on pourrait recalculer à partir
+ * d'une adresse devinée. L'empreinte n'est jamais stockée (amendement #97).
+ */
+export function ownerContactFingerprint(state: OwnerContactState, key: string): string {
+  return createHmac("sha256", key)
+    .update(
+      JSON.stringify([
+        state.ownerConsentStatus,
+        state.ownerName,
+        state.ownerPhone,
+        state.ownerEmail,
+        state.ownerConsentDecidedAt?.toISOString() ?? null,
+      ]),
+    )
+    .digest("base64url");
+}
+
+/** Empreinte par la clé de l'instance (celle de better-auth, obligatoire au démarrage). */
+export function ownerContactVersion(state: OwnerContactState): string {
+  const key = process.env.BETTER_AUTH_SECRET;
+  if (!key) throw new Error("BETTER_AUTH_SECRET manquant.");
+  return ownerContactFingerprint(state, key);
+}
+
+/** Condition Prisma : la ligne porte encore exactement cet état de contact. */
+export function ownerContactUnchanged(state: OwnerContactState): OwnerContactState {
+  return {
+    ownerConsentStatus: state.ownerConsentStatus,
+    ownerName: state.ownerName,
+    ownerPhone: state.ownerPhone,
+    ownerEmail: state.ownerEmail,
+    ownerConsentDecidedAt: state.ownerConsentDecidedAt,
+  };
 }
 
 /** Jeton d'URL publique : 32 octets, base64url — non devinable, non séquentiel. */

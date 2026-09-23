@@ -6,9 +6,12 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { ACCOUNT_NOT_ACTIVE_CODE, auth } from "@/lib/auth";
+import { rateLimitMessage } from "@/lib/auth-rate-limit";
 
 export interface SignInActionResult {
   error: string | null;
+  // #147 — connexion bloquée : le formulaire propose la réinitialisation.
+  rateLimited?: boolean;
 }
 
 const schema = z.object({
@@ -49,6 +52,8 @@ export async function signInAction(
     });
     user = result.user;
   } catch (e) {
+    const limited = rateLimitMessage(e);
+    if (limited) return { error: limited, rateLimited: true };
     if (e instanceof APIError && e.body?.code === ACCOUNT_NOT_ACTIVE_CODE) {
       return { error: e.body.message ?? "Ce compte ne peut pas se connecter." };
     }
@@ -56,21 +61,6 @@ export async function signInAction(
   }
 
   if (!user) return { error: "Erreur de connexion." };
-
-  // SAFE-01 — profil incomplet (pas de date de naissance). Les quatre chemins
-  // de création l'imposent (register, setup, createChildAccount, seed) : un
-  // compte ACTIVE sans date est une anomalie de données, pas une étape
-  // utilisateur. On refuse ici plutôt que de proposer un écran de complétion :
-  // cette date gouverne la protection des mineurs, elle ne se déclare pas en
-  // libre-service. Le message part avant tout redirect, donc l'utilisateur sait
-  // quoi faire ; le cookie de session posé par signInEmail sera balayé par le
-  // proxy à la première navigation (même branche que les comptes non-ACTIVE).
-  if (!user.birthDate) {
-    return {
-      error:
-        "Ce compte est incomplet (date de naissance manquante). Contacte un responsable pour la renseigner.",
-    };
-  }
 
   redirect("/dashboard");
 }

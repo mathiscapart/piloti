@@ -10,6 +10,8 @@ import { can, inUnitScope } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
+import { stepConfirmationError, stepProposalError } from "./step-proposal";
+
 // US-S04…S07 — actions du suivi pédagogique sur un jeune (chef : pedago.manage).
 
 // Périmètre d'unité : `pedago.manage` dit qu'un CHEF peut suivre des jeunes,
@@ -79,6 +81,8 @@ function parseWallDate(raw: string): Date | null {
 
 // ── US-S04 — validation d'étape (workflow à 2 chefs) ────────────────────────
 
+class StaleValidationError extends Error {}
+
 export async function proposeStep(
   jeuneId: string,
   stepId: string,
@@ -88,10 +92,15 @@ export async function proposeStep(
   const { user, jeune } = scope;
 
   const [step, existing] = await Promise.all([
-    db.progressionStep.findUnique({ where: { id: stepId }, select: { id: true, name: true } }),
+    db.progressionStep.findUnique({
+      where: { id: stepId },
+      select: { id: true, name: true, unit: true, archived: true },
+    }),
     db.stepValidation.findUnique({ where: { stepId_userId: { stepId, userId: jeuneId } } }),
   ]);
   if (!step) return { error: "Étape introuvable." };
+  const invalid = stepProposalError(step, jeune.unit);
+  if (invalid) return { error: invalid };
   if (existing) return { error: "Validation déjà en cours ou confirmée." };
 
   await withAudit(
@@ -131,30 +140,42 @@ export async function confirmStep(
   if (!scope.ok) return scope.result;
   const { user, jeune } = scope;
 
-  const validation = await db.stepValidation.findUnique({
-    where: { stepId_userId: { stepId, userId: jeuneId } },
-  });
+  const [validation, step] = await Promise.all([
+    db.stepValidation.findUnique({
+      where: { stepId_userId: { stepId, userId: jeuneId } },
+      select: { id: true, status: true, proposedById: true },
+    }),
+    db.progressionStep.findUnique({
+      where: { id: stepId },
+      select: { name: true, unit: true, archived: true },
+    }),
+  ]);
   if (!validation) return { error: "Aucune proposition à confirmer." };
-  if (validation.status === "CONFIRMED") return { error: "Étape déjà validée." };
-  // Règle des 2 chefs : le confirmateur doit différer du proposeur. Combinée au
-  // périmètre d'unité, la 2e validation vient forcément d'un chef de la branche.
-  if (validation.proposedById === user.id) {
-    return { error: "Un autre chef doit confirmer cette étape (validation à 2)." };
+  if (!step) return { error: "Étape introuvable." };
+  const invalid = stepConfirmationError(validation, step, jeune.unit, user.id);
+  if (invalid) return { error: invalid };
+
+  // Statut et étape ont été lus hors transaction : la confirmation n'a lieu que
+  // si la ligne est toujours une proposition sur une étape non archivée (#152).
+  // Sinon — retrait, confirmation concurrente ou archivage entre-temps — la
+  // transaction est annulée, AuditLog compris, et la famille n'est pas notifiée.
+  try {
+    await withAudit(
+      async (tx) => {
+        const { count } = await tx.stepValidation.updateMany({
+          where: { id: validation.id, status: "PROPOSED", step: { archived: false } },
+          data: { status: "CONFIRMED", confirmedById: user.id, confirmedAt: new Date() },
+        });
+        if (count === 0) throw new StaleValidationError();
+      },
+      { action: "STEP_VALIDATION_CONFIRMED", userId: user.id, metadata: { jeuneId, stepId } },
+    );
+  } catch (err) {
+    if (err instanceof StaleValidationError) {
+      return { error: "Cette proposition a changé entre-temps, recharge la page." };
+    }
+    throw err;
   }
-
-  const step = await db.progressionStep.findUnique({
-    where: { id: stepId },
-    select: { name: true },
-  });
-
-  await withAudit(
-    (tx) =>
-      tx.stepValidation.update({
-        where: { id: validation.id },
-        data: { status: "CONFIRMED", confirmedById: user.id, confirmedAt: new Date() },
-      }),
-    { action: "STEP_VALIDATION_CONFIRMED", userId: user.id, metadata: { jeuneId, stepId } },
-  );
 
   after(async () => {
     const recipients = await jeuneAndParents(jeuneId);
@@ -162,7 +183,7 @@ export async function confirmStep(
       userId: uid,
       type: "STEP_VALIDATED",
       title: "Étape validée 🎉",
-      body: `L'étape « ${step?.name ?? ""} » a été validée pour ${jeune.firstName}.`,
+      body: `L'étape « ${step.name} » a été validée pour ${jeune.firstName}.`,
       link: `/membres/${jeuneId}/progression`,
       messageId: `stepvalidated-${stepId}-${jeuneId}`,
     }));
@@ -172,23 +193,91 @@ export async function confirmStep(
   return { error: null };
 }
 
+// Deux régimes (#100) : une PROPOSITION se retire par les chefs de la branche
+// (`pedago.manage`, comme les autres écritures) ; une étape CONFIRMÉE par deux
+// chefs ne se défait pas par un seul — annulation réservée au RG et à l'ADMIN
+// (`pedago.validation.cancel`), et la famille en est prévenue.
 export async function removeValidation(
   jeuneId: string,
   stepId: string,
 ): Promise<ActionResult> {
-  const scope = await requirePedagoScope(jeuneId);
-  if (!scope.ok) return scope.result;
-  const { user } = scope;
+  const user = await getCurrentUser();
+  const canCancelConfirmed = can(user, "pedago.validation.cancel");
+  if (!canCancelConfirmed && !can(user, "pedago.manage")) {
+    return { error: "Permission refusée." };
+  }
   const validation = await db.stepValidation.findUnique({
     where: { stepId_userId: { stepId, userId: jeuneId } },
-    select: { id: true },
+    select: {
+      id: true,
+      status: true,
+      proposedById: true,
+      confirmedById: true,
+      step: { select: { name: true } },
+    },
   });
   if (!validation) return { error: "Validation introuvable." };
 
-  await withAudit(
-    (tx) => tx.stepValidation.delete({ where: { id: validation.id } }),
-    { action: "STEP_VALIDATION_REMOVED", userId: user.id, metadata: { jeuneId, stepId } },
-  );
+  if (validation.status === "CONFIRMED") {
+    if (!canCancelConfirmed) {
+      return {
+        error: "Seuls le responsable de groupe et l'admin peuvent annuler une étape validée.",
+      };
+    }
+  } else {
+    if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
+    const outOfScope = await refuseIfOutOfScope(user, jeuneId);
+    if (outOfScope) return outOfScope;
+  }
+
+  const cancelled = validation.status === "CONFIRMED";
+  // Le statut a été lu hors transaction : on ne supprime que s'il n'a pas changé.
+  // Sans ce garde, une proposition confirmée entre-temps par un 2e chef serait
+  // effacée par un chef seul, tracée comme simple retrait (#100). Lever annule
+  // la transaction, AuditLog compris.
+  try {
+    await withAudit(
+      async (tx) => {
+        const { count } = await tx.stepValidation.deleteMany({
+          where: { id: validation.id, status: validation.status },
+        });
+        if (count === 0) throw new StaleValidationError();
+      },
+      {
+        action: cancelled ? "STEP_VALIDATION_CANCELLED" : "STEP_VALIDATION_REMOVED",
+        userId: user.id,
+        metadata: {
+          jeuneId,
+          stepId,
+          proposedById: validation.proposedById,
+          confirmedById: validation.confirmedById,
+        },
+      },
+    );
+  } catch (err) {
+    if (err instanceof StaleValidationError) {
+      return { error: "La validation a changé entre-temps, recharge la page." };
+    }
+    throw err;
+  }
+
+  if (cancelled) {
+    after(async () => {
+      const [recipients, jeune] = await Promise.all([
+        jeuneAndParents(jeuneId),
+        db.user.findUnique({ where: { id: jeuneId }, select: { firstName: true } }),
+      ]);
+      await notifyMany(recipients, (uid) => ({
+        userId: uid,
+        type: "STEP_VALIDATION_CANCELLED",
+        title: "Validation d'étape annulée",
+        body: `La validation de l'étape « ${validation.step.name} » a été annulée pour ${jeune?.firstName ?? ""}.`,
+        link: `/membres/${jeuneId}/progression`,
+        messageId: `stepcancelled-${stepId}-${jeuneId}`,
+      }));
+    });
+  }
+
   revalidatePath(`/membres/${jeuneId}/progression`);
   return { error: null };
 }
@@ -380,7 +469,7 @@ export async function deleteNote(noteId: string): Promise<ActionResult> {
 
   await withAudit(
     (tx) => tx.pedagogicalNote.delete({ where: { id: noteId } }),
-    { action: "PEDAGO_NOTE_ADDED", userId: user.id, metadata: { noteId, deleted: true } },
+    { action: "PEDAGO_NOTE_DELETED", userId: user.id, metadata: { noteId, jeuneId: note.userId } },
   );
   revalidatePath(`/membres/${note.userId}/progression`);
   return { error: null };

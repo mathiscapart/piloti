@@ -99,6 +99,18 @@ export default function CguPage() {
       </section>
 
       <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Droit applicable et litiges</h2>
+        <p>
+          Les présentes conditions sont soumises au droit français. En cas de
+          différend relatif à leur interprétation ou à leur exécution, une
+          solution amiable est recherchée en priorité : écrivez à{" "}
+          <strong>{ORG_EMAIL}</strong>. À défaut d&apos;accord, le litige est
+          porté devant les tribunaux compétents selon les règles de droit
+          commun.
+        </p>
+      </section>
+
+      <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Contact</h2>
         <p>
           Pour toute question relative à ces conditions :{" "}

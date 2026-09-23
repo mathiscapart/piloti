@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, inUnitScope } from "@/lib/permissions";
+import { can, canReadPedagoNotes, inUnitScope } from "@/lib/permissions";
 import { isChildOf } from "@/modules/family/queries";
 import { listBadgesForUnit } from "@/modules/pedagogy/referential";
 import { getProgression } from "@/modules/pedagogy/progression";
@@ -20,15 +20,15 @@ export default async function ProgressionPage({ params }: PageProps) {
   const user = await getCurrentUser();
 
   // Accès : encadrement (pedago.view) ; le jeune lui-même ; un parent du jeune.
-  // Les notes sensibles (US-S07) ne sont visibles que de l'encadrement.
   const isStaff = can(user, "pedago.view");
   const isSelf = user.id === id;
   const isParent = !isStaff && !isSelf ? await isChildOf(user.id, id) : false;
   if (!isStaff && !isSelf && !isParent) redirect("/dashboard");
 
-  const includeNotes = isStaff;
-
-  const data = await getProgression(id, includeNotes);
+  // Notes sensibles (US-S07) : chargées seulement si l'utilisateur peut les lire
+  // (chef de la branche du jeune, ADMIN) — sinon `data.notes` vaut `null` et
+  // rien ne part vers le navigateur (#98).
+  const data = await getProgression(id, (jeuneUnit) => canReadPedagoNotes(user, jeuneUnit));
   if (!data) notFound();
 
   // Périmètre d'unité : la lecture reste ouverte à tout l'encadrement, l'ÉCRITURE
@@ -36,6 +36,9 @@ export default async function ProgressionPage({ params }: PageProps) {
   // règle que les actions de `progression-actions.ts`, pour ne pas afficher des
   // boutons qui échoueraient à l'usage.
   const canManage = can(user, "pedago.manage") && inUnitScope(user, data.jeune.unit);
+  // #100 — annuler une étape CONFIRMÉE : RG et ADMIN seulement, quelle que soit
+  // la branche (même droit que `removeValidation`).
+  const canCancelConfirmed = can(user, "pedago.validation.cancel");
 
   // Badges attribuables (catalogue filtré par la branche du jeune), pour les chefs.
   const awardable = canManage
@@ -76,6 +79,7 @@ export default async function ProgressionPage({ params }: PageProps) {
         jeuneId={id}
         data={data}
         canManage={canManage}
+        canCancelConfirmed={canCancelConfirmed}
         currentUserId={user.id}
         awardableBadges={awardable.map((b) => ({ id: b.id, name: b.name, icon: b.icon }))}
       />

@@ -103,15 +103,17 @@ export const UNIT_LABEL: Record<Unit, string> = {
   ADULTES: "Adultes (responsables, local)",
 };
 
-// US-CM-01 — branches trop jeunes pour un compte autonome : le compte existe
-// (pour être rattaché à un matériel, une progression…) mais ne se connecte
-// jamais lui-même — un parent agit pour lui via son propre compte (FamilyLink).
-export const NO_LOGIN_UNITS = ["FARFADETS", "LOUVETEAUX"] as const;
-
-export function unitAllowsLogin(unit: Unit | string | null | undefined): boolean {
-  if (!unit) return true;
-  return !(NO_LOGIN_UNITS as readonly string[]).includes(unit);
-}
+// #114 — branches jeunes (toutes sauf ADULTES). Sert à proposer/valider les
+// branches d'un compte enfant : la règle « pas de connexion sous 15 ans » ne
+// dépend plus de la branche mais uniquement de l'âge (cf. src/lib/legal/age.ts,
+// canEnableLogin / canCreateChildAccount).
+export const YOUTH_UNITS = [
+  "FARFADETS",
+  "LOUVETEAUX",
+  "SCOUTS",
+  "PIONNIERS",
+  "COMPAGNONS",
+] as const;
 
 export const EQUIPMENT_CONDITIONS = [
   "NEUF",
@@ -302,9 +304,12 @@ export const NOTIFICATION_TYPES = [
   "CAMPAIGN_REMINDER", // US-F03 — relance d'une cotisation en retard
   "STEP_VALIDATION_REQUEST", // US-S04 — 2e chef sollicité pour confirmer une étape
   "STEP_VALIDATED", // US-S04 — étape confirmée (→ jeune / parent)
+  "STEP_VALIDATION_CANCELLED", // #100 — étape confirmée annulée par le RG / l'admin (→ jeune / parent)
   "BADGE_AWARDED", // US-S05 — badge attribué (→ jeune / parent)
   "REPORT_CREATED", // SAFE-02 — signalement créé (→ les modérateurs concernés : ADMIN + CHEF de l'unité)
   "REPORT_UPDATE", // SAFE-02 — signalement traité (résolu ou rejeté) → le signalant
+  "ACCOUNT_UPDATE", // inscription validée ou refusée → le demandeur
+  "SECURITY_ALERT", // #147 connexion / #153 changement de mot de passe bloqués après plusieurs mots de passe erronés → le titulaire
 ] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
@@ -355,6 +360,8 @@ export const AUDIT_ACTIONS = [
   "USER_PROFILE_UPDATED",
   "USER_DELETED",
   "USER_PASSWORD_CHANGED",
+  // #153 — session déconnectée après trop de mots de passe actuels erronés.
+  "USER_SESSION_REVOKED",
   "USER_FAMILY_LINKED",
   "USER_FAMILY_UNLINKED",
   "EQUIPMENT_CREATED",
@@ -393,11 +400,13 @@ export const AUDIT_ACTIONS = [
   "EXPENSE_REIMBURSED",
   "CAMPAIGN_CREATED",
   "CAMPAIGN_PAYMENT_RECORDED",
+  "CAMPAIGN_PAYMENT_CANCELLED",
   "CAMPAIGN_EXEMPTION_TOGGLED",
   "CAMPAIGN_REMINDERS_UPDATED",
   "BUDGET_LINE_SET",
   "EVENT_PRICE_SET",
   "EVENT_PAYMENT_RECORDED",
+  "EVENT_PAYMENT_CORRECTED",
   "CASHBOX_CREATED",
   "CASH_MOVEMENT",
   "CASH_TRANSFER",
@@ -419,13 +428,19 @@ export const AUDIT_ACTIONS = [
   "STEP_VALIDATION_PROPOSED",
   "STEP_VALIDATION_CONFIRMED",
   "STEP_VALIDATION_REMOVED",
+  "STEP_VALIDATION_CANCELLED",
   "BADGE_AWARD_GRANTED",
   "BADGE_AWARD_REVOKED",
   "PEDAGO_GOAL_SET",
   "PEDAGO_GOAL_UPDATED",
   "PEDAGO_NOTE_ADDED",
+  "PEDAGO_NOTE_DELETED",
   "MESSAGE_REPORTED",
   "MESSAGE_HIDDEN",
+  // #92 — modification / suppression d'un message de salon par son auteur (ou
+  // un ADMIN) ; l'ancien texte est en métadonnée.
+  "MESSAGE_EDITED",
+  "MESSAGE_DELETED",
   "REPORT_RESOLVED",
   "REPORT_DISMISSED",
   // US-CM-01 — compte enfant sans connexion, créé par la SECRÉTAIRE/ADMIN.
@@ -433,9 +448,19 @@ export const AUDIT_ACTIONS = [
   // US-CM-01 — modification d'un compte par un admin/secrétaire (peut faire
   // basculer canLogin: false → true si l'email placeholder est remplacé).
   "USER_ACCOUNT_UPDATED",
+  // #149 — email mis en minuscules par la migration 20260923120000 (aucun
+  // acteur humain : userId = le compte lui-même).
+  "USER_EMAIL_LOWERCASED",
   // US-C08 — droit à l'image.
   "IMAGE_RIGHTS_STATUS_SET",
   // RGPD-09 — effacement du contact d'un propriétaire de lieu, à sa demande.
   "PLACE_OWNER_CONTACT_ERASED",
+  // RGPD-09 — décision du propriétaire via son lien, et relance par un chef.
+  "PLACE_OWNER_CONSENT_GRANTED",
+  "PLACE_OWNER_CONSENT_REFUSED",
+  "PLACE_OWNER_CONSENT_RESENT",
+  // #97 — l'accord retombe en attente quand le chef change l'email ou le
+  // téléphone du propriétaire (ou vide le contact depuis le formulaire).
+  "PLACE_OWNER_CONSENT_RESET",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

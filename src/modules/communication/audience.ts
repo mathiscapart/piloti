@@ -1,4 +1,5 @@
-import { effectiveRoles } from "@/lib/permissions";
+import { UNITS } from "@/lib/enums";
+import { canActOnUnit, effectiveRoles } from "@/lib/permissions";
 
 // US-C01/C03 — audience d'une annonce : source unique des destinataires
 // (notifications, relance), de la visibilité et du taux de lecture (#111).
@@ -44,4 +45,17 @@ export function audienceUserIds(
   }
   if (excludeUserId) ids.delete(excludeUserId);
   return [...ids];
+}
+
+/**
+ * #112 — périmètre de publication (D-024) : un chef publie vers SA branche ;
+ * « Tout le groupe » et « Tous les parents » n'ont pas de branche et restent
+ * aux rôles non bornés (RG, ADMIN). La diffusion urgente suit la même règle.
+ */
+export function canPublishAnnouncementTo(
+  user: Parameters<typeof canActOnUnit>[0],
+  audience: string,
+): boolean {
+  const unit = (UNITS as readonly string[]).includes(audience) ? audience : null;
+  return canActOnUnit(user, "announcement.publish", unit);
 }

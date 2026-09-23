@@ -138,7 +138,7 @@ export default async function ModerationPage({ searchParams }: PageProps) {
                             </span>
                           ) : r.targetState === "DELETED" ? (
                             <span className="rounded-full bg-brick-soft px-2 py-0.5 text-xs font-bold text-brick-ink">
-                              Supprimé par l&apos;auteur
+                              Supprimé depuis le signalement
                             </span>
                           ) : null}
                         </div>

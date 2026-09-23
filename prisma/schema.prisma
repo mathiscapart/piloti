@@ -639,6 +639,11 @@ model CampaignPayment {
   note         String?
   recordedById String?
   createdAt    DateTime @default(now())
+  // #121 — annulation logique d'une saisie erronée : le paiement reste dans
+  // l'historique mais sort de tous les totaux.
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelReason  String?
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   user     User     @relation("CampaignPaymentUser", fields: [userId], references: [id], onDelete: Cascade)

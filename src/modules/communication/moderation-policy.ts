@@ -50,20 +50,36 @@ interface ReportUnitCtx {
   targetAuthorId: string | null;
 }
 
+// ADMIN et RESPONSABLE_GROUPE modèrent tout le groupe ; un CHEF seul est borné
+// à son unité. Un compte RG + CHEF reste à l'échelle du groupe (#150).
+export function isGroupWideModerator(user: { role?: string; roles?: string[] | string | null }): boolean {
+  const roles = effectiveRoles(user);
+  return roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE");
+}
+
 // #91 — la personne mise en cause ne voit ni ne traite le signalement qui la
 // vise, quel que soit son rôle : elle connaîtrait le signalant et pourrait
 // classer l'affaire elle-même.
-function isTargetAuthor(userId: string | undefined, targetAuthorId: string | null): boolean {
-  return targetAuthorId !== null && userId === targetAuthorId;
+// #150 — auteur indéterminable (signalement antérieur à la copie, message
+// supprimé depuis) : ce pourrait être le chef qui regarde. Fail-closed, seuls
+// l'ADMIN et le RG le voient et le traitent.
+function isExcludedAsAuthor(
+  user: { id?: string; role?: string; roles?: string[] | string | null },
+  targetAuthorId: string | null,
+): boolean {
+  if (targetAuthorId === null) return !isGroupWideModerator(user);
+  return user.id === targetAuthorId;
 }
 
 // Un modérateur peut traiter (masquer / résoudre / rejeter) un signalement
-// s'il a `moderation.review` (CHEF ou ADMIN, cf. `PERMISSIONS`) ET :
-//  - c'est un ADMIN (superutilisateur, toutes les unités) ;
+// s'il a `moderation.review` (CHEF, RG ou ADMIN, cf. `PERMISSIONS`) ET :
+//  - c'est un ADMIN ou un RG (toutes les unités) ;
 //  - OU c'est un CHEF de l'unité concernée par le signalement.
 // Un signalement dont `concernedUnit` est null (auteur sans unité) n'est
-// traitable que par un ADMIN — fail-closed plutôt que d'ouvrir à tous les CHEF.
-// Jamais par l'auteur du contenu signalé (#91).
+// traitable que par un ADMIN ou un RG — fail-closed plutôt que d'ouvrir à tous
+// les CHEF.
+// Jamais par l'auteur du contenu signalé (#91), ni par un CHEF quand cet auteur
+// est indéterminable (#150).
 export function canModerateReport(user: ModerationCtx, report: ReportUnitCtx): boolean {
   // ADMIN et RESPONSABLE_GROUPE traitent toutes les unités ; un CHEF est limité
   // à l'unité concernée par le signalement — c'est exactement `inUnitScope`,
@@ -71,7 +87,7 @@ export function canModerateReport(user: ModerationCtx, report: ReportUnitCtx): b
   return (
     canModerate(user) &&
     inUnitScope(user, report.concernedUnit) &&
-    !isTargetAuthor(user.id, report.targetAuthorId)
+    !isExcludedAsAuthor(user, report.targetAuthorId)
   );
 }
 
@@ -94,10 +110,9 @@ export function selectReportRecipients(
 ): string[] {
   return users
     .filter((u) => {
-      if (isTargetAuthor(u.id, targetAuthorId)) return false;
-      const roles = effectiveRoles(u);
-      if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
-      return concernedUnit !== null && roles.includes("CHEF") && u.unit === concernedUnit;
+      if (isExcludedAsAuthor(u, targetAuthorId)) return false;
+      if (isGroupWideModerator(u)) return true;
+      return concernedUnit !== null && effectiveRoles(u).includes("CHEF") && u.unit === concernedUnit;
     })
     .map((u) => u.id);
 }

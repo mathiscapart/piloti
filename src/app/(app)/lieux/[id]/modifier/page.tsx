@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
+import { ownerContactVersion } from "@/modules/camp/owner-consent";
 
 import { PlaceForm, type PlaceFormValues } from "../../PlaceForm";
 
@@ -55,6 +56,7 @@ export default async function EditPlacePage({ params }: PageProps) {
     ownerPhone: ownerContactPending ? "" : (place.ownerPhone ?? ""),
     ownerEmail: ownerContactPending ? "" : (place.ownerEmail ?? ""),
     ownerContactPending,
+    ownerContactVersion: ownerContactVersion(place),
     notes: place.notes ?? "",
     photos: parseJsonArray(place.photosJson),
     ownerRefusedOn:

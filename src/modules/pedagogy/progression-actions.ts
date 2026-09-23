@@ -10,7 +10,7 @@ import { can, inUnitScope } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
-import { stepProposalError } from "./step-proposal";
+import { stepConfirmationError, stepProposalError } from "./step-proposal";
 
 // US-S04…S07 — actions du suivi pédagogique sur un jeune (chef : pedago.manage).
 
@@ -81,6 +81,8 @@ function parseWallDate(raw: string): Date | null {
 
 // ── US-S04 — validation d'étape (workflow à 2 chefs) ────────────────────────
 
+class StaleValidationError extends Error {}
+
 export async function proposeStep(
   jeuneId: string,
   stepId: string,
@@ -138,30 +140,42 @@ export async function confirmStep(
   if (!scope.ok) return scope.result;
   const { user, jeune } = scope;
 
-  const validation = await db.stepValidation.findUnique({
-    where: { stepId_userId: { stepId, userId: jeuneId } },
-  });
+  const [validation, step] = await Promise.all([
+    db.stepValidation.findUnique({
+      where: { stepId_userId: { stepId, userId: jeuneId } },
+      select: { id: true, status: true, proposedById: true },
+    }),
+    db.progressionStep.findUnique({
+      where: { id: stepId },
+      select: { name: true, unit: true, archived: true },
+    }),
+  ]);
   if (!validation) return { error: "Aucune proposition à confirmer." };
-  if (validation.status === "CONFIRMED") return { error: "Étape déjà validée." };
-  // Règle des 2 chefs : le confirmateur doit différer du proposeur. Combinée au
-  // périmètre d'unité, la 2e validation vient forcément d'un chef de la branche.
-  if (validation.proposedById === user.id) {
-    return { error: "Un autre chef doit confirmer cette étape (validation à 2)." };
+  if (!step) return { error: "Étape introuvable." };
+  const invalid = stepConfirmationError(validation, step, jeune.unit, user.id);
+  if (invalid) return { error: invalid };
+
+  // Statut et étape ont été lus hors transaction : la confirmation n'a lieu que
+  // si la ligne est toujours une proposition sur une étape non archivée (#152).
+  // Sinon — retrait, confirmation concurrente ou archivage entre-temps — la
+  // transaction est annulée, AuditLog compris, et la famille n'est pas notifiée.
+  try {
+    await withAudit(
+      async (tx) => {
+        const { count } = await tx.stepValidation.updateMany({
+          where: { id: validation.id, status: "PROPOSED", step: { archived: false } },
+          data: { status: "CONFIRMED", confirmedById: user.id, confirmedAt: new Date() },
+        });
+        if (count === 0) throw new StaleValidationError();
+      },
+      { action: "STEP_VALIDATION_CONFIRMED", userId: user.id, metadata: { jeuneId, stepId } },
+    );
+  } catch (err) {
+    if (err instanceof StaleValidationError) {
+      return { error: "Cette proposition a changé entre-temps, recharge la page." };
+    }
+    throw err;
   }
-
-  const step = await db.progressionStep.findUnique({
-    where: { id: stepId },
-    select: { name: true },
-  });
-
-  await withAudit(
-    (tx) =>
-      tx.stepValidation.update({
-        where: { id: validation.id },
-        data: { status: "CONFIRMED", confirmedById: user.id, confirmedAt: new Date() },
-      }),
-    { action: "STEP_VALIDATION_CONFIRMED", userId: user.id, metadata: { jeuneId, stepId } },
-  );
 
   after(async () => {
     const recipients = await jeuneAndParents(jeuneId);
@@ -169,7 +183,7 @@ export async function confirmStep(
       userId: uid,
       type: "STEP_VALIDATED",
       title: "Étape validée 🎉",
-      body: `L'étape « ${step?.name ?? ""} » a été validée pour ${jeune.firstName}.`,
+      body: `L'étape « ${step.name} » a été validée pour ${jeune.firstName}.`,
       link: `/membres/${jeuneId}/progression`,
       messageId: `stepvalidated-${stepId}-${jeuneId}`,
     }));
@@ -178,8 +192,6 @@ export async function confirmStep(
   revalidatePath(`/membres/${jeuneId}/progression`);
   return { error: null };
 }
-
-class StaleValidationError extends Error {}
 
 // Deux régimes (#100) : une PROPOSITION se retire par les chefs de la branche
 // (`pedago.manage`, comme les autres écritures) ; une étape CONFIRMÉE par deux

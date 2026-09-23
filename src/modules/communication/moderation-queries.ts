@@ -1,8 +1,10 @@
 import { db } from "@/lib/db";
 import type { ReportStatus, ReportTargetType } from "@/lib/enums";
-import { effectiveRoles } from "@/lib/permissions";
+import type { CurrentUser } from "@/lib/get-current-user";
 
 import {
+  canModerateReport,
+  isGroupWideModerator,
   isVisibleMessage,
   parseTargetSnapshot,
   reportTargetState,
@@ -10,13 +12,6 @@ import {
 } from "./moderation-policy";
 
 export type ReportStatusFilter = "PENDING" | "RESOLVED" | "DISMISSED" | "all";
-
-interface QueueUser {
-  id: string;
-  role: string;
-  roles?: string[] | string | null;
-  unit?: string | null;
-}
 
 export interface ReportQueueEntry {
   id: string;
@@ -50,17 +45,18 @@ export interface ReportQueueEntry {
 // Routage (raffinement SAFE-02) : un CHEF ne voit que les signalements de SON
 // unité (`Report.concernedUnit`, l'unité de l'auteur du message visé) ; un
 // signalement dont `concernedUnit` est null (auteur sans unité) lui reste
-// invisible — fail-closed. L'ADMIN voit tout. Le RESPONSABLE_GROUPE (lecture
-// seule, `moderation.view`) garde une vue globale, alignée sur le reste de
-// l'appli où RG = lecture seule sur tout (arbitrage à confirmer, cf. la tâche).
+// invisible — fail-closed. L'ADMIN et le RESPONSABLE_GROUPE voient tout le
+// groupe.
 // #91 : un signalement visant un contenu de `user` lui est toujours masqué —
 // il y verrait le signalant.
+// #150 : la file applique `canModerateReport`, la règle des actions — un RG
+// également CHEF n'est pas borné à son unité, et un signalement dont l'auteur
+// est indéterminable reste invisible d'un CHEF.
 export async function listReports(
   status: ReportStatusFilter = "PENDING",
-  user: QueueUser,
+  user: CurrentUser,
 ): Promise<ReportQueueEntry[]> {
-  const roles = effectiveRoles(user);
-  const scopedToUnit = !roles.includes("ADMIN") && roles.includes("CHEF");
+  const scopedToUnit = !isGroupWideModerator(user);
   if (scopedToUnit && !user.unit) return [];
 
   const reports = await db.report.findMany({
@@ -128,7 +124,10 @@ export async function listReports(
       : dmById.get(r.targetId)?.senderId) ??
     null;
 
-  return reports.filter((r) => authorIdOf(r) !== user.id).map((r) => {
+  const visible = reports.filter((r) =>
+    canModerateReport(user, { concernedUnit: r.concernedUnit, targetAuthorId: authorIdOf(r) }),
+  );
+  return visible.map((r) => {
     let target: ReportQueueEntry["target"] = null;
     if (r.targetType === "CHANNEL_MESSAGE") {
       const m = messageById.get(r.targetId);

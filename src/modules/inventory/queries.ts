@@ -3,7 +3,11 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 
-import { blockingLoans, isOverdue } from "./availability";
+import {
+  blockingLoans,
+  incidentAvailability,
+  isOverdue,
+} from "./availability";
 
 // Days ahead used to flag loans as "coming due soon" on the dashboard.
 const UPCOMING_DUE_DAYS = 3;
@@ -357,6 +361,10 @@ export async function listBorrowableEquipment(
           borrower: { select: { firstName: true, lastName: true } },
         },
       },
+      incidents: {
+        where: { resolvedAt: null },
+        select: { severity: true, resolvedAt: true },
+      },
     },
   });
 
@@ -390,6 +398,8 @@ export async function listBorrowableEquipment(
     );
     const isBroken =
       eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE";
+    // Issue #107 — règle partagée avec `createLoan` (cf. ./availability).
+    const incidents = incidentAvailability(eq.incidents);
     return {
       id: eq.id,
       name: eq.name,
@@ -399,12 +409,16 @@ export async function listBorrowableEquipment(
       photo: eq.photo,
       location: eq.location,
       availableQty,
-      disabled: availableQty <= 0 || isBroken,
+      disabled: availableQty <= 0 || isBroken || incidents.blocked,
+      blockedByIncident: !isBroken && incidents.blocked,
+      incidentWarning: incidents.warning,
       disabledReason: isBroken
         ? eq.condition === "HORS_SERVICE"
           ? "Hors service"
           : "À réparer"
-        : availableQty <= 0
+        : incidents.blocked
+          ? "Indispo : incident bloquant ouvert"
+          : availableQty <= 0
           ? lateLoan
             ? `Indispo : en retard chez ${lateLoan.borrower.firstName} ${lateLoan.borrower.lastName}`
             : period

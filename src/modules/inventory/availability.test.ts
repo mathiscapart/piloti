@@ -3,7 +3,12 @@
 // une double réservation d'un article qui n'est physiquement pas au local.
 
 import { describe, expect, it } from "vitest";
-import { availableQtyForPeriod, blockingLoans, isOverdue } from "./availability";
+import {
+  availableQtyForPeriod,
+  blockingLoans,
+  incidentAvailability,
+  isOverdue,
+} from "./availability";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 const NOW = new Date("2026-09-11T10:00:00.000Z");
@@ -94,5 +99,48 @@ describe("blockingLoans", () => {
     const late = { ...loan("2026-09-01", "2026-09-07"), borrower: "Thomas Martin" };
     const after = { ...loan("2026-09-20", "2026-09-22"), borrower: "Autre" };
     expect(blockingLoans([late, after], PERIOD, NOW)).toEqual([late]);
+  });
+});
+
+// Issue #107 — un incident Bloquant ouvert rend l'article non empruntable ;
+// Gênant / Mineur le laissent empruntable avec un avertissement.
+describe("incidentAvailability", () => {
+  const incident = (severity: string, resolvedAt: Date | null = null) => ({
+    severity,
+    resolvedAt,
+  });
+
+  it("aucun incident → empruntable, sans avertissement", () => {
+    expect(incidentAvailability([])).toEqual({ blocked: false, warning: false });
+  });
+
+  it("incident Bloquant ouvert → non empruntable", () => {
+    expect(incidentAvailability([incident("BLOQUANT")]).blocked).toBe(true);
+  });
+
+  it("incident Bloquant résolu → empruntable", () => {
+    expect(
+      incidentAvailability([incident("BLOQUANT", d("2026-09-10"))]),
+    ).toEqual({ blocked: false, warning: false });
+  });
+
+  it("incident Gênant ouvert → empruntable avec avertissement", () => {
+    expect(incidentAvailability([incident("GENANT")])).toEqual({
+      blocked: false,
+      warning: true,
+    });
+  });
+
+  it("incident Mineur ouvert → empruntable avec avertissement", () => {
+    expect(incidentAvailability([incident("MINEUR")])).toEqual({
+      blocked: false,
+      warning: true,
+    });
+  });
+
+  it("Bloquant et Gênant ouverts → non empruntable", () => {
+    expect(
+      incidentAvailability([incident("GENANT"), incident("BLOQUANT")]).blocked,
+    ).toBe(true);
   });
 });

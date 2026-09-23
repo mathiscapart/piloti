@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 
 import { audienceUserIds, type AudienceUser, type FamilyEdge } from "./audience";
 
@@ -34,7 +34,7 @@ export async function loadAudienceContext(): Promise<{
   const [users, links] = await Promise.all([
     db.user.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, role: true, roles: true, unit: true },
+      select: { id: true, role: true, roles: true, unit: true, canLogin: true },
     }),
     db.familyLink.findMany({ select: { parentId: true, childId: true } }),
   ]);
@@ -51,7 +51,7 @@ export async function viewerAudienceFilter(
     select: {
       parentId: true,
       childId: true,
-      child: { select: { id: true, role: true, roles: true, unit: true } },
+      child: { select: { id: true, role: true, roles: true, unit: true, canLogin: true } },
     },
   });
   const users: AudienceUser[] = [
@@ -75,15 +75,13 @@ export async function listAnnouncementsForUser(
     },
   });
 
-  const roles = effectiveRoles(user);
   const isStaff = can(user, "announcement.publish");
-  const isAdmin = roles.includes("ADMIN");
+  const manageAny = can(user, "announcement.manage_any");
 
-  const inAudience =
-    isStaff || isAdmin ? () => true : await viewerAudienceFilter(user);
+  const inAudience = isStaff ? () => true : await viewerAudienceFilter(user);
 
   const items = rows.filter((a) => inAudience(a.audience));
-  const managed = items.filter((a) => isAdmin || a.authorId === user.id);
+  const managed = items.filter((a) => manageAny || a.authorId === user.id);
 
   // Stats de lecture (US-C03) — calculées seulement s'il y a des annonces
   // gérées. Seuls les lecteurs de l'audience comptent (#111).
@@ -115,7 +113,7 @@ export async function listAnnouncementsForUser(
     createdAt: a.createdAt,
     authorId: a.authorId,
     authorName: `${a.author.firstName} ${a.author.lastName}`,
-    canManage: isAdmin || a.authorId === user.id,
+    canManage: manageAny || a.authorId === user.id,
     stats: statsById.get(a.id) ?? null,
   }));
 }

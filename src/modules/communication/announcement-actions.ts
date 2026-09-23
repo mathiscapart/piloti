@@ -8,7 +8,7 @@ import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { ANNOUNCEMENT_AUDIENCES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
@@ -118,8 +118,7 @@ export async function deleteAnnouncement(
   });
   if (!announcement) return { error: "Annonce introuvable." };
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (announcement.authorId !== user.id && !isAdmin) {
+  if (announcement.authorId !== user.id && !can(user, "announcement.manage_any")) {
     return { error: "Tu ne peux supprimer que tes propres annonces." };
   }
 
@@ -177,8 +176,7 @@ export async function fetchAnnouncementReaders(
     select: { authorId: true },
   });
   if (!announcement) return [];
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (announcement.authorId !== user.id && !isAdmin) return [];
+  if (announcement.authorId !== user.id && !can(user, "announcement.manage_any")) return [];
   return getAnnouncementReaders(announcementId);
 }
 
@@ -194,8 +192,7 @@ export async function remindUnreadAnnouncement(
   });
   if (!announcement) return { error: "Annonce introuvable." };
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (announcement.authorId !== user.id && !isAdmin) {
+  if (announcement.authorId !== user.id && !can(user, "announcement.manage_any")) {
     return { error: "Tu ne peux relancer que tes propres annonces." };
   }
 

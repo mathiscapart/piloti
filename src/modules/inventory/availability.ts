@@ -46,3 +46,17 @@ export function availableQtyForPeriod(
   );
   return Math.max(0, totalQty - loaned);
 }
+
+// Issue #107 — un incident Bloquant ouvert rend l'article non empruntable, sans
+// toucher à `Equipment.condition` : la résolution rend l'article sans perdre son
+// état d'origine. Gênant / Mineur ouverts : empruntable, avec avertissement.
+type IncidentState = { severity: string; resolvedAt: Date | null };
+
+export function incidentAvailability(incidents: IncidentState[]): {
+  blocked: boolean;
+  warning: boolean;
+} {
+  const open = incidents.filter((incident) => incident.resolvedAt === null);
+  const blocked = open.some((incident) => incident.severity === "BLOQUANT");
+  return { blocked, warning: !blocked && open.length > 0 };
+}

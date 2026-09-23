@@ -13,7 +13,7 @@ import { publishChannelEvent } from "@/lib/realtime";
 import { postLoanToEventChannel } from "@/modules/planning/event-hooks";
 
 import type { ActionResult } from "@/lib/types";
-import { availableQtyForPeriod } from "./availability";
+import { availableQtyForPeriod, incidentAvailability } from "./availability";
 import { resolveOverdueNotifications } from "./overdue";
 import {
   createLoanSchema,
@@ -82,6 +82,10 @@ export async function createLoan(
         where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
         select: { quantity: true, startDate: true, expectedReturn: true },
       },
+      incidents: {
+        where: { resolvedAt: null },
+        select: { severity: true, resolvedAt: true },
+      },
     },
   });
   const byId = new Map(equipments.map((eq) => [eq.id, eq]));
@@ -95,6 +99,10 @@ export async function createLoan(
     }
     if (eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE") {
       return { error: `« ${eq.name} » n'est pas empruntable (en réparation / hors service).` };
+    }
+    // Issue #107 — un incident Bloquant ouvert rend l'article non empruntable.
+    if (incidentAvailability(eq.incidents).blocked) {
+      return { error: `« ${eq.name} » n'est pas empruntable (incident bloquant ouvert).` };
     }
     const itemEnd = item.expectedReturn ?? parsed.data.expectedReturn;
     if (itemEnd < start) {

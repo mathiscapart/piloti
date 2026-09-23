@@ -709,3 +709,15 @@ Deux défauts laissés par #97.
 - La politique de confidentialité le dit (`PRIVACY_VERSION` 2026-09-22) : supprimer un message le retire des salons, pas du journal.
 - À l'anonymisation de l'auteur, `previousBody` et `body` sont retirés par `redactAuditMetadata` (liste blanche, #94).
 - Aucune durée de conservation n'est fixée pour ces textes : le journal d'audit n'est jamais purgé. Suivi dans #163.
+
+## D-038 — migration de données : emails mis en minuscules, audit sans acteur humain
+
+**Contexte** : avant #149, `updateUserAccount` enregistrait l'email saisi par l'admin tel quel. better-auth cherche `email.toLowerCase()` et SQLite compare en tenant compte de la casse : un compte dont l'email contient une majuscule ne peut plus se connecter ni réinitialiser son mot de passe. La saisie est désormais normalisée, mais des comptes déjà en prod peuvent être touchés.
+
+**Choix** : une migration SQL (`20260923120000_lowercase_user_email`) met ces emails en minuscules au démarrage. Elle écrit d'abord une ligne `AuditLog` `USER_EMAIL_LOWERCASED` par compte modifié, avec le même filtre, pour respecter l'invariant « aucune mutation sans trace ». Faute d'acteur humain, `userId` est le compte lui-même. L'adresse n'est pas recopiée dans `metadata`.
+
+**Option écartée** : laisser les admins réenregistrer chaque fiche. Cela suppose de connaître les comptes touchés, et le titulaire reste bloqué d'ici là.
+
+**Conséquences** :
+- Deux comptes qui ne diffèrent que par la casse ne sont **pas** modifiés : l'index unique ferait échouer la migration et donc le démarrage de la prod. Ils restent à traiter à la main (requête de contrôle en tête du fichier SQL).
+- `lower()` de SQLite ne traite que l'ASCII, contrairement à `toLowerCase()`. C'est sans effet ici : la validation Zod refuse déjà les adresses non ASCII.

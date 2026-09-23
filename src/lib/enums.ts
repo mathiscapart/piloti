@@ -448,6 +448,9 @@ export const AUDIT_ACTIONS = [
   // US-CM-01 — modification d'un compte par un admin/secrétaire (peut faire
   // basculer canLogin: false → true si l'email placeholder est remplacé).
   "USER_ACCOUNT_UPDATED",
+  // #149 — email mis en minuscules par la migration 20260923120000 (aucun
+  // acteur humain : userId = le compte lui-même).
+  "USER_EMAIL_LOWERCASED",
   // US-C08 — droit à l'image.
   "IMAGE_RIGHTS_STATUS_SET",
   // RGPD-09 — effacement du contact d'un propriétaire de lieu, à sa demande.

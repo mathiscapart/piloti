@@ -89,36 +89,14 @@ export async function resolveIncident(
 
   const incident = await db.incident.findUnique({
     where: { id: incidentId },
-    select: {
-      id: true,
-      equipmentId: true,
-      resolvedAt: true,
-      equipment: {
-        select: {
-          condition: true,
-          _count: { select: { incidents: { where: { resolvedAt: null } } } },
-        },
-      },
-    },
+    select: { id: true, equipmentId: true, resolvedAt: true },
   });
   if (!incident) return { error: "Incident introuvable." };
   if (incident.resolvedAt) return { error: "Incident déjà résolu." };
 
-  // #123 — un article « à réparer » revient en service quand son dernier
-  // incident ouvert est résolu. Un article hors service le reste.
-  const backInService =
-    incident.equipment.condition === "A_REPARER" &&
-    incident.equipment._count.incidents === 1;
-
   await withAudit(
     async (tx) => {
-      if (backInService) {
-        await tx.equipment.update({
-          where: { id: incident.equipmentId },
-          data: { condition: "BON" },
-        });
-      }
-      return tx.incident.update({
+      await tx.incident.update({
         where: { id: incidentId },
         data: {
           resolvedAt: new Date(),
@@ -126,8 +104,20 @@ export async function resolveIncident(
           resolvedNote: parsed.data.resolvedNote,
         },
       });
+      // #123 — un article « à réparer » revient en service quand son dernier
+      // incident ouvert est résolu. Un article hors service le reste. Décidé
+      // dans la transaction pour ne pas dépendre d'une lecture périmée.
+      const open = await tx.incident.count({
+        where: { equipmentId: incident.equipmentId, resolvedAt: null },
+      });
+      if (open > 0) return { backInService: false };
+      const { count } = await tx.equipment.updateMany({
+        where: { id: incident.equipmentId, condition: "A_REPARER" },
+        data: { condition: "BON" },
+      });
+      return { backInService: count > 0 };
     },
-    {
+    ({ backInService }) => ({
       action: "INCIDENT_RESOLVED",
       userId: user.id,
       incidentId,
@@ -138,7 +128,7 @@ export async function resolveIncident(
           ? { equipmentCondition: { from: "A_REPARER", to: "BON" } }
           : {}),
       },
-    },
+    }),
   );
 
   revalidatePath("/incidents");

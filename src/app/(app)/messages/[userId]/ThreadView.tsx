@@ -134,7 +134,7 @@ export function ThreadView({ initial }: { initial: Thread }) {
                 <button
                   type="button"
                   onClick={() => report(m.id)}
-                  className="rounded p-1 text-trail opacity-0 transition-opacity hover:bg-brick-soft hover:text-brick-ink group-hover:opacity-100"
+                  className="rounded p-1 text-trail opacity-100 transition-opacity hover:bg-brick-soft hover:text-brick-ink md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                   title="Signaler"
                 >
                   <Flag className="size-3.5" />

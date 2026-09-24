@@ -10,10 +10,15 @@
 # Build : `docker compose build`
 # Run   : `docker compose up -d`
 
+# Version de l'image Node, épinglée. La valeur réelle vient de NODE_IMAGE_TAG
+# dans le fichier .env passé à docker compose (voir .env.example) ; ce défaut
+# ne sert que pour un `docker build` lancé à la main.
+ARG NODE_IMAGE_TAG=22.23.3-alpine3.24
+
 # -----------------------------------------------------------------------------
-# Base : Node 22 Alpine + pnpm + outils de compilation native (better-sqlite3)
+# Base : Node Alpine + pnpm + outils de compilation native (better-sqlite3)
 # -----------------------------------------------------------------------------
-FROM node:22-alpine AS base
+FROM node:${NODE_IMAGE_TAG} AS base
 RUN apk add --no-cache libc6-compat python3 make g++ \
  && corepack enable \
  && corepack prepare pnpm@latest-11 --activate
@@ -78,7 +83,7 @@ CMD ["sh", "-c", "pnpm prisma migrate deploy && chown -R 1001:1001 /data"]
 # -----------------------------------------------------------------------------
 # Runner : image finale, minimale, USER non-root
 # -----------------------------------------------------------------------------
-FROM node:22-alpine AS runner
+FROM node:${NODE_IMAGE_TAG} AS runner
 RUN apk add --no-cache libc6-compat wget
 WORKDIR /app
 

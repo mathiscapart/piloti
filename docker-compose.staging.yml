@@ -50,6 +50,8 @@ services:
     build:
       context: .
       target: migrate
+      args:
+        NODE_IMAGE_TAG: ${NODE_IMAGE_TAG:?NODE_IMAGE_TAG manquant (voir .env.example)}
     # Tag DÉDIÉ au staging : ne jamais réutiliser `piloti:migrate` (prod), sinon
     # un `build` staging écrase l'image de la prod.
     image: piloti-staging:migrate
@@ -73,6 +75,8 @@ services:
     build:
       context: .
       target: dev
+      args:
+        NODE_IMAGE_TAG: ${NODE_IMAGE_TAG:?NODE_IMAGE_TAG manquant (voir .env.example)}
     image: piloti-staging:seed
     environment:
       DATABASE_URL: file:/data/piloti.db
@@ -101,6 +105,8 @@ services:
     build:
       context: .
       target: runner
+      args:
+        NODE_IMAGE_TAG: ${NODE_IMAGE_TAG:?NODE_IMAGE_TAG manquant (voir .env.example)}
     # Tag DÉDIÉ au staging : jamais `piloti:latest` (prod).
     image: piloti-staging:latest
     environment:
@@ -169,7 +175,7 @@ services:
   # sur un environnement qui reste accessible depuis Internet (via Access).
   # ---------------------------------------------------------------------------
   traefik:
-    image: traefik:v3.6
+    image: traefik:${TRAEFIK_IMAGE_TAG:?TRAEFIK_IMAGE_TAG manquant (voir .env.example)}
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
@@ -201,7 +207,7 @@ services:
   # différent, cf. docs/DEPLOYMENT.md). Token-based.
   # ---------------------------------------------------------------------------
   cloudflared:
-    image: cloudflare/cloudflared:2025.4.0
+    image: cloudflare/cloudflared:${CLOUDFLARED_IMAGE_TAG:?CLOUDFLARED_IMAGE_TAG manquant (voir .env.example)}
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${STAGING_CLOUDFLARE_TUNNEL_TOKEN:?STAGING_CLOUDFLARE_TUNNEL_TOKEN manquant}

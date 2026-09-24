@@ -63,6 +63,8 @@ const ACTION_LABEL: Record<string, string> = {
   PLACE_OWNER_CONSENT_RESENT: "Relance du propriétaire",
   PLACE_OWNER_CONSENT_RESET: "Accord du propriétaire annulé",
   PLACE_OWNER_CONTACT_ERASED: "Contact du propriétaire effacé",
+  AUDIT_MESSAGE_TEXT_REDACTED: "Texte de messages expurgé (conservation)",
+  AUDIT_LOG_PURGED: "Journal d'audit purgé (conservation)",
 };
 
 const ACTION_ICON: Record<string, LucideIcon> = {

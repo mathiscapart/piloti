@@ -245,6 +245,8 @@ TRAEFIK_DOMAIN="piloti.votre-domaine.fr"
 CLOUDFLARE_TUNNEL_TOKEN="<token Zero Trust>"
 RESEND_API_KEY="re_<votre-cle>"
 RESEND_FROM_EMAIL="noreply@votre-domaine.fr"
+# Optionnel — durée de conservation du journal d'audit, en années (vide = 10).
+AUDIT_RETENTION_YEARS=""
 ```
 
 ### Lancer

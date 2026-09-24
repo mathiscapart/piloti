@@ -118,6 +118,8 @@ services:
       VAPID_PUBLIC_KEY: ${STAGING_VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${STAGING_VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${STAGING_VAPID_SUBJECT:-}
+      # #163 — durée de conservation du journal d'audit, en années. Vide = 10.
+      AUDIT_RETENTION_YEARS: ${STAGING_AUDIT_RETENTION_YEARS:-}
       # LEGAL-02 — identité légale. Contrairement à la prod, non obligatoire :
       # le staging n'est pas un site publié au sens de la LCEN et ne doit pas
       # afficher l'identité réelle du groupe. Valeurs de test par défaut, pour

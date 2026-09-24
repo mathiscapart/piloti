@@ -50,6 +50,9 @@ services:
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+      # #163 — durée de conservation du journal d'audit, en années. Vide = 10.
+      # Une valeur invalide empêche l'app de démarrer (src/lib/audit-retention.ts).
+      AUDIT_RETENTION_YEARS: ${AUDIT_RETENTION_YEARS:-}
       # LEGAL-02 / CONF-01 — identité légale publiée dans /mentions-legales,
       # /cgu et /confidentialite. OBLIGATOIRES : les mentions légales sont une
       # obligation (LCEN art. 6-III) et une instance qui les publierait vides

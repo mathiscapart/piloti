@@ -462,5 +462,10 @@ export const AUDIT_ACTIONS = [
   // #97 — l'accord retombe en attente quand le chef change l'email ou le
   // téléphone du propriétaire (ou vide le contact depuis le formulaire).
   "PLACE_OWNER_CONSENT_RESET",
+  // #163 — conservation du journal d'audit (scheduler, cf. audit-purge.ts) :
+  // texte des messages retiré après 1 an, lignes supprimées après
+  // AUDIT_RETENTION_YEARS. Une ligne récapitulative par lot.
+  "AUDIT_MESSAGE_TEXT_REDACTED",
+  "AUDIT_LOG_PURGED",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

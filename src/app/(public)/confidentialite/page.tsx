@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { MESSAGE_TEXT_RETENTION_YEARS, auditRetentionYears } from "@/lib/audit-retention";
+import { IMAGE_RIGHTS_LABEL } from "@/lib/enums";
 import {
   ORG_GROUP,
   ORG_HOSTING_PROVIDER,
@@ -20,6 +22,8 @@ export const dynamic = "force-dynamic";
 // de l'application (cf. src/lib/auth.ts, docker-compose.yml). L'identité du
 // groupe et de l'hébergeur vient de l'environnement (organization.ts).
 export default function ConfidentialitePage() {
+  // #163 — durée propre à l'instance (AUDIT_RETENTION_YEARS), lue au rendu.
+  const auditYears = auditRetentionYears();
   return (
     <article className="prose prose-sm max-w-none space-y-6 text-earth">
       <h1 className="text-3xl font-black text-forest">Politique de confidentialité</h1>
@@ -81,7 +85,13 @@ export default function ConfidentialitePage() {
           <li>
             L&apos;<strong>obligation légale</strong>{" "}
             de tenue d&apos;une comptabilité pour
-            les données financières (cotisations, notes de frais).
+            les données financières (cotisations, notes de frais) ;
+          </li>
+          <li>
+            Le <strong>consentement</strong>{" "}
+            du responsable légal — ou du jeune lui-même s&apos;il est majeur —
+            pour l&apos;utilisation de l&apos;image des jeunes (voir « Droit à
+            l&apos;image » ci-dessous).
           </li>
         </ul>
       </section>
@@ -103,6 +113,56 @@ export default function ConfidentialitePage() {
           Les échanges privés sont fermés aux moins de 15 ans ; au-delà et
           jusqu&apos;à leur majorité, ils restent limités aux encadrants de leur
           unité et à leurs responsables légaux.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Droit à l&apos;image</h2>
+        <p>
+          Le groupe prend des photos lors de ses activités. Il ne les utilise,
+          pour chaque jeune, que dans la limite de l&apos;autorisation donnée
+          par son responsable légal, ou par le jeune lui-même s&apos;il est
+          majeur. Cette autorisation est facultative.
+        </p>
+        <p>Trois réponses sont possibles :</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>« {IMAGE_RIGHTS_LABEL.OUI} »</strong> : communication
+            interne (Piloti, annonces aux familles) et publications externes
+            (site du groupe, réseaux sociaux, presse locale, supports des Scouts
+            et Guides de France) ;
+          </li>
+          <li>
+            <strong>« {IMAGE_RIGHTS_LABEL.RESTREINT_INTERNE} »</strong> :
+            communication interne seulement (Piloti, annonces aux familles),
+            aucune publication externe ;
+          </li>
+          <li>
+            <strong>« {IMAGE_RIGHTS_LABEL.NON} »</strong> : aucune diffusion de
+            l&apos;image du jeune.
+          </li>
+        </ul>
+        <p>
+          Tant qu&apos;aucune réponse n&apos;est enregistrée, le jeune est
+          considéré comme n&apos;ayant pas donné son autorisation.
+        </p>
+        <p>
+          La réponse est enregistrée sur la fiche du jeune dans Piloti par le
+          responsable de groupe ou la secrétaire. Elle y est visible des
+          encadrants (chefs, responsable de groupe, secrétaire, trésorier),
+          pour qu&apos;ils la respectent. Elle reste valable jusqu&apos;à ce
+          qu&apos;elle soit modifiée ; chaque modification est conservée avec
+          sa date, à titre de preuve.
+        </p>
+        <p>
+          Vous pouvez modifier ou retirer cette autorisation à tout moment, par
+          simple demande au responsable de groupe, à la secrétaire ou au
+          référent RGPD (<strong>{ORG_PRIVACY_EMAIL}</strong>) : elle est
+          enregistrée sur la fiche du jeune de la même manière que
+          l&apos;accord. Après un retrait, plus aucune nouvelle photo du jeune
+          n&apos;est diffusée, et celles déjà publiées sont retirées des
+          supports numériques que le groupe maîtrise (son site et ses comptes
+          de réseaux sociaux).
         </p>
       </section>
 
@@ -154,12 +214,25 @@ export default function ConfidentialitePage() {
           l&apos;effacement de son auteur.
         </p>
         <p>
+          Le journal d&apos;audit, qui conserve l&apos;auteur et la date des
+          opérations de gestion du groupe, est conservé{" "}
+          <strong>
+            {auditYears} an{auditYears > 1 ? "s" : ""}
+          </strong>
+          . Ses entrées plus anciennes sont supprimées automatiquement.
+        </p>
+        <p>
           Quand un message de salon est modifié ou supprimé, son texte
           d&apos;origine est conservé dans le journal d&apos;audit, consultable
           par le responsable de groupe et l&apos;administrateur, au titre de la
           modération et de la protection des mineurs. Supprimer un message le
-          retire donc des salons, mais pas de ce journal. Ce texte en est
-          retiré lors de l&apos;anonymisation du compte de son auteur.
+          retire donc des salons, mais pas immédiatement de ce journal. Ce
+          texte en est retiré automatiquement au bout de{" "}
+          <strong>
+            {MESSAGE_TEXT_RETENTION_YEARS} an{MESSAGE_TEXT_RETENTION_YEARS > 1 ? "s" : ""}
+          </strong>
+          , ou plus tôt lors de l&apos;anonymisation du compte de son auteur ;
+          seule reste la trace de l&apos;opération (qui, quoi, quand).
         </p>
         <p>
           Une demande d&apos;inscription refusée est conservée 30 jours (le

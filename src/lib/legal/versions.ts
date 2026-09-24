@@ -19,7 +19,11 @@
 // chiffrement du contenu. Évolution mineure : aucun re-consentement (D-014).
 // D-037 (2026-09-22) — le texte d'un message de salon modifié ou supprimé est
 // conservé dans le journal d'audit. Évolution mineure : aucun re-consentement.
-export const PRIVACY_VERSION = "2026-09-22";
+// #163 + #143 (2026-09-23) — durées de conservation du journal d'audit (texte
+// des messages 1 an, journal selon AUDIT_RETENTION_YEARS) et section « Droit à
+// l'image » avec sa base légale. Information ajoutée, aucun droit retiré :
+// aucun re-consentement (D-014).
+export const PRIVACY_VERSION = "2026-09-23";
 export const TERMS_VERSION = "2026-09-21";
 export const LEGAL_VERSION = "2026-08-22";
 

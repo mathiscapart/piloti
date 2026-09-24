@@ -8,12 +8,19 @@
 // superutilisateur (toutes les actions).
 //
 // US-32 — redéfinition de la matrice pour tous les rôles :
-//   ADMIN, RESPONSABLE_GROUPE (RG, lecture seule sur tout), CHEF,
-//   RESPONSABLE_MATERIEL, TRESORIER, SECRETAIRE, MEMBRE_LOCAL, PARENT, SCOUT.
+//   ADMIN, RESPONSABLE_GROUPE (RG), CHEF, RESPONSABLE_MATERIEL, TRESORIER,
+//   SECRETAIRE, MEMBRE_LOCAL, PARENT, SCOUT.
 //   Les actions de LECTURE sont distinctes des actions de MUTATION
-//   (`*.view` vs `*.create/...`) afin de permettre le « lecture seule » du RG.
+//   (`*.view` vs `*.create/...`).
 //   Permission conditionnée par la branche : un JEUNE (SCOUT) des branches
 //   Pionniers/Compagnons peut créer un prêt.
+//
+// #173 (amende US-32) — le RG n'est plus en lecture seule : il écrit sur tout
+//   le groupe (union des droits CHEF, TRESORIER, RESPONSABLE_MATERIEL,
+//   SECRETAIRE, plus la gestion du contenu d'autrui). Il est ajouté action par
+//   action, sans court-circuit dans `can()`. Lui restent fermés : `admin.access`
+//   (zone technique), l'attribution des rôles ADMIN/RG (`canAssignRole`) et les
+//   notes de suivi sensibles (`canReadPedagoNotes`).
 //
 // Périmètre d'unité — la matrice ci-dessous ne dit QUE « quel rôle a le droit ».
 // Certaines actions valent en plus « seulement sur ma branche » : c'est
@@ -40,7 +47,7 @@ export const ACTIONS = [
   "incident.resolve",
   // Comptes / membres
   "admin.access",
-  "audit.view", // journal d'audit en lecture (ADMIN + RG, lecture seule)
+  "audit.view", // journal d'audit en lecture (ADMIN + RG)
   "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "member.view",
@@ -49,14 +56,14 @@ export const ACTIONS = [
   "member.image_rights.manage", // US-C08 — définir le statut de droit à l'image (RG + SEC)
   // Dons
   "donation.create",
-  "donation.view", // consulter les dons (RESPONSABLE_MATERIEL + RG lecture seule)
+  "donation.view", // consulter les dons (RESPONSABLE_MATERIEL + RG)
   "donation.review",
   // Communication
   "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
   "announcement.manage_any", // #111 — lecteurs, relance, suppression de l'annonce d'un autre (l'auteur gère les siennes)
   "message.manage_any", // #92 — modifier / supprimer le message d'un autre (l'auteur, lui, gère les siens)
   // SAFE-02 — signalement & modération de contenu (salons + messagerie privée).
-  "moderation.view", // consulter la file de modération (CHEF + RG, lecture)
+  "moderation.view", // consulter la file de modération (CHEF + RG)
   "moderation.review", // traiter la file : masquer un message, résoudre/rejeter
   // Planning & événements (US-P01/P02/P03)
   "event.view", // consulter le calendrier (tout utilisateur actif)
@@ -77,7 +84,7 @@ export const ACTIONS = [
   // Lieux de camp (US-L01…L06)
   "place.view", // consulter les lieux de camp (encadrement)
   "place.create", // créer un lieu de camp
-  "place.manage", // modifier / archiver un lieu (créateur ou admin, cf. action)
+  "place.manage", // modifier / archiver un lieu (créateur, RG ou admin, cf. action)
   // RGPD-09 — le contact du propriétaire est la donnée personnelle d'un TIERS
   // qui n'utilise pas l'app. On protège le CHAMP, pas la ressource : consulter
   // un lieu (budget d'un camp, équipements) reste légitime pour l'encadrement
@@ -117,8 +124,7 @@ const ANY_ACTIVE = new Set<Action>([
 
 // Pour chaque action, les rôles (hors ADMIN, superutilisateur) qui l'autorisent.
 // Une action absente / à liste vide = réservée à l'ADMIN.
-// RG = lecture seule : présent sur les `*.view` / `member.directory`, absent
-// de toute mutation.
+// RG (#173) : présent sur toutes les actions sauf `admin.access`.
 const CHEF = "CHEF";
 const RG = "RESPONSABLE_GROUPE";
 const MAT = "RESPONSABLE_MATERIEL";
@@ -127,103 +133,96 @@ const SEC = "SECRETAIRE";
 const LOCAL = "MEMBRE_LOCAL";
 
 const PERMISSIONS: Record<Action, Role[]> = {
-  // Inventaire — lecture : encadrants + RG (lecture) + responsable matériel.
+  // Inventaire — encadrants + RG + responsable matériel.
   "equipment.view": [CHEF, RG, MAT],
-  "equipment.create": [CHEF, MAT],
-  "equipment.update": [CHEF, MAT],
-  "equipment.archive": [CHEF, MAT],
-  "equipment.status.change": [CHEF, MAT],
-  "category.manage": [CHEF, MAT],
-  // Prêts — TRESORIER voit les prêts ; RG en lecture ; CHEF/MAT gèrent.
+  "equipment.create": [CHEF, RG, MAT],
+  "equipment.update": [CHEF, RG, MAT],
+  "equipment.archive": [CHEF, RG, MAT],
+  "equipment.status.change": [CHEF, RG, MAT],
+  "category.manage": [CHEF, RG, MAT],
+  // Prêts — TRESORIER voit les prêts ; CHEF/RG/MAT gèrent.
   "loan.view": [CHEF, RG, MAT, TRES],
-  "loan.create": [CHEF, MAT], // + JEUNE Pios/Compas (conditionné, cf. can())
-  "loan.return.validate": [CHEF, MAT],
-  // Incidents — PARENT peut créer ; MAT crée et résout ; RG lit.
+  "loan.create": [CHEF, RG, MAT], // + JEUNE Pios/Compas (conditionné, cf. can())
+  "loan.return.validate": [CHEF, RG, MAT],
+  // Incidents — PARENT peut créer ; MAT et RG créent et résolvent.
   "incident.view": [CHEF, RG, MAT],
-  "incident.report": [CHEF, MAT, "PARENT"],
-  "incident.resolve": [MAT],
+  "incident.report": [CHEF, RG, MAT, "PARENT"],
+  "incident.resolve": [RG, MAT],
   // Comptes / membres
-  "admin.access": [], // ADMIN only (zone technique)
-  // US-32 — RG = « lecture seule sur tout » : accès au journal d'audit en lecture.
+  "admin.access": [], // ADMIN only (zone technique), RG compris (#173)
   "audit.view": [RG],
-  // US-32 — la SECRÉTAIRE valide les inscriptions et attribue les rôles
-  // (sauf ADMIN/RG : garde-fou anti-élévation, cf. canAssignRole).
-  "user.approve": [SEC],
-  "user.manage": [SEC],
+  // US-32 — la SECRÉTAIRE et le RG (#173) valident les inscriptions et
+  // attribuent les rôles, sauf ADMIN/RG : garde-fou anti-élévation, cf.
+  // canAssignRole. Le RG ne peut donc ni se promouvoir ni toucher un autre RG.
+  "user.approve": [RG, SEC],
+  "user.manage": [RG, SEC],
   "member.view": [CHEF, RG, SEC, TRES],
   // Rattachement familial parent ↔ jeune. Permission DÉDIÉE, volontairement
   // séparée de `user.manage` : celle-ci ouvre l'attribution des rôles, et
-  // l'élargir au CHEF aurait été une élévation de privilèges. Comme
-  // `member.image_rights.manage`, déroge à la convention « RG = lecture
-  // seule » — le rattachement familial est un acte de suivi des jeunes, pas
-  // une opération technique de compte. ADMIN superuser.
+  // l'élargir au CHEF aurait été une élévation de privilèges. ADMIN superuser.
   "member.family.manage": [CHEF, RG, SEC],
   // Annuaire des compétences : RG + SECRÉTAIRE (US-32) ; ADMIN superuser.
   "member.directory": [RG, SEC],
-  // US-C08 — déroge volontairement à la convention « RG = lecture seule »
-  // documentée en tête de fichier : comme `moderation.review` (protection des
-  // mineurs), le droit à l'image est un motif de conformité/protection, pas
-  // une gestion opérationnelle courante — le RG a besoin d'y écrire, pas
-  // seulement d'en consulter la valeur. SEC gère aussi (dossiers admin des
-  // membres) ; ADMIN superuser.
+  // US-C08 — droit à l'image : RG et SEC (dossiers admin des membres) ;
+  // ADMIN superuser.
   "member.image_rights.manage": [RG, SEC],
-  // Dons — MAT accepte/refuse ; RG = lecture seule sur tout (consulte les dons) ; ADMIN.
+  // Dons — MAT et RG consultent, acceptent, refusent ; ADMIN.
   "donation.create": [], // géré par ANY_ACTIVE
   "donation.view": [MAT, RG],
-  "donation.review": [MAT],
+  "donation.review": [MAT, RG],
   // Communication — publier une annonce / diffusion urgente : encadrants.
   "announcement.publish": [CHEF, RG],
   // #92 — l'auteur modifie / supprime ses propres messages (contrôle dans
-  // l'action) ; le message d'un autre : ADMIN seul.
-  "announcement.manage_any": [],
-  "message.manage_any": [],
+  // l'action) ; le contenu d'un autre : RG (#173) et ADMIN.
+  "announcement.manage_any": [RG],
+  "message.manage_any": [RG],
   // SAFE-02 — la file de modération se consulte ET se traite par les chefs et le
   // responsable de groupe (masquer, résoudre, rejeter). Un CHEF est limité à son
   // unité (cf. canModerateReport) ; RG et ADMIN voient et traitent toutes les unités.
   "moderation.view": [CHEF, RG],
   "moderation.review": [CHEF, RG],
-  // Planning — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
+  // Planning — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs + RG.
   "event.view": [],
-  "event.manage": [CHEF],
-  // Tâches — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs.
+  "event.manage": [CHEF, RG],
+  // Tâches — consultation ouverte à tous (ANY_ACTIVE) ; gestion = chefs + RG.
   "task.view": [],
-  "task.manage": [CHEF],
-  // Finances — déclaration par les encadrants ; gestion par le trésorier ;
-  // consultation pour encadrants + RG (lecture seule). Le déclarant voit
+  "task.manage": [CHEF, RG],
+  // Finances — déclaration par les encadrants ; gestion par le trésorier et le
+  // RG, hors ses propres notes (cf. canReviewExpense). Le déclarant voit
   // toujours ses propres notes (filtré côté requête).
   // Déclaration ouverte à tous les rôles encadrants / fonctionnels — SAUF
   // parents et jeunes (qui n'avancent pas de frais pour le groupe).
   "expense.create": [CHEF, MAT, TRES, SEC, RG, LOCAL],
   "expense.view": [CHEF, MAT, TRES, SEC, RG, LOCAL],
-  "expense.manage": [TRES],
-  // Cotisations — gestion par le trésorier ; lecture pour trésorier + RG.
+  "expense.manage": [TRES, RG],
+  // Cotisations — gestion par le trésorier et le RG.
   "campaign.view": [TRES, RG],
-  "campaign.manage": [TRES],
-  // Budget d'événement — construit par chef ou trésorier (US-F04 « chef ou
-  // trésorier ») ; lecture + RG.
+  "campaign.manage": [TRES, RG],
+  // Budget d'événement — construit par chef, trésorier (US-F04) ou RG.
   "budget.view": [CHEF, TRES, RG],
-  "budget.manage": [CHEF, TRES],
-  // Lieux de camp — consultation pour l'encadrement (RG en lecture) ; création
-  // et avis par les chefs ; la modification ajoute un contrôle « créateur ou
-  // admin » dans l'action (US-L05).
+  "budget.manage": [CHEF, TRES, RG],
+  // Lieux de camp — consultation pour l'encadrement ; création et avis par les
+  // chefs et le RG ; la modification ajoute un contrôle « créateur, RG ou
+  // admin » dans l'action (US-L05, #173).
   "place.view": [CHEF, RG, MAT, TRES, SEC, LOCAL],
   // RGPD-09 — minimisation : deux rôles seulement, ceux qui organisent le camp.
   "place.owner_contact.view": [CHEF, RG],
   "place.owner_contact.erase": [CHEF, RG],
-  "place.create": [CHEF],
-  "place.manage": [CHEF],
-  "place.review": [CHEF],
-  // Suivi pédagogique — gestion par les chefs ; RG en lecture seule. Le jeune
-  // et le parent accèdent à LEURS ressources via une logique dédiée dans la
-  // page (pas par `can()`), hors notes sensibles (US-S07/S10).
+  "place.create": [CHEF, RG],
+  "place.manage": [CHEF, RG],
+  "place.review": [CHEF, RG],
+  // Suivi pédagogique — gestion par les chefs et le RG, hors notes sensibles
+  // (cf. canReadPedagoNotes). Le jeune et le parent accèdent à LEURS
+  // ressources via une logique dédiée dans la page (pas par `can()`), hors
+  // notes sensibles (US-S07/S10).
   "pedago.view": [CHEF, RG],
-  "pedago.manage": [CHEF],
+  "pedago.manage": [CHEF, RG],
   // #100 — une étape confirmée par deux chefs ne se défait pas par un seul :
-  // l'annulation est réservée au RG (déroge à « RG = lecture seule », c'est un
-  // arbitrage, pas une gestion courante) et à l'ADMIN. Une proposition non
-  // confirmée reste retirable par les chefs de la branche (`pedago.manage`).
+  // l'annulation est réservée au RG (un arbitrage) et à l'ADMIN. Une
+  // proposition non confirmée reste retirable par les chefs de la branche
+  // (`pedago.manage`).
   "pedago.validation.cancel": [RG],
-  "pedago.referential": [CHEF],
+  "pedago.referential": [CHEF, RG],
 };
 
 /**
@@ -341,11 +340,45 @@ export function canActOnUnit(
  * US-S07 — notes de suivi sensibles d'un jeune (#98). Contrairement au reste de
  * la progression (`pedago.view`, lecture ouverte à l'encadrement et au RG), elles
  * ne se lisent que là où elles s'écrivent : chefs de la branche du jeune et
- * ADMIN. Le RG ne les lit pas. Condition unique pour CHARGER et pour AFFICHER :
- * une note qu'on n'a pas le droit de lire n'est jamais envoyée au navigateur.
+ * ADMIN. Condition unique pour CHARGER, AFFICHER et ÉCRIRE : une note qu'on n'a
+ * pas le droit de lire n'est jamais envoyée au navigateur.
+ *
+ * #173 — le RG a `pedago.manage` mais ne lit ni n'écrit ces notes (décision du
+ * 2026-09-24, #98 maintenu) : le droit s'évalue SANS son rôle RG. Un RG aussi
+ * CHEF les lit donc comme un chef, sur sa seule branche.
  */
 export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
-  return canActOnUnit(user, "pedago.manage", jeuneUnit);
+  const roles = effectiveRoles(user).filter((r) => r !== RG);
+  return canActOnUnit({ ...user, roles }, "pedago.manage", jeuneUnit);
+}
+
+/**
+ * #103 / #173 — valider, refuser ou rembourser une note de frais. Le RG ne
+ * traite pas SA propre note, même s'il est aussi trésorier. Le trésorier seul
+ * n'est pas encore tranché (#103) : comportement inchangé pour lui.
+ */
+export function canReviewExpense(
+  user: AuthCtx,
+  expense: { declarantId: string },
+): boolean {
+  if (!can(user, "expense.manage")) return false;
+  const ownNote = user.id !== undefined && expense.declarantId === user.id;
+  return !(ownNote && hasRole(user, RG));
+}
+
+/**
+ * US-L05 — modifier / archiver un lieu de camp : son créateur, le RG (#173) ou
+ * l'ADMIN. Un lieu dont le créateur a été anonymisé (`createdById` null) n'est
+ * plus géré que par le RG et l'ADMIN.
+ */
+export function canManagePlace(
+  user: AuthCtx,
+  place: { createdById: string | null },
+): boolean {
+  if (!can(user, "place.manage")) return false;
+  const roles = effectiveRoles(user);
+  if (roles.includes("ADMIN") || roles.includes(RG)) return true;
+  return user.id !== undefined && place.createdById === user.id;
 }
 
 /**
@@ -360,7 +393,8 @@ export function scopedUnits(user: AuthCtx, catalog: readonly string[]): string[]
 
 // US-32 — la zone /admin n'est plus 100 % ADMIN : différentes rubriques sont
 // ouvertes à la SECRÉTAIRE (inscriptions, comptes), au RESPONSABLE_MATERIEL
-// (catégories, dons) et au CHEF (catégories). L'accès à la zone est accordé
+// (catégories, dons), au CHEF (catégories) et au RG (tout sauf la zone
+// technique, #173). L'accès à la zone est accordé
 // dès qu'au moins une rubrique est accessible ; chaque page se reprotège.
 const ADMIN_ZONE_ACTIONS: Action[] = [
   "admin.access",
@@ -376,8 +410,8 @@ export function canAccessAdminZone(user: AuthCtx): boolean {
 }
 
 // US-32 — garde-fou anti-élévation de privilèges : seul l'ADMIN peut attribuer
-// les rôles sensibles (ADMIN, RESPONSABLE_GROUPE). La SECRÉTAIRE attribue tous
-// les autres rôles.
+// les rôles sensibles (ADMIN, RESPONSABLE_GROUPE). La SECRÉTAIRE et le RG
+// (#173) attribuent tous les autres rôles.
 const PRIVILEGED_ROLES = new Set<string>(["ADMIN", "RESPONSABLE_GROUPE"]);
 
 export function canAssignRole(actor: AuthCtx, role: string): boolean {

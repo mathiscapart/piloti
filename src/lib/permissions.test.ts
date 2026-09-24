@@ -7,12 +7,15 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  ACTIONS,
   assignableRoles,
   can,
   canAccessAdminZone,
   canActOnUnit,
   canAssignRole,
+  canManagePlace,
   canReadPedagoNotes,
+  canReviewExpense,
   effectiveRoles,
   hasRole,
   inUnitScope,
@@ -192,22 +195,22 @@ describe("can — SAFE-02 modération de contenu", () => {
 });
 
 describe("can — message.manage_any (#92)", () => {
-  it("seul l'ADMIN modifie ou supprime le message d'un autre", () => {
-    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "message.manage_any")).toBe(
-      true,
-    );
-    for (const role of ["CHEF", "RESPONSABLE_GROUPE", "PARENT", "SCOUT"]) {
+  it("seuls l'ADMIN et le RG modifient ou suppriment le message d'un autre (#173)", () => {
+    for (const role of ["ADMIN", "RESPONSABLE_GROUPE"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "message.manage_any")).toBe(true);
+    }
+    for (const role of ["CHEF", "PARENT", "SCOUT"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "message.manage_any")).toBe(false);
     }
   });
 });
 
 describe("can — announcement.manage_any (#111)", () => {
-  it("seul l'ADMIN gère l'annonce d'un autre (lecteurs, relance, suppression)", () => {
-    expect(
-      can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "announcement.manage_any"),
-    ).toBe(true);
-    for (const role of ["CHEF", "RESPONSABLE_GROUPE", "PARENT", "SCOUT"]) {
+  it("seuls l'ADMIN et le RG gèrent l'annonce d'un autre (lecteurs, relance, suppression, #173)", () => {
+    for (const role of ["ADMIN", "RESPONSABLE_GROUPE"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "announcement.manage_any")).toBe(true);
+    }
+    for (const role of ["CHEF", "PARENT", "SCOUT"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "announcement.manage_any")).toBe(
         false,
       );
@@ -502,9 +505,15 @@ describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => 
     expect(canReadPedagoNotes(user(["ADMIN"]), "PIONNIERS")).toBe(true);
   });
 
-  it("refuse le RG, qui a pourtant pedago.view", () => {
-    expect(can(user(["RESPONSABLE_GROUPE"]), "pedago.view")).toBe(true);
+  it("refuse le RG, qui a pourtant pedago.view et pedago.manage (#173)", () => {
+    expect(can(user(["RESPONSABLE_GROUPE"]), "pedago.manage")).toBe(true);
     expect(canReadPedagoNotes(user(["RESPONSABLE_GROUPE"]), "PIONNIERS")).toBe(false);
+  });
+
+  it("un RG aussi chef ne lit que les notes de SA branche, comme un chef (#173)", () => {
+    const rgChef = user(["RESPONSABLE_GROUPE", "CHEF"], "SCOUTS");
+    expect(canReadPedagoNotes(rgChef, "SCOUTS")).toBe(true);
+    expect(canReadPedagoNotes(rgChef, "PIONNIERS")).toBe(false);
   });
 
   it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"]])("refuse %s", (role) => {
@@ -538,6 +547,140 @@ describe("pedago.validation.cancel — annuler une étape confirmée (#100)", ()
   it("refuse un RG dont le compte n'est pas actif", () => {
     expect(
       can({ role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "SUSPENDED" }, "pedago.validation.cancel"),
+    ).toBe(false);
+  });
+});
+
+// #173 — le RG passe de la lecture seule à l'écriture sur tout le groupe : union
+// des droits de CHEF, TRÉSORIER, RESPONSABLE_MATERIEL et SECRÉTAIRE, plus la
+// gestion du contenu d'autrui. Seule la zone technique reste à l'ADMIN.
+describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
+  const rg = (extra: string[] = [], unit: string | null = null, status = "ACTIVE") => ({
+    id: "rg-1",
+    role: "RESPONSABLE_GROUPE",
+    roles: ["RESPONSABLE_GROUPE", ...extra],
+    unit,
+    status,
+  });
+
+  it.each(ACTIONS.filter((a) => a !== "admin.access"))("autorise %s", (action) => {
+    expect(can(rg(), action)).toBe(true);
+  });
+
+  it("refuse admin.access (zone technique, ADMIN seul)", () => {
+    expect(can(rg(), "admin.access")).toBe(false);
+    expect(can(rg(["CHEF", "TRESORIER", "SECRETAIRE"]), "admin.access")).toBe(false);
+  });
+
+  it("n'attribue ni ADMIN ni RESPONSABLE_GROUPE, mais attribue les autres rôles", () => {
+    expect(canAssignRole(rg(), "ADMIN")).toBe(false);
+    expect(canAssignRole(rg(), "RESPONSABLE_GROUPE")).toBe(false);
+    for (const role of ["CHEF", "TRESORIER", "RESPONSABLE_MATERIEL", "SECRETAIRE", "PARENT", "SCOUT"]) {
+      expect(canAssignRole(rg(), role)).toBe(true);
+    }
+  });
+
+  it("un compte RG non ACTIVE n'a aucun droit", () => {
+    for (const status of ["PENDING", "SUSPENDED", "REJECTED", "DELETED", undefined]) {
+      for (const action of ACTIONS) {
+        expect(can({ ...rg(), status }, action)).toBe(false);
+      }
+    }
+  });
+
+  it("n'est borné à aucune branche, même sans unité renseignée", () => {
+    expect(canActOnUnit(rg(), "event.manage", "PIONNIERS")).toBe(true);
+    expect(canActOnUnit(rg(), "pedago.referential", "SCOUTS")).toBe(true);
+    expect(canActOnUnit(rg(), "member.family.manage", "FARFADETS")).toBe(true);
+  });
+
+  it("un RG aussi CHEF n'est pas réduit à sa branche (#150)", () => {
+    const rgChef = rg(["CHEF"], "SCOUTS");
+    expect(canActOnUnit(rgChef, "event.manage", "PIONNIERS")).toBe(true);
+    expect(canActOnUnit(rgChef, "pedago.manage", "PIONNIERS")).toBe(true);
+    expect(inUnitScope(rgChef, "PIONNIERS")).toBe(true);
+  });
+
+  it("un RG aussi TRÉSORIER cumule sans rien perdre", () => {
+    const rgTres = rg(["TRESORIER"]);
+    for (const action of ["expense.manage", "campaign.manage", "budget.manage", "loan.create"] as const) {
+      expect(can(rgTres, action)).toBe(true);
+    }
+    expect(can(rgTres, "admin.access")).toBe(false);
+  });
+
+  it("ouvre la zone /admin (inscriptions, comptes, catégories, dons)", () => {
+    expect(canAccessAdminZone(rg())).toBe(true);
+  });
+});
+
+// #103 (règle du chef) étendue au RG par #173 : qui déclare une note de frais
+// ne la valide pas lui-même. Le cas du trésorier seul reste ouvert (#103).
+describe("canReviewExpense — pas d'auto-validation d'une note de frais", () => {
+  const u = (id: string, roles: string[], status = "ACTIVE") => ({
+    id,
+    role: roles[0],
+    roles,
+    status,
+  });
+
+  it("le RG valide la note d'un autre", () => {
+    expect(canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE"]), { declarantId: "chef-1" })).toBe(true);
+  });
+
+  it("le RG ne valide pas sa propre note", () => {
+    expect(canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE"]), { declarantId: "rg-1" })).toBe(false);
+  });
+
+  it("un RG aussi trésorier ne valide pas non plus sa propre note", () => {
+    expect(
+      canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE", "TRESORIER"]), { declarantId: "rg-1" }),
+    ).toBe(false);
+  });
+
+  it("le trésorier seul : comportement inchangé tant que #103 n'est pas tranché", () => {
+    expect(canReviewExpense(u("t-1", ["TRESORIER"]), { declarantId: "t-1" })).toBe(true);
+    expect(canReviewExpense(u("t-1", ["TRESORIER"]), { declarantId: "x" })).toBe(true);
+  });
+
+  it("refuse sans expense.manage, ou hors statut ACTIVE", () => {
+    expect(canReviewExpense(u("c-1", ["CHEF"]), { declarantId: "x" })).toBe(false);
+    expect(
+      canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE"], "SUSPENDED"), { declarantId: "x" }),
+    ).toBe(false);
+  });
+});
+
+// US-L05 — modifier / archiver un lieu : son créateur, le RG (#173) ou l'ADMIN.
+describe("canManagePlace — créateur, RG ou admin", () => {
+  const u = (id: string, roles: string[], status = "ACTIVE") => ({
+    id,
+    role: roles[0],
+    roles,
+    status,
+  });
+
+  it("le chef créateur gère son lieu", () => {
+    expect(canManagePlace(u("c-1", ["CHEF"]), { createdById: "c-1" })).toBe(true);
+  });
+
+  it("un autre chef ne gère pas le lieu", () => {
+    expect(canManagePlace(u("c-2", ["CHEF"]), { createdById: "c-1" })).toBe(false);
+  });
+
+  it.each([["RESPONSABLE_GROUPE"], ["ADMIN"]])("%s gère tout lieu, même orphelin", (role) => {
+    expect(canManagePlace(u("x", [role]), { createdById: "c-1" })).toBe(true);
+    expect(canManagePlace(u("x", [role]), { createdById: null })).toBe(true);
+  });
+
+  it("un lieu orphelin (créateur anonymisé) n'est à aucun chef", () => {
+    expect(canManagePlace({ role: "CHEF", roles: ["CHEF"], status: "ACTIVE" }, { createdById: null })).toBe(false);
+  });
+
+  it("refuse sans place.manage, même au créateur, et hors statut ACTIVE", () => {
+    expect(canManagePlace(u("p-1", ["PARENT"]), { createdById: "p-1" })).toBe(false);
+    expect(
+      canManagePlace(u("rg-1", ["RESPONSABLE_GROUPE"], "SUSPENDED"), { createdById: "c-1" }),
     ).toBe(false);
   });
 });

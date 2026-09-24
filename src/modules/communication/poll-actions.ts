@@ -105,7 +105,10 @@ export async function closePoll(pollId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   const poll = await db.poll.findUnique({ where: { id: pollId } });
   if (!poll) return { error: "Sondage introuvable." };
-  const staff = effectiveRoles(user).some((r) => r === "ADMIN" || r === "CHEF");
+  // Chefs, RG (#173) et ADMIN closent le sondage d'un autre.
+  const staff = effectiveRoles(user).some(
+    (r) => r === "ADMIN" || r === "RESPONSABLE_GROUPE" || r === "CHEF",
+  );
   if (poll.authorId !== user.id && !staff) {
     return { error: "Réservé à l'auteur ou aux chefs." };
   }

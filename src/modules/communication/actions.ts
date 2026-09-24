@@ -74,8 +74,11 @@ async function notifyChannelMessage(
 // non sensible ; ils portent déjà auteur + horodatage). L'audit reste réservé
 // aux mutations sensibles (inventaire, comptes…).
 
+// Épingler un message : chefs, RG (#173) et ADMIN.
 function isStaff(user: { role: string; roles?: string[] | string | null }) {
-  return effectiveRoles(user).some((r) => r === "ADMIN" || r === "CHEF");
+  return effectiveRoles(user).some(
+    (r) => r === "ADMIN" || r === "RESPONSABLE_GROUPE" || r === "CHEF",
+  );
 }
 
 export async function postMessage(

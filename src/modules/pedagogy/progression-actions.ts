@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, inUnitScope } from "@/lib/permissions";
+import { can, canReadPedagoNotes, inUnitScope } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
@@ -440,11 +440,15 @@ export async function deleteGoal(goalId: string): Promise<ActionResult> {
 }
 
 // ── US-S07 — note de suivi (sensible) ───────────────────────────────────────
+// Écrire une note exige le droit de la lire (`canReadPedagoNotes`) : chefs de
+// la branche du jeune et ADMIN, pas le RG malgré `pedago.manage` (#98, #173).
+const NOTES_RESERVEES = "Les notes de suivi sont réservées aux chefs de la branche.";
 
 export async function addNote(jeuneId: string, content: string): Promise<ActionResult> {
   const scope = await requirePedagoScope(jeuneId);
   if (!scope.ok) return scope.result;
-  const { user } = scope;
+  const { user, jeune } = scope;
+  if (!canReadPedagoNotes(user, jeune.unit)) return { error: NOTES_RESERVEES };
   const trimmed = content.trim();
   if (!trimmed) return { error: "Note vide." };
 
@@ -464,8 +468,9 @@ export async function deleteNote(noteId: string): Promise<ActionResult> {
   if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
   const note = await db.pedagogicalNote.findUnique({ where: { id: noteId }, select: { id: true, userId: true } });
   if (!note) return { error: "Note introuvable." };
-  const outOfScope = await refuseIfOutOfScope(user, note.userId);
-  if (outOfScope) return outOfScope;
+  const jeune = await db.user.findUnique({ where: { id: note.userId }, select: { unit: true } });
+  if (!jeune) return { error: "Jeune introuvable." };
+  if (!canReadPedagoNotes(user, jeune.unit)) return { error: NOTES_RESERVEES };
 
   await withAudit(
     (tx) => tx.pedagogicalNote.delete({ where: { id: noteId } }),

@@ -103,13 +103,14 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       // US-32 — chaque rubrique est filtrée par sa permission propre :
       // dons/catégories → RESPONSABLE_MATERIEL ; inscriptions/utilisateurs →
-      // SECRÉTAIRE ; journal d'audit → ADMIN.
+      // SECRÉTAIRE ; journal d'audit → ADMIN + RG. Le RG voit toutes les
+      // rubriques (#173).
       { href: "/admin/dons", label: "Dons", icon: Gift, requires: "donation.view" },
       { href: "/admin/inscriptions", label: "Inscriptions", icon: UserPlus, requires: "user.approve" },
       { href: "/admin/utilisateurs", label: "Utilisateurs", icon: Users, requires: "user.manage" },
       { href: "/admin/categories", label: "Catégories", icon: FolderOpen, requires: "category.manage" },
       { href: "/admin/audit", label: "Journal d'audit", icon: History, requires: "audit.view" },
-      // SAFE-02 — file de signalements : CHEF + RG (lecture ; traitement CHEF).
+      // SAFE-02 — file de signalements : CHEF + RG.
       { href: "/moderation", label: "Modération", icon: ShieldAlert, requires: "moderation.view" },
     ],
   },

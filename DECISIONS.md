@@ -771,3 +771,20 @@ Deux défauts laissés par #97.
 - `IMAGE_RIGHTS_VERSION` ne change pas : le formulaire sur lequel les autorisations ont été recueillies est inchangé.
 - Piloti ne fait qu'enregistrer la réponse : rien n'empêche techniquement de publier la photo d'un jeune dans une annonce ou un salon. Le respect du statut repose sur les encadrants, qui le voient sur la fiche.
 - Une famille ne peut pas modifier l'autorisation elle-même dans Piloti : elle passe par le RG, la secrétaire ou le référent RGPD. Un parent qui est aussi chef voit le statut de son enfant (`member.view`) sans pouvoir le modifier.
+
+## D-042 — #173 : le responsable de groupe écrit sur tout le groupe (amende US-32)
+
+**Contexte** : depuis US-32, le RG (`RESPONSABLE_GROUPE`) était « en lecture seule sur tout », à quelques dérogations près (droit à l'image, rattachement familial, modération, annonces, annulation d'étape). Il ne pouvait ni corriger une donnée ni remplacer un chef, un trésorier, un responsable matériel ou une secrétaire absents.
+
+**Choix** (décision du 2026-09-24) :
+- Le RG reçoit toutes les mutations de la matrice : l'union des droits de CHEF, TRÉSORIER, RESPONSABLE_MATERIEL et SECRÉTAIRE, plus `announcement.manage_any` et `message.manage_any`. Il est ajouté **action par action** dans `PERMISSIONS` (`src/lib/permissions.ts`), sans court-circuit dans `can()` : la matrice reste lisible ligne à ligne et extensible (#165).
+- Périmètre : tout le groupe. `inUnitScope` et `canActOnUnit` ne le bornaient déjà pas ; un RG également CHEF garde le périmètre du groupe (#150).
+- Lui restent fermés : `admin.access` (zone technique) et l'attribution des rôles ADMIN et RG (`canAssignRole`). Via `user.manage`, il est traité comme la SECRÉTAIRE : il ne modifie, ne suspend, ne supprime ni ne réinitialise un compte ADMIN ou RG, le sien compris.
+- **Notes de suivi sensibles (US-S07)** : #98 est maintenu, le RG ne les lit ni ne les écrit malgré `pedago.manage`. `canReadPedagoNotes` évalue le droit sans le rôle RG et décide aussi de l'écriture (`addNote`, `deleteNote`). Un RG aussi CHEF les lit comme un chef, sur sa branche.
+- **Notes de frais** : le RG ne valide, ne refuse ni ne rembourse sa propre note, même s'il est aussi trésorier (`canReviewExpense`, règle de #103 étendue au RG). Le cas du trésorier seul reste ouvert (#103).
+- Contrôles ad hoc « ADMIN » : ouverts au RG quand ils relèvent de la gestion du groupe (modifier ou archiver le lieu d'un autre, `canManagePlace` ; épingler un message ; clore le sondage d'un autre ; supprimer le message d'un autre dans l'interface). Restent à l'ADMIN ceux qui relèvent de la technique ou de la protection des mineurs : accès à tous les salons, écriture dans un salon archivé, passe-droit de messagerie privée (SAFE-01).
+
+**Conséquences** :
+- Les destinataires des notifications calculés par rôle (trésoriers pour une nouvelle note, gestionnaires pour un prêt en retard, chefs de la branche pour une étape à confirmer) ne sont pas élargis au RG.
+- Les boutons signalés « à tort » pour le compte `rg` dans #109 (prêts, stock, NFC) deviennent légitimes.
+- Le RG n'a aucune action propre : il emprunte les Server Actions existantes, qui tracent par `withAudit()` avec lui comme acteur. Exceptions préexistantes, communes à tous les rôles : épingler un message et clore un sondage ne sont pas tracés (volume de messagerie, cf. `communication/actions.ts`).

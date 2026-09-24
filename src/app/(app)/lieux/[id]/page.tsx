@@ -18,7 +18,7 @@ import {
   type CampEquipment,
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can, canManagePlace } from "@/lib/permissions";
 import {
   isConsentLinkExpired,
   OWNER_CONSENT_LINK_TTL_DAYS,
@@ -63,9 +63,7 @@ export default async function PlaceDetailPage({ params }: PageProps) {
   if (!data) notFound();
   const { place } = data;
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  const canManage =
-    can(user, "place.manage") && (isAdmin || place.createdById === user.id);
+  const canManage = canManagePlace(user, place);
   const canReview = can(user, "place.review");
   // RGPD-09 — minimisation : le contact du propriétaire appartient à un TIERS
   // qui n'utilise pas l'app. Consulter le lieu reste ouvert à l'encadrement

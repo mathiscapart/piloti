@@ -19,7 +19,8 @@
 //   le groupe (union des droits CHEF, TRESORIER, RESPONSABLE_MATERIEL,
 //   SECRETAIRE, plus la gestion du contenu d'autrui). Il est ajouté action par
 //   action, sans court-circuit dans `can()`. Lui restent fermés : `admin.access`
-//   (zone technique), l'attribution des rôles ADMIN/RG (`canAssignRole`) et le
+//   (zone technique), l'attribution des rôles ADMIN/RG (`canAssignRole`), la
+//   définition d'un mot de passe et la suppression d'un compte, et le
 //   pédagogique des chefs de branche (`pedago.manage`, `pedago.referential`,
 //   notes de suivi sensibles).
 //
@@ -51,6 +52,8 @@ export const ACTIONS = [
   "audit.view", // journal d'audit en lecture (ADMIN + RG)
   "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
+  "user.password.set", // définir le mot de passe d'un compte (ADMIN seul, #173)
+  "user.delete", // supprimer (anonymiser) un compte (ADMIN seul, #173)
   "member.view",
   "member.family.manage", // rattachement parent ↔ jeune (CHEF, RG, SEC)
   "member.directory", // US-26 — annuaire des compétences parents (RG)
@@ -127,7 +130,7 @@ const ANY_ACTIVE = new Set<Action>([
 // Pour chaque action, les rôles (hors ADMIN, superutilisateur) qui l'autorisent.
 // Une action absente / à liste vide = réservée à l'ADMIN.
 // RG (#173) : présent sur toutes les actions sauf `admin.access`,
-// `pedago.manage` et `pedago.referential`.
+// `user.password.set`, `user.delete`, `pedago.manage` et `pedago.referential`.
 const CHEF = "CHEF";
 const RG = "RESPONSABLE_GROUPE";
 const MAT = "RESPONSABLE_MATERIEL";
@@ -159,6 +162,10 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // canAssignRole. Le RG ne peut donc ni se promouvoir ni toucher un autre RG.
   "user.approve": [RG, SEC],
   "user.manage": [RG, SEC],
+  // #173 — se connecter à la place de quelqu'un ou effacer un compte sont
+  // réservés à l'ADMIN, secrétaire et RG compris (décision du 2026-09-24).
+  "user.password.set": [],
+  "user.delete": [],
   "member.view": [CHEF, RG, SEC, TRES],
   // Rattachement familial parent ↔ jeune. Permission DÉDIÉE, volontairement
   // séparée de `user.manage` : celle-ci ouvre l'attribution des rôles, et

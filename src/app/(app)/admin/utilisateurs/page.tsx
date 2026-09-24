@@ -145,6 +145,8 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
   // passe) restent réservées à l'ADMIN ; la SECRÉTAIRE n'attribue que les rôles
   // (sauf ADMIN/RG, cf. canAssignRole).
   const isAdmin = can(currentUser, "admin.access");
+  // #173 — supprimer un compte : ADMIN seul.
+  const canDelete = can(currentUser, "user.delete");
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -352,7 +354,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                             </Link>
                           </Button>
                         )}
-                        {rejected ? (
+                        {rejected && canDelete ? (
                           <DeleteUserButton
                             userId={u.id}
                             fullName={`${u.firstName} ${u.lastName}`}
@@ -464,7 +466,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                                   </Link>
                                 </Button>
                               )}
-                              {rejected ? (
+                              {rejected && canDelete ? (
                                 <DeleteUserButton
                                   userId={u.id}
                                   fullName={`${u.firstName} ${u.lastName}`}

@@ -564,7 +564,13 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     status,
   });
 
-  const FERMEES = ["admin.access", "pedago.manage", "pedago.referential"];
+  const FERMEES = [
+    "admin.access",
+    "pedago.manage",
+    "pedago.referential",
+    "user.password.set",
+    "user.delete",
+  ];
 
   it.each(ACTIONS.filter((a) => !FERMEES.includes(a)))("autorise %s", (action) => {
     expect(can(rg(), action)).toBe(true);
@@ -716,4 +722,21 @@ describe("can — channel.moderate", () => {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "channel.moderate")).toBe(false);
     },
   );
+});
+
+// #173 — définir le mot de passe d'un compte et supprimer un compte : ADMIN seul
+// (décision du 2026-09-24). La SECRÉTAIRE et le RG gardent le reste de user.manage.
+describe("can — user.password.set / user.delete (ADMIN seul)", () => {
+  it.each([["user.password.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
+    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, action)).toBe(true);
+    for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE", "CHEF", "TRESORIER"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, action)).toBe(false);
+    }
+  });
+
+  it("la SECRÉTAIRE et le RG gardent user.manage", () => {
+    for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "user.manage")).toBe(true);
+    }
+  });
 });

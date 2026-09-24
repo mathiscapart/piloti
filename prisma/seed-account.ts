@@ -22,7 +22,7 @@ export async function createCredentialUser(input: {
     firstName: input.firstName,
     lastName: input.lastName,
     phone: input.phone,
-  });
+  }, { method: "email-password" });
   await ctx.internalAdapter.linkAccount({
     userId: user.id,
     providerId: "credential",

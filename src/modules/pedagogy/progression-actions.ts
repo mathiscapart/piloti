@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, inUnitScope } from "@/lib/permissions";
+import { can, canActOnUnit, canReadPedagoNotes } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
@@ -17,9 +17,10 @@ import { stepConfirmationError, stepProposalError } from "./step-proposal";
 // Périmètre d'unité : `pedago.manage` dit qu'un CHEF peut suivre des jeunes,
 // pas qu'il peut suivre TOUS les jeunes. Chaque action d'écriture ci-dessous
 // passe par `requirePedagoScope`, qui résout le jeune visé puis vérifie
-// `inUnitScope`. La LECTURE (`pedago.view`) reste ouverte à tout l'encadrement :
+// `canActOnUnit`. La LECTURE (`pedago.view`) reste ouverte à tout l'encadrement :
 // seule l'écriture — étapes, badges, objectifs et notes sensibles (US-S07) —
-// est bornée à la branche. ADMIN et RG ne sont pas bornés (cf. `inUnitScope`).
+// est bornée à la branche. Seul l'ADMIN n'est pas borné ; un RG aussi CHEF
+// l'est à sa branche, comme un chef (#173).
 const HORS_BRANCHE = "Ce jeune n'est pas dans ta branche.";
 
 type PedagoScope =
@@ -40,7 +41,7 @@ async function requirePedagoScope(jeuneId: string): Promise<PedagoScope> {
     select: { id: true, unit: true, firstName: true },
   });
   if (!jeune) return { ok: false, result: { error: "Jeune introuvable." } };
-  if (!inUnitScope(user, jeune.unit)) {
+  if (!canActOnUnit(user, "pedago.manage", jeune.unit)) {
     return { ok: false, result: { error: HORS_BRANCHE } };
   }
   return { ok: true, user, jeune };
@@ -60,7 +61,7 @@ async function refuseIfOutOfScope(
     select: { unit: true },
   });
   if (!jeune) return { error: "Jeune introuvable." };
-  return inUnitScope(user, jeune.unit) ? null : { error: HORS_BRANCHE };
+  return canActOnUnit(user, "pedago.manage", jeune.unit) ? null : { error: HORS_BRANCHE };
 }
 
 // Jeune + ses parents (liens familiaux) — destinataires des notifications.
@@ -304,7 +305,7 @@ export async function awardBadge(
     select: { id: true, unit: true },
   });
   if (cibles.length !== uniques.length) return { error: "Jeune introuvable." };
-  if (cibles.some((j) => !inUnitScope(user, j.unit))) {
+  if (cibles.some((j) => !canActOnUnit(user, "pedago.manage", j.unit))) {
     return { error: "La sélection contient des jeunes hors de ta branche." };
   }
 
@@ -440,11 +441,16 @@ export async function deleteGoal(goalId: string): Promise<ActionResult> {
 }
 
 // ── US-S07 — note de suivi (sensible) ───────────────────────────────────────
+// Écrire une note exige le droit de la lire (`canReadPedagoNotes`) : chefs de
+// la branche du jeune et ADMIN, pas le RG (#98, #173) — un RG aussi chef ne les
+// écrit que dans sa branche.
+const NOTES_RESERVEES = "Les notes de suivi sont réservées aux chefs de la branche.";
 
 export async function addNote(jeuneId: string, content: string): Promise<ActionResult> {
   const scope = await requirePedagoScope(jeuneId);
   if (!scope.ok) return scope.result;
-  const { user } = scope;
+  const { user, jeune } = scope;
+  if (!canReadPedagoNotes(user, jeune.unit)) return { error: NOTES_RESERVEES };
   const trimmed = content.trim();
   if (!trimmed) return { error: "Note vide." };
 
@@ -464,8 +470,9 @@ export async function deleteNote(noteId: string): Promise<ActionResult> {
   if (!can(user, "pedago.manage")) return { error: "Permission refusée." };
   const note = await db.pedagogicalNote.findUnique({ where: { id: noteId }, select: { id: true, userId: true } });
   if (!note) return { error: "Note introuvable." };
-  const outOfScope = await refuseIfOutOfScope(user, note.userId);
-  if (outOfScope) return outOfScope;
+  const jeune = await db.user.findUnique({ where: { id: note.userId }, select: { unit: true } });
+  if (!jeune) return { error: "Jeune introuvable." };
+  if (!canReadPedagoNotes(user, jeune.unit)) return { error: NOTES_RESERVEES };
 
   await withAudit(
     (tx) => tx.pedagogicalNote.delete({ where: { id: noteId } }),

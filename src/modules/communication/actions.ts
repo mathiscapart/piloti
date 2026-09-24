@@ -5,7 +5,7 @@ import { after } from "next/server";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 import { publishChannelEvent, publishUserEvent } from "@/lib/realtime";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
@@ -74,8 +74,21 @@ async function notifyChannelMessage(
 // non sensible ; ils portent déjà auteur + horodatage). L'audit reste réservé
 // aux mutations sensibles (inventaire, comptes…).
 
-function isStaff(user: { role: string; roles?: string[] | string | null }) {
-  return effectiveRoles(user).some((r) => r === "ADMIN" || r === "CHEF");
+// #173 — agir sur le message d'un autre exige la permission (`message.edit_any`
+// pour modifier, `message.manage_any` pour supprimer) ET l'accès au salon : le
+// RG n'a pas le passe-droit de salon de l'ADMIN. Renvoie l'erreur à retourner,
+// ou `null` si l'action peut continuer.
+async function refuseIfNotOwnOrManageable(
+  user: Awaited<ReturnType<typeof getCurrentUser>>,
+  message: { authorId: string | null; channelId: string },
+  action: "message.edit_any" | "message.manage_any",
+  error: string,
+): Promise<ActionResult | null> {
+  if (message.authorId === user.id) return null;
+  if (!can(user, action)) return { error };
+  const channel = await db.channel.findUnique({ where: { id: message.channelId } });
+  if (!channel || !canAccessChannel(user, channel)) return { error: "Salon inaccessible." };
+  return null;
 }
 
 export async function postMessage(
@@ -158,9 +171,13 @@ export async function editMessage(
   const user = await getCurrentUser();
   const message = await db.message.findUnique({ where: { id: messageId } });
   if (!message) return { error: "Message introuvable." };
-  if (message.authorId !== user.id && !can(user, "message.manage_any")) {
-    return { error: "Tu ne peux éditer que tes propres messages." };
-  }
+  const refused = await refuseIfNotOwnOrManageable(
+    user,
+    message,
+    "message.edit_any",
+    "Tu ne peux éditer que tes propres messages.",
+  );
+  if (refused) return refused;
   const trimmed = body.trim();
   if (trimmed.length === 0) return { error: "Message vide." };
 
@@ -196,10 +213,14 @@ export async function deleteMessage(messageId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   const message = await db.message.findUnique({ where: { id: messageId } });
   if (!message) return { error: "Message introuvable." };
-  // L'auteur supprime ses propres messages ; l'ADMIN supprime n'importe lequel.
-  if (message.authorId !== user.id && !can(user, "message.manage_any")) {
-    return { error: "Tu ne peux supprimer que tes propres messages." };
-  }
+  // L'auteur supprime ses propres messages ; le RG et l'ADMIN, ceux des autres.
+  const refused = await refuseIfNotOwnOrManageable(
+    user,
+    message,
+    "message.manage_any",
+    "Tu ne peux supprimer que tes propres messages.",
+  );
+  if (refused) return refused;
   // Réactions supprimées en cascade (onDelete: Cascade au schéma). Suppression
   // en dur même si le message est signalé (#92) : la copie du signalement fait
   // preuve, le texte supprimé est tracé ici.
@@ -223,7 +244,7 @@ export async function deleteMessage(messageId: string): Promise<ActionResult> {
 
 export async function togglePin(messageId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
-  if (!isStaff(user)) return { error: "Réservé aux chefs." };
+  if (!can(user, "channel.moderate")) return { error: "Réservé aux chefs." };
   const message = await db.message.findUnique({ where: { id: messageId } });
   if (!message) return { error: "Message introuvable." };
 

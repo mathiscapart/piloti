@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can, canManagePlace } from "@/lib/permissions";
 import { ownerContactVersion } from "@/modules/camp/owner-consent";
 
 import { PlaceForm, type PlaceFormValues } from "../../PlaceForm";
@@ -35,8 +35,7 @@ export default async function EditPlacePage({ params }: PageProps) {
   const place = await db.campPlace.findUnique({ where: { id } });
   if (!place || place.archived) notFound();
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (!isAdmin && place.createdById !== user.id) redirect(`/lieux/${id}`);
+  if (!canManagePlace(user, place)) redirect(`/lieux/${id}`);
 
   // #136 — sans accord, le contact reste masqué ici comme sur la fiche. Il
   // n'entre ni dans les props ni, donc, dans le payload RSC : le formulaire

@@ -7,7 +7,7 @@ import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { CAMP_EQUIPMENT } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can, canManagePlace } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 
@@ -182,7 +182,7 @@ export async function createPlace(
     : { error: null, id: place.id };
 }
 
-// US-L05 — modifier un lieu (chef créateur OU admin).
+// US-L05 — modifier un lieu (chef créateur, RG ou admin).
 export async function updatePlace(
   placeId: string,
   fd: FormData,
@@ -210,9 +210,8 @@ export async function updatePlace(
   });
   if (!place) return { error: "Lieu introuvable." };
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (!isAdmin && place.createdById !== user.id) {
-    return { error: "Seul le créateur du lieu (ou un admin) peut le modifier." };
+  if (!canManagePlace(user, place)) {
+    return { error: "Seul le créateur du lieu (ou le responsable de groupe) peut le modifier." };
   }
 
   const name = str(fd, "name");
@@ -345,7 +344,7 @@ export async function updatePlace(
   return deferred ? { error: null, notice: OWNER_CONSENT_REQUEST_DEFERRED } : { error: null };
 }
 
-// US-L05 — archiver un lieu (créateur ou admin).
+// US-L05 — archiver un lieu (créateur, RG ou admin).
 export async function archivePlace(placeId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!can(user, "place.manage")) return { error: "Permission refusée." };
@@ -355,9 +354,8 @@ export async function archivePlace(placeId: string): Promise<ActionResult> {
     select: { id: true, createdById: true },
   });
   if (!place) return { error: "Lieu introuvable." };
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (!isAdmin && place.createdById !== user.id) {
-    return { error: "Seul le créateur du lieu (ou un admin) peut l'archiver." };
+  if (!canManagePlace(user, place)) {
+    return { error: "Seul le créateur du lieu (ou le responsable de groupe) peut l'archiver." };
   }
 
   await withAudit(

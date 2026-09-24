@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, canReadPedagoNotes, inUnitScope } from "@/lib/permissions";
+import { can, canActOnUnit, canReadPedagoNotes } from "@/lib/permissions";
 import { isChildOf } from "@/modules/family/queries";
 import { listBadgesForUnit } from "@/modules/pedagogy/referential";
 import { getProgression } from "@/modules/pedagogy/progression";
@@ -32,10 +32,10 @@ export default async function ProgressionPage({ params }: PageProps) {
   if (!data) notFound();
 
   // Périmètre d'unité : la lecture reste ouverte à tout l'encadrement, l'ÉCRITURE
-  // est réservée aux chefs de la branche du jeune (ADMIN/RG non bornés) — même
+  // est réservée aux chefs de la branche du jeune (ADMIN non borné) — même
   // règle que les actions de `progression-actions.ts`, pour ne pas afficher des
   // boutons qui échoueraient à l'usage.
-  const canManage = can(user, "pedago.manage") && inUnitScope(user, data.jeune.unit);
+  const canManage = canActOnUnit(user, "pedago.manage", data.jeune.unit);
   // #100 — annuler une étape CONFIRMÉE : RG et ADMIN seulement, quelle que soit
   // la branche (même droit que `removeValidation`).
   const canCancelConfirmed = can(user, "pedago.validation.cancel");

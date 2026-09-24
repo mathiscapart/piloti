@@ -151,9 +151,11 @@ function parseRoles(raw: string | null | undefined): string[] {
   }
 }
 
-// US-32 — la SECRÉTAIRE gère les comptes comme un admin, MAIS ne peut pas agir
-// (suspendre / supprimer / réinitialiser / changer l'unité) sur un compte qui
+// US-32 — la SECRÉTAIRE (et le RG, #173) gère les comptes comme un admin, MAIS
+// ne peut pas agir (suspendre / changer l'unité / modifier) sur un compte qui
 // porte ADMIN ou Responsable de groupe. L'ADMIN, lui, agit sur tout le monde.
+// Supprimer un compte et définir son mot de passe sont réservés à l'ADMIN
+// (`user.delete`, `user.password.set`, #173).
 async function assertCanManageTarget(
   actor: Actor,
   targetUserId: string,
@@ -666,7 +668,7 @@ export async function deleteUser(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const actor = await ensureCan("user.manage");
+  const actor = await ensureCan("user.delete");
   if ("error" in actor) return actor;
 
   const parsed = userIdSchema.safeParse({ userId: formData.get("userId") });
@@ -745,7 +747,7 @@ export async function changeUserPassword(
   _prev: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const actor = await ensureCan("user.manage");
+  const actor = await ensureCan("user.password.set");
   if ("error" in actor) return actor;
 
   const parsed = changePasswordSchema.safeParse({

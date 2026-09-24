@@ -136,8 +136,11 @@ export default async function EditUserAccountPage({ params }: PageProps) {
           {!isSelf && active && (
             <SuspendButton userId={target.id} fullName={fullName} />
           )}
-          {!isSelf && <ChangePasswordDialog userId={target.id} fullName={fullName} />}
-          {!isSelf && (
+          {/* #173 — mot de passe et suppression : ADMIN seul. */}
+          {!isSelf && can(currentUser, "user.password.set") && (
+            <ChangePasswordDialog userId={target.id} fullName={fullName} />
+          )}
+          {!isSelf && can(currentUser, "user.delete") && (
             <DeleteUserButton
               userId={target.id}
               fullName={fullName}

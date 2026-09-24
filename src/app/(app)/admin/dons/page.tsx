@@ -40,7 +40,7 @@ interface PageProps {
 }
 
 export default async function AdminDonationsPage({ searchParams }: PageProps) {
-  // US-32 — consultation des dons : RESPONSABLE_MATERIEL + RG (lecture seule) + ADMIN.
+  // US-32 — consultation des dons : RESPONSABLE_MATERIEL + RG + ADMIN.
   // La validation (accepter/refuser) reste réservée à `donation.review`.
   const user = await requireCan("donation.view");
   const canReview = can(user, "donation.review");

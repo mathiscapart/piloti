@@ -7,12 +7,15 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  ACTIONS,
   assignableRoles,
   can,
   canAccessAdminZone,
   canActOnUnit,
   canAssignRole,
+  canManagePlace,
   canReadPedagoNotes,
+  canReviewExpense,
   effectiveRoles,
   hasRole,
   inUnitScope,
@@ -192,22 +195,22 @@ describe("can — SAFE-02 modération de contenu", () => {
 });
 
 describe("can — message.manage_any (#92)", () => {
-  it("seul l'ADMIN modifie ou supprime le message d'un autre", () => {
-    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "message.manage_any")).toBe(
-      true,
-    );
-    for (const role of ["CHEF", "RESPONSABLE_GROUPE", "PARENT", "SCOUT"]) {
+  it("seuls l'ADMIN et le RG suppriment le message d'un autre (#173)", () => {
+    for (const role of ["ADMIN", "RESPONSABLE_GROUPE"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "message.manage_any")).toBe(true);
+    }
+    for (const role of ["CHEF", "PARENT", "SCOUT"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "message.manage_any")).toBe(false);
     }
   });
 });
 
 describe("can — announcement.manage_any (#111)", () => {
-  it("seul l'ADMIN gère l'annonce d'un autre (lecteurs, relance, suppression)", () => {
-    expect(
-      can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "announcement.manage_any"),
-    ).toBe(true);
-    for (const role of ["CHEF", "RESPONSABLE_GROUPE", "PARENT", "SCOUT"]) {
+  it("seuls l'ADMIN et le RG gèrent l'annonce d'un autre (lecteurs, relance, suppression, #173)", () => {
+    for (const role of ["ADMIN", "RESPONSABLE_GROUPE"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "announcement.manage_any")).toBe(true);
+    }
+    for (const role of ["CHEF", "PARENT", "SCOUT"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "announcement.manage_any")).toBe(
         false,
       );
@@ -507,6 +510,12 @@ describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => 
     expect(canReadPedagoNotes(user(["RESPONSABLE_GROUPE"]), "PIONNIERS")).toBe(false);
   });
 
+  it("un RG aussi chef ne lit que les notes de SA branche, comme un chef (#173)", () => {
+    const rgChef = user(["RESPONSABLE_GROUPE", "CHEF"], "SCOUTS");
+    expect(canReadPedagoNotes(rgChef, "SCOUTS")).toBe(true);
+    expect(canReadPedagoNotes(rgChef, "PIONNIERS")).toBe(false);
+  });
+
   it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"]])("refuse %s", (role) => {
     expect(canReadPedagoNotes(user([role], "PIONNIERS"), "PIONNIERS")).toBe(false);
   });
@@ -539,5 +548,210 @@ describe("pedago.validation.cancel — annuler une étape confirmée (#100)", ()
     expect(
       can({ role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "SUSPENDED" }, "pedago.validation.cancel"),
     ).toBe(false);
+  });
+});
+
+// #173 — le RG passe de la lecture seule à l'écriture sur tout le groupe : union
+// des droits de CHEF, TRÉSORIER, RESPONSABLE_MATERIEL et SECRÉTAIRE, plus la
+// gestion du contenu d'autrui. Restent hors de sa portée la zone technique et
+// le pédagogique des chefs de branche (étapes, badges, référentiel).
+describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
+  const rg = (extra: string[] = [], unit: string | null = null, status = "ACTIVE") => ({
+    id: "rg-1",
+    role: "RESPONSABLE_GROUPE",
+    roles: ["RESPONSABLE_GROUPE", ...extra],
+    unit,
+    status,
+  });
+
+  const FERMEES = [
+    "admin.access",
+    "pedago.manage",
+    "pedago.referential",
+    "user.password.set",
+    "user.delete",
+    "message.edit_any",
+  ];
+
+  it.each(ACTIONS.filter((a) => !FERMEES.includes(a)))("autorise %s", (action) => {
+    expect(can(rg(), action)).toBe(true);
+  });
+
+  it("refuse le pédagogique des chefs de branche, mais garde la lecture et l'arbitrage (#100)", () => {
+    expect(can(rg(), "pedago.manage")).toBe(false);
+    expect(can(rg(), "pedago.referential")).toBe(false);
+    expect(can(rg(), "pedago.view")).toBe(true);
+    expect(can(rg(), "pedago.validation.cancel")).toBe(true);
+  });
+
+  it("refuse admin.access (zone technique, ADMIN seul)", () => {
+    expect(can(rg(), "admin.access")).toBe(false);
+    expect(can(rg(["CHEF", "TRESORIER", "SECRETAIRE"]), "admin.access")).toBe(false);
+  });
+
+  it("n'attribue ni ADMIN ni RESPONSABLE_GROUPE, mais attribue les autres rôles", () => {
+    expect(canAssignRole(rg(), "ADMIN")).toBe(false);
+    expect(canAssignRole(rg(), "RESPONSABLE_GROUPE")).toBe(false);
+    for (const role of ["CHEF", "TRESORIER", "RESPONSABLE_MATERIEL", "SECRETAIRE", "PARENT", "SCOUT"]) {
+      expect(canAssignRole(rg(), role)).toBe(true);
+    }
+  });
+
+  it("un compte RG non ACTIVE n'a aucun droit", () => {
+    for (const status of ["PENDING", "SUSPENDED", "REJECTED", "DELETED", undefined]) {
+      for (const action of ACTIONS) {
+        expect(can({ ...rg(), status }, action)).toBe(false);
+      }
+    }
+  });
+
+  it("n'est borné à aucune branche, même sans unité renseignée", () => {
+    expect(canActOnUnit(rg(), "event.manage", "PIONNIERS")).toBe(true);
+    expect(canActOnUnit(rg(), "budget.manage", "SCOUTS")).toBe(true);
+    expect(canActOnUnit(rg(), "member.family.manage", "FARFADETS")).toBe(true);
+  });
+
+  it("un RG aussi CHEF n'est pas réduit à sa branche sur ses droits de RG (#150)", () => {
+    const rgChef = rg(["CHEF"], "SCOUTS");
+    expect(canActOnUnit(rgChef, "event.manage", "PIONNIERS")).toBe(true);
+    expect(inUnitScope(rgChef, "PIONNIERS")).toBe(true);
+  });
+
+  it("un RG aussi CHEF n'a le pédagogique que sur SA branche, comme un chef", () => {
+    const rgChef = rg(["CHEF"], "SCOUTS");
+    for (const action of ["pedago.manage", "pedago.referential"] as const) {
+      expect(canActOnUnit(rgChef, action, "SCOUTS")).toBe(true);
+      expect(canActOnUnit(rgChef, action, "PIONNIERS")).toBe(false);
+      expect(canActOnUnit(rgChef, action, null)).toBe(false);
+    }
+    expect(canActOnUnit(rg(["CHEF"], null), "pedago.manage", "SCOUTS")).toBe(false);
+  });
+
+  it("un RG aussi TRÉSORIER cumule sans rien perdre", () => {
+    const rgTres = rg(["TRESORIER"]);
+    for (const action of ["expense.manage", "campaign.manage", "budget.manage", "loan.create"] as const) {
+      expect(can(rgTres, action)).toBe(true);
+    }
+    expect(can(rgTres, "admin.access")).toBe(false);
+  });
+
+  it("ouvre la zone /admin (inscriptions, comptes, catégories, dons)", () => {
+    expect(canAccessAdminZone(rg())).toBe(true);
+  });
+});
+
+// #103 (règle du chef) étendue au RG par #173 : qui déclare une note de frais
+// ne la valide pas lui-même. Le cas du trésorier seul reste ouvert (#103).
+describe("canReviewExpense — pas d'auto-validation d'une note de frais", () => {
+  const u = (id: string, roles: string[], status = "ACTIVE") => ({
+    id,
+    role: roles[0],
+    roles,
+    status,
+  });
+
+  it("le RG valide la note d'un autre", () => {
+    expect(canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE"]), { declarantId: "chef-1" })).toBe(true);
+  });
+
+  it("le RG ne valide pas sa propre note", () => {
+    expect(canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE"]), { declarantId: "rg-1" })).toBe(false);
+  });
+
+  it("un RG aussi trésorier ne valide pas non plus sa propre note", () => {
+    expect(
+      canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE", "TRESORIER"]), { declarantId: "rg-1" }),
+    ).toBe(false);
+  });
+
+  it("le trésorier seul : comportement inchangé tant que #103 n'est pas tranché", () => {
+    expect(canReviewExpense(u("t-1", ["TRESORIER"]), { declarantId: "t-1" })).toBe(true);
+    expect(canReviewExpense(u("t-1", ["TRESORIER"]), { declarantId: "x" })).toBe(true);
+  });
+
+  it("refuse sans expense.manage, ou hors statut ACTIVE", () => {
+    expect(canReviewExpense(u("c-1", ["CHEF"]), { declarantId: "x" })).toBe(false);
+    expect(
+      canReviewExpense(u("rg-1", ["RESPONSABLE_GROUPE"], "SUSPENDED"), { declarantId: "x" }),
+    ).toBe(false);
+  });
+});
+
+// US-L05 — modifier / archiver un lieu : son créateur, le RG (#173) ou l'ADMIN.
+describe("canManagePlace — créateur, RG ou admin", () => {
+  const u = (id: string, roles: string[], status = "ACTIVE") => ({
+    id,
+    role: roles[0],
+    roles,
+    status,
+  });
+
+  it("le chef créateur gère son lieu", () => {
+    expect(canManagePlace(u("c-1", ["CHEF"]), { createdById: "c-1" })).toBe(true);
+  });
+
+  it("un autre chef ne gère pas le lieu", () => {
+    expect(canManagePlace(u("c-2", ["CHEF"]), { createdById: "c-1" })).toBe(false);
+  });
+
+  it.each([["RESPONSABLE_GROUPE"], ["ADMIN"]])("%s gère tout lieu, même orphelin", (role) => {
+    expect(canManagePlace(u("x", [role]), { createdById: "c-1" })).toBe(true);
+    expect(canManagePlace(u("x", [role]), { createdById: null })).toBe(true);
+  });
+
+  it("un lieu orphelin (créateur anonymisé) n'est à aucun chef", () => {
+    expect(canManagePlace({ role: "CHEF", roles: ["CHEF"], status: "ACTIVE" }, { createdById: null })).toBe(false);
+  });
+
+  it("refuse sans place.manage, même au créateur, et hors statut ACTIVE", () => {
+    expect(canManagePlace(u("p-1", ["PARENT"]), { createdById: "p-1" })).toBe(false);
+    expect(
+      canManagePlace(u("rg-1", ["RESPONSABLE_GROUPE"], "SUSPENDED"), { createdById: "c-1" }),
+    ).toBe(false);
+  });
+});
+
+// Épingler un message, clore le sondage d'un autre : chefs, RG (#173), ADMIN.
+describe("can — channel.moderate", () => {
+  it.each([["CHEF"], ["RESPONSABLE_GROUPE"], ["ADMIN"]])("autorise %s", (role) => {
+    expect(can({ role, roles: [role], status: "ACTIVE" }, "channel.moderate")).toBe(true);
+  });
+
+  it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"], ["RESPONSABLE_MATERIEL"]])(
+    "refuse %s",
+    (role) => {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "channel.moderate")).toBe(false);
+    },
+  );
+});
+
+// #173 — définir le mot de passe d'un compte et supprimer un compte : ADMIN seul
+// (décision du 2026-09-24). La SECRÉTAIRE et le RG gardent le reste de user.manage.
+describe("can — user.password.set / user.delete (ADMIN seul)", () => {
+  it.each([["user.password.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
+    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, action)).toBe(true);
+    for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE", "CHEF", "TRESORIER"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, action)).toBe(false);
+    }
+  });
+
+  it("la SECRÉTAIRE et le RG gardent user.manage", () => {
+    for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "user.manage")).toBe(true);
+    }
+  });
+});
+
+// #173 — le RG supprime le message d'un autre, mais ne le réécrit pas :
+// modifier les mots de quelqu'un reste à l'ADMIN (décision du 2026-09-24).
+describe("can — message.edit_any (ADMIN seul)", () => {
+  it("ADMIN seul modifie le message d'un autre ; le RG le supprime seulement", () => {
+    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "message.edit_any")).toBe(true);
+    const rg = { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE" };
+    expect(can(rg, "message.edit_any")).toBe(false);
+    expect(can(rg, "message.manage_any")).toBe(true);
+    for (const role of ["CHEF", "SECRETAIRE", "PARENT", "SCOUT"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "message.edit_any")).toBe(false);
+    }
   });
 });

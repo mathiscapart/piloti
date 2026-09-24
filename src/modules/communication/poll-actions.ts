@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 import { publishChannelEvent } from "@/lib/realtime";
 import type { ActionResult } from "@/lib/types";
 
@@ -105,8 +105,7 @@ export async function closePoll(pollId: string): Promise<ActionResult> {
   const user = await getCurrentUser();
   const poll = await db.poll.findUnique({ where: { id: pollId } });
   if (!poll) return { error: "Sondage introuvable." };
-  const staff = effectiveRoles(user).some((r) => r === "ADMIN" || r === "CHEF");
-  if (poll.authorId !== user.id && !staff) {
+  if (poll.authorId !== user.id && !can(user, "channel.moderate")) {
     return { error: "Réservé à l'auteur ou aux chefs." };
   }
 

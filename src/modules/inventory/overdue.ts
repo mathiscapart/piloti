@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 import { notify } from "@/modules/notifications/notify";
 
 // US-07 — Alerte retard de retour.
@@ -13,8 +13,8 @@ import { notify } from "@/modules/notifications/notify";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-// Qui reçoit l'alerte : les comptes qui gèrent les prêts.
-const MANAGER_ROLES = ["ADMIN", "CHEF", "RESPONSABLE_MATERIEL"];
+// Qui reçoit l'alerte : les comptes qui valident les retours de prêt
+// (`loan.return.validate` : chefs, RG depuis #173, responsable matériel, admin).
 
 /**
  * Parcourt les prêts en retard et envoie une alerte aux gestionnaires qui n'en
@@ -46,11 +46,9 @@ export async function checkOverdueLoans(): Promise<number> {
 
   const users = await db.user.findMany({
     where: { status: "ACTIVE" },
-    select: { id: true, role: true, roles: true },
+    select: { id: true, role: true, roles: true, status: true },
   });
-  const recipients = users.filter((u) =>
-    effectiveRoles(u).some((r) => MANAGER_ROLES.includes(r)),
-  );
+  const recipients = users.filter((u) => can(u, "loan.return.validate"));
   if (recipients.length === 0) return 0;
 
   // Déduplication : on ne ré-alerte pas un couple (destinataire, prêt) déjà

@@ -195,7 +195,7 @@ describe("can — SAFE-02 modération de contenu", () => {
 });
 
 describe("can — message.manage_any (#92)", () => {
-  it("seuls l'ADMIN et le RG modifient ou suppriment le message d'un autre (#173)", () => {
+  it("seuls l'ADMIN et le RG suppriment le message d'un autre (#173)", () => {
     for (const role of ["ADMIN", "RESPONSABLE_GROUPE"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "message.manage_any")).toBe(true);
     }
@@ -570,6 +570,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     "pedago.referential",
     "user.password.set",
     "user.delete",
+    "message.edit_any",
   ];
 
   it.each(ACTIONS.filter((a) => !FERMEES.includes(a)))("autorise %s", (action) => {
@@ -737,6 +738,20 @@ describe("can — user.password.set / user.delete (ADMIN seul)", () => {
   it("la SECRÉTAIRE et le RG gardent user.manage", () => {
     for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "user.manage")).toBe(true);
+    }
+  });
+});
+
+// #173 — le RG supprime le message d'un autre, mais ne le réécrit pas :
+// modifier les mots de quelqu'un reste à l'ADMIN (décision du 2026-09-24).
+describe("can — message.edit_any (ADMIN seul)", () => {
+  it("ADMIN seul modifie le message d'un autre ; le RG le supprime seulement", () => {
+    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "message.edit_any")).toBe(true);
+    const rg = { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE" };
+    expect(can(rg, "message.edit_any")).toBe(false);
+    expect(can(rg, "message.manage_any")).toBe(true);
+    for (const role of ["CHEF", "SECRETAIRE", "PARENT", "SCOUT"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "message.edit_any")).toBe(false);
     }
   });
 });

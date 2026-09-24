@@ -65,7 +65,8 @@ export const ACTIONS = [
   // Communication
   "announcement.publish", // US-C01/C05 — publier une annonce (+ diffusion urgente)
   "announcement.manage_any", // #111 — lecteurs, relance, suppression de l'annonce d'un autre (l'auteur gère les siennes)
-  "message.manage_any", // #92 — modifier / supprimer le message d'un autre (l'auteur, lui, gère les siens)
+  "message.manage_any", // #92 — supprimer le message d'un autre (l'auteur, lui, gère les siens)
+  "message.edit_any", // #92 / #173 — modifier le message d'un autre (ADMIN seul)
   "channel.moderate", // épingler un message, clore le sondage d'un autre (l'auteur clôt le sien)
   // SAFE-02 — signalement & modération de contenu (salons + messagerie privée).
   "moderation.view", // consulter la file de modération (CHEF + RG)
@@ -130,7 +131,8 @@ const ANY_ACTIVE = new Set<Action>([
 // Pour chaque action, les rôles (hors ADMIN, superutilisateur) qui l'autorisent.
 // Une action absente / à liste vide = réservée à l'ADMIN.
 // RG (#173) : présent sur toutes les actions sauf `admin.access`,
-// `user.password.set`, `user.delete`, `pedago.manage` et `pedago.referential`.
+// `user.password.set`, `user.delete`, `message.edit_any`, `pedago.manage` et
+// `pedago.referential`.
 const CHEF = "CHEF";
 const RG = "RESPONSABLE_GROUPE";
 const MAT = "RESPONSABLE_MATERIEL";
@@ -186,6 +188,9 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // l'action) ; le contenu d'un autre : RG (#173) et ADMIN.
   "announcement.manage_any": [RG],
   "message.manage_any": [RG],
+  // #173 — réécrire les mots de quelqu'un n'est pas de la modération : le RG
+  // supprime, seul l'ADMIN modifie (décision du 2026-09-24).
+  "message.edit_any": [],
   "channel.moderate": [CHEF, RG],
   // SAFE-02 — la file de modération se consulte ET se traite par les chefs et le
   // responsable de groupe (masquer, résoudre, rejeter). Un CHEF est limité à son

@@ -74,16 +74,18 @@ async function notifyChannelMessage(
 // non sensible ; ils portent déjà auteur + horodatage). L'audit reste réservé
 // aux mutations sensibles (inventaire, comptes…).
 
-// #173 — agir sur le message d'un autre exige aussi l'accès au salon : le RG a
-// `message.manage_any` sans le passe-droit de salon de l'ADMIN. Renvoie l'erreur
-// à retourner, ou `null` si l'action peut continuer.
+// #173 — agir sur le message d'un autre exige la permission (`message.edit_any`
+// pour modifier, `message.manage_any` pour supprimer) ET l'accès au salon : le
+// RG n'a pas le passe-droit de salon de l'ADMIN. Renvoie l'erreur à retourner,
+// ou `null` si l'action peut continuer.
 async function refuseIfNotOwnOrManageable(
   user: Awaited<ReturnType<typeof getCurrentUser>>,
   message: { authorId: string | null; channelId: string },
+  action: "message.edit_any" | "message.manage_any",
   error: string,
 ): Promise<ActionResult | null> {
   if (message.authorId === user.id) return null;
-  if (!can(user, "message.manage_any")) return { error };
+  if (!can(user, action)) return { error };
   const channel = await db.channel.findUnique({ where: { id: message.channelId } });
   if (!channel || !canAccessChannel(user, channel)) return { error: "Salon inaccessible." };
   return null;
@@ -172,6 +174,7 @@ export async function editMessage(
   const refused = await refuseIfNotOwnOrManageable(
     user,
     message,
+    "message.edit_any",
     "Tu ne peux éditer que tes propres messages.",
   );
   if (refused) return refused;
@@ -214,6 +217,7 @@ export async function deleteMessage(messageId: string): Promise<ActionResult> {
   const refused = await refuseIfNotOwnOrManageable(
     user,
     message,
+    "message.manage_any",
     "Tu ne peux supprimer que tes propres messages.",
   );
   if (refused) return refused;

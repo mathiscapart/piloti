@@ -19,8 +19,9 @@
 //   le groupe (union des droits CHEF, TRESORIER, RESPONSABLE_MATERIEL,
 //   SECRETAIRE, plus la gestion du contenu d'autrui). Il est ajouté action par
 //   action, sans court-circuit dans `can()`. Lui restent fermés : `admin.access`
-//   (zone technique), l'attribution des rôles ADMIN/RG (`canAssignRole`) et les
-//   notes de suivi sensibles (`canReadPedagoNotes`).
+//   (zone technique), l'attribution des rôles ADMIN/RG (`canAssignRole`) et le
+//   pédagogique des chefs de branche (`pedago.manage`, `pedago.referential`,
+//   notes de suivi sensibles).
 //
 // Périmètre d'unité — la matrice ci-dessous ne dit QUE « quel rôle a le droit ».
 // Certaines actions valent en plus « seulement sur ma branche » : c'est
@@ -125,7 +126,8 @@ const ANY_ACTIVE = new Set<Action>([
 
 // Pour chaque action, les rôles (hors ADMIN, superutilisateur) qui l'autorisent.
 // Une action absente / à liste vide = réservée à l'ADMIN.
-// RG (#173) : présent sur toutes les actions sauf `admin.access`.
+// RG (#173) : présent sur toutes les actions sauf `admin.access`,
+// `pedago.manage` et `pedago.referential`.
 const CHEF = "CHEF";
 const RG = "RESPONSABLE_GROUPE";
 const MAT = "RESPONSABLE_MATERIEL";
@@ -213,18 +215,18 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "place.create": [CHEF, RG],
   "place.manage": [CHEF, RG],
   "place.review": [CHEF, RG],
-  // Suivi pédagogique — gestion par les chefs et le RG, hors notes sensibles
-  // (cf. canReadPedagoNotes). Le jeune et le parent accèdent à LEURS
-  // ressources via une logique dédiée dans la page (pas par `can()`), hors
-  // notes sensibles (US-S07/S10).
+  // Suivi pédagogique — gestion par les chefs ; RG en lecture (#173 : le
+  // pédagogique reste aux chefs de branche). Le jeune et le parent accèdent à
+  // LEURS ressources via une logique dédiée dans la page (pas par `can()`),
+  // hors notes sensibles (US-S07/S10).
   "pedago.view": [CHEF, RG],
-  "pedago.manage": [CHEF, RG],
+  "pedago.manage": [CHEF],
   // #100 — une étape confirmée par deux chefs ne se défait pas par un seul :
   // l'annulation est réservée au RG (un arbitrage) et à l'ADMIN. Une
   // proposition non confirmée reste retirable par les chefs de la branche
   // (`pedago.manage`).
   "pedago.validation.cancel": [RG],
-  "pedago.referential": [CHEF, RG],
+  "pedago.referential": [CHEF],
 };
 
 /**
@@ -345,9 +347,10 @@ export function canActOnUnit(
  * ADMIN. Condition unique pour CHARGER, AFFICHER et ÉCRIRE : une note qu'on n'a
  * pas le droit de lire n'est jamais envoyée au navigateur.
  *
- * #173 — le RG a `pedago.manage` mais ne lit ni n'écrit ces notes (décision du
- * 2026-09-24, #98 maintenu) : le droit s'évalue SANS son rôle RG. Un RG aussi
- * CHEF les lit donc comme un chef, sur sa seule branche.
+ * #173 — le RG ne lit ni n'écrit ces notes (décision du 2026-09-24, #98
+ * maintenu). Le droit s'évalue SANS son rôle RG : sinon un RG aussi CHEF, que
+ * `inUnitScope` ne borne pas, les lirait dans toutes les branches. Il les lit
+ * donc comme un chef, sur sa seule branche.
  */
 export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
   const roles = effectiveRoles(user).filter((r) => r !== RG);

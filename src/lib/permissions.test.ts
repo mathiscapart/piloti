@@ -505,8 +505,8 @@ describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => 
     expect(canReadPedagoNotes(user(["ADMIN"]), "PIONNIERS")).toBe(true);
   });
 
-  it("refuse le RG, qui a pourtant pedago.view et pedago.manage (#173)", () => {
-    expect(can(user(["RESPONSABLE_GROUPE"]), "pedago.manage")).toBe(true);
+  it("refuse le RG, qui a pourtant pedago.view", () => {
+    expect(can(user(["RESPONSABLE_GROUPE"]), "pedago.view")).toBe(true);
     expect(canReadPedagoNotes(user(["RESPONSABLE_GROUPE"]), "PIONNIERS")).toBe(false);
   });
 
@@ -553,7 +553,8 @@ describe("pedago.validation.cancel — annuler une étape confirmée (#100)", ()
 
 // #173 — le RG passe de la lecture seule à l'écriture sur tout le groupe : union
 // des droits de CHEF, TRÉSORIER, RESPONSABLE_MATERIEL et SECRÉTAIRE, plus la
-// gestion du contenu d'autrui. Seule la zone technique reste à l'ADMIN.
+// gestion du contenu d'autrui. Restent hors de sa portée la zone technique et
+// le pédagogique des chefs de branche (étapes, badges, référentiel).
 describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
   const rg = (extra: string[] = [], unit: string | null = null, status = "ACTIVE") => ({
     id: "rg-1",
@@ -563,8 +564,17 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     status,
   });
 
-  it.each(ACTIONS.filter((a) => a !== "admin.access"))("autorise %s", (action) => {
+  const FERMEES = ["admin.access", "pedago.manage", "pedago.referential"];
+
+  it.each(ACTIONS.filter((a) => !FERMEES.includes(a)))("autorise %s", (action) => {
     expect(can(rg(), action)).toBe(true);
+  });
+
+  it("refuse le pédagogique des chefs de branche, mais garde la lecture et l'arbitrage (#100)", () => {
+    expect(can(rg(), "pedago.manage")).toBe(false);
+    expect(can(rg(), "pedago.referential")).toBe(false);
+    expect(can(rg(), "pedago.view")).toBe(true);
+    expect(can(rg(), "pedago.validation.cancel")).toBe(true);
   });
 
   it("refuse admin.access (zone technique, ADMIN seul)", () => {
@@ -590,7 +600,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
 
   it("n'est borné à aucune branche, même sans unité renseignée", () => {
     expect(canActOnUnit(rg(), "event.manage", "PIONNIERS")).toBe(true);
-    expect(canActOnUnit(rg(), "pedago.referential", "SCOUTS")).toBe(true);
+    expect(canActOnUnit(rg(), "budget.manage", "SCOUTS")).toBe(true);
     expect(canActOnUnit(rg(), "member.family.manage", "FARFADETS")).toBe(true);
   });
 

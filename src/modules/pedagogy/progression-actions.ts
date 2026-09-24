@@ -441,7 +441,8 @@ export async function deleteGoal(goalId: string): Promise<ActionResult> {
 
 // ── US-S07 — note de suivi (sensible) ───────────────────────────────────────
 // Écrire une note exige le droit de la lire (`canReadPedagoNotes`) : chefs de
-// la branche du jeune et ADMIN, pas le RG malgré `pedago.manage` (#98, #173).
+// la branche du jeune et ADMIN, pas le RG (#98, #173) — un RG aussi chef ne les
+// écrit que dans sa branche.
 const NOTES_RESERVEES = "Les notes de suivi sont réservées aux chefs de la branche.";
 
 export async function addNote(jeuneId: string, content: string): Promise<ActionResult> {

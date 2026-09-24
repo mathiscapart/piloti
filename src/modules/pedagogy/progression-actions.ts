@@ -6,7 +6,7 @@ import { after } from "next/server";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, canReadPedagoNotes, inUnitScope } from "@/lib/permissions";
+import { can, canActOnUnit, canReadPedagoNotes } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { notifyMany } from "@/modules/notifications/notify";
 
@@ -17,9 +17,10 @@ import { stepConfirmationError, stepProposalError } from "./step-proposal";
 // Périmètre d'unité : `pedago.manage` dit qu'un CHEF peut suivre des jeunes,
 // pas qu'il peut suivre TOUS les jeunes. Chaque action d'écriture ci-dessous
 // passe par `requirePedagoScope`, qui résout le jeune visé puis vérifie
-// `inUnitScope`. La LECTURE (`pedago.view`) reste ouverte à tout l'encadrement :
+// `canActOnUnit`. La LECTURE (`pedago.view`) reste ouverte à tout l'encadrement :
 // seule l'écriture — étapes, badges, objectifs et notes sensibles (US-S07) —
-// est bornée à la branche. ADMIN et RG ne sont pas bornés (cf. `inUnitScope`).
+// est bornée à la branche. Seul l'ADMIN n'est pas borné ; un RG aussi CHEF
+// l'est à sa branche, comme un chef (#173).
 const HORS_BRANCHE = "Ce jeune n'est pas dans ta branche.";
 
 type PedagoScope =
@@ -40,7 +41,7 @@ async function requirePedagoScope(jeuneId: string): Promise<PedagoScope> {
     select: { id: true, unit: true, firstName: true },
   });
   if (!jeune) return { ok: false, result: { error: "Jeune introuvable." } };
-  if (!inUnitScope(user, jeune.unit)) {
+  if (!canActOnUnit(user, "pedago.manage", jeune.unit)) {
     return { ok: false, result: { error: HORS_BRANCHE } };
   }
   return { ok: true, user, jeune };
@@ -60,7 +61,7 @@ async function refuseIfOutOfScope(
     select: { unit: true },
   });
   if (!jeune) return { error: "Jeune introuvable." };
-  return inUnitScope(user, jeune.unit) ? null : { error: HORS_BRANCHE };
+  return canActOnUnit(user, "pedago.manage", jeune.unit) ? null : { error: HORS_BRANCHE };
 }
 
 // Jeune + ses parents (liens familiaux) — destinataires des notifications.
@@ -304,7 +305,7 @@ export async function awardBadge(
     select: { id: true, unit: true },
   });
   if (cibles.length !== uniques.length) return { error: "Jeune introuvable." };
-  if (cibles.some((j) => !inUnitScope(user, j.unit))) {
+  if (cibles.some((j) => !canActOnUnit(user, "pedago.manage", j.unit))) {
     return { error: "La sélection contient des jeunes hors de ta branche." };
   }
 

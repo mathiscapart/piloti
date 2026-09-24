@@ -321,6 +321,10 @@ const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
  * TRÉSORIER. Le chef ne gère que le budget des événements de sa branche ; le
  * trésorier gère tout, sans quoi il ne pourrait plus rien encaisser. On ne
  * borne donc que si le droit ne vient QUE de rôles bornés.
+ *
+ * Dans ce cas, la borne est la branche du compte, sans l'exemption de groupe
+ * d'`inUnitScope` : un RG aussi CHEF n'a le pédagogique, réservé aux chefs
+ * (#173), que sur sa propre branche. Ses droits de RG restent sans borne.
  */
 export function canActOnUnit(
   user: AuthCtx,
@@ -337,7 +341,7 @@ export function canActOnUnit(
     (r) => !UNIT_BOUND_ROLES.has(r) && (allowed as string[]).includes(r),
   );
   if (viaRoleTransverse) return true;
-  return inUnitScope(user, targetUnit);
+  return targetUnit !== null && user.unit === targetUnit;
 }
 
 /**
@@ -347,14 +351,11 @@ export function canActOnUnit(
  * ADMIN. Condition unique pour CHARGER, AFFICHER et ÉCRIRE : une note qu'on n'a
  * pas le droit de lire n'est jamais envoyée au navigateur.
  *
- * #173 — le RG ne lit ni n'écrit ces notes (décision du 2026-09-24, #98
- * maintenu). Le droit s'évalue SANS son rôle RG : sinon un RG aussi CHEF, que
- * `inUnitScope` ne borne pas, les lirait dans toutes les branches. Il les lit
- * donc comme un chef, sur sa seule branche.
+ * #173 — le RG ne les lit ni ne les écrit (#98 maintenu) ; un RG aussi CHEF
+ * les lit comme un chef, sur sa seule branche (cf. `canActOnUnit`).
  */
 export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
-  const roles = effectiveRoles(user).filter((r) => r !== RG);
-  return canActOnUnit({ ...user, roles }, "pedago.manage", jeuneUnit);
+  return canActOnUnit(user, "pedago.manage", jeuneUnit);
 }
 
 /**

@@ -604,11 +604,20 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     expect(canActOnUnit(rg(), "member.family.manage", "FARFADETS")).toBe(true);
   });
 
-  it("un RG aussi CHEF n'est pas réduit à sa branche (#150)", () => {
+  it("un RG aussi CHEF n'est pas réduit à sa branche sur ses droits de RG (#150)", () => {
     const rgChef = rg(["CHEF"], "SCOUTS");
     expect(canActOnUnit(rgChef, "event.manage", "PIONNIERS")).toBe(true);
-    expect(canActOnUnit(rgChef, "pedago.manage", "PIONNIERS")).toBe(true);
     expect(inUnitScope(rgChef, "PIONNIERS")).toBe(true);
+  });
+
+  it("un RG aussi CHEF n'a le pédagogique que sur SA branche, comme un chef", () => {
+    const rgChef = rg(["CHEF"], "SCOUTS");
+    for (const action of ["pedago.manage", "pedago.referential"] as const) {
+      expect(canActOnUnit(rgChef, action, "SCOUTS")).toBe(true);
+      expect(canActOnUnit(rgChef, action, "PIONNIERS")).toBe(false);
+      expect(canActOnUnit(rgChef, action, null)).toBe(false);
+    }
+    expect(canActOnUnit(rg(["CHEF"], null), "pedago.manage", "SCOUTS")).toBe(false);
   });
 
   it("un RG aussi TRÉSORIER cumule sans rien perdre", () => {

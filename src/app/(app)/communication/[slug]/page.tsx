@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can } from "@/lib/permissions";
 import { canWriteChannel } from "@/modules/communication/access";
 import { loadPolls } from "@/modules/communication/poll-actions";
 import {
@@ -38,11 +38,8 @@ export default async function ChannelPage({ params }: PageProps) {
     }),
   ]);
 
-  const roles = effectiveRoles(user);
-  // Même règle que `togglePin` / `closePoll` : chefs, RG (#173) et ADMIN.
-  const isStaff = roles.some(
-    (r) => r === "ADMIN" || r === "RESPONSABLE_GROUPE" || r === "CHEF",
-  );
+  // Même règle que `togglePin` / `closePoll`.
+  const isStaff = can(user, "channel.moderate");
   // Même règle que `deleteMessage` : le message d'un autre (RG, ADMIN).
   const canManageAny = can(user, "message.manage_any");
   const canWrite = canWriteChannel(user, channel);

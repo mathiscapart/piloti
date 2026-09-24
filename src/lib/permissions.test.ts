@@ -684,3 +684,17 @@ describe("canManagePlace — créateur, RG ou admin", () => {
     ).toBe(false);
   });
 });
+
+// Épingler un message, clore le sondage d'un autre : chefs, RG (#173), ADMIN.
+describe("can — channel.moderate", () => {
+  it.each([["CHEF"], ["RESPONSABLE_GROUPE"], ["ADMIN"]])("autorise %s", (role) => {
+    expect(can({ role, roles: [role], status: "ACTIVE" }, "channel.moderate")).toBe(true);
+  });
+
+  it.each([["PARENT"], ["SCOUT"], ["TRESORIER"], ["SECRETAIRE"], ["RESPONSABLE_MATERIEL"]])(
+    "refuse %s",
+    (role) => {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "channel.moderate")).toBe(false);
+    },
+  );
+});

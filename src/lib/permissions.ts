@@ -325,7 +325,7 @@ const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
 
 /**
  * Périmètre d'unité pour UNE action donnée : « ce compte peut-il faire cette
- * action sur cette branche ? ». Combine `can()` et `inUnitScope()`, en tenant
+ * action sur cette branche ? ». Combine `can()` et une borne d'unité, en tenant
  * compte du rôle par lequel le droit arrive.
  *
  * La nuance est indispensable dès qu'une action est partagée entre un rôle

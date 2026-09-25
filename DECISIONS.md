@@ -790,3 +790,18 @@ Deux défauts laissés par #97.
 - **Notifications** (précisé par le responsable le 2026-09-24) : le RG est prévenu de ce qu'il peut traiter. Les destinataires d'une nouvelle note de frais ou d'un ticket de caisse, et ceux d'un prêt en retard, ne sont plus une liste de rôles écrite en dur mais dérivés de la matrice : `can(u, "expense.manage")` et `can(u, "loan.return.validate")`. Une future évolution des droits met ainsi à jour les destinataires. Il recevait déjà les signalements de modération. Les chefs de la branche restent seuls prévenus d'une étape à confirmer (le pédagogique n'est pas à lui). Aucune notification n'existe aujourd'hui, pour personne, sur un don proposé, un incident signalé ou une inscription en attente.
 - Les boutons signalés « à tort » pour le compte `rg` dans #109 (prêts, stock, NFC) deviennent légitimes.
 - Le RG n'a aucune action propre : il emprunte les Server Actions existantes, qui tracent par `withAudit()` avec lui comme acteur. Exceptions préexistantes, communes à tous les rôles : épingler un message et clore un sondage ne sont pas tracés (volume de messagerie, cf. `communication/actions.ts`).
+
+## D-043 — Versions des images Docker épinglées dans le `.env`
+
+**Contexte** : les versions des images étaient écrites en dur, et de façon flottante pour Node (`node:22-alpine` dans le `Dockerfile`, `traefik:v3.6` et `cloudflare/cloudflared:2025.4.0` dans les trois fichiers compose). Un rebuild pouvait changer d'image sans commit, et monter une version imposait de modifier jusqu'à cinq endroits. cloudflared avait ainsi dix-sept mois de retard.
+
+**Choix** (2026-09-24) :
+- Trois variables, `NODE_IMAGE_TAG`, `TRAEFIK_IMAGE_TAG` et `CLOUDFLARED_IMAGE_TAG`, lues par `docker-compose.yml`, `docker-compose.staging.yml` et `docker-compose.dev.yml`. Node passe par un `ARG` du `Dockerfile`, transmis par `build.args`.
+- Versions **exactes** (`22.23.3-alpine3.24`, `v3.7.13`, `2026.9.3`) : un rebuild redonne la même image.
+- Variables **obligatoires** (`${VAR:?…}`, comme `BETTER_AUTH_SECRET`), sans valeur par défaut dans les compose : le `.env` est la seule source de vérité, et un oubli arrête `docker compose` avant tout build. Les valeurs de référence vivent dans `.env.example`.
+
+**Conséquences** :
+- Chaque `.env.production` et `.env.staging` des répertoires de déploiement doit recevoir les trois lignes avant le prochain `deploy.ps1`, sinon le déploiement s'arrête (sans rien casser).
+- Monter une image = changer une ligne dans le `.env` de l'environnement, puis redéployer. Mettre aussi à jour `.env.example` pour que le dépôt reflète la version de référence.
+- Le `ARG` du `Dockerfile` garde un défaut, utile seulement pour un `docker build` lancé à la main.
+- `scripts/backup.ps1` utilise encore `alpine:3.21` en dur (image outil, hors compose).

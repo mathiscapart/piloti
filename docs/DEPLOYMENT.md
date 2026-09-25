@@ -139,6 +139,7 @@ Noms de variables imposés par `docker-compose.staging.yml` (préfixe `STAGING_`
 | `STAGING_RESEND_API_KEY` / `STAGING_RESEND_FROM_EMAIL` | Optionnels. Si vides, le flux « mot de passe oublié » est désactivé en staging |
 | `STAGING_VAPID_PUBLIC_KEY` / `STAGING_VAPID_PRIVATE_KEY` / `STAGING_VAPID_SUBJECT` | Optionnels. Générer avec `npx web-push generate-vapid-keys`, des clés dédiées au staging |
 | `STAGING_AUDIT_RETENTION_YEARS` | Optionnel. Même rôle que `AUDIT_RETENTION_YEARS` en prod (vide = 10 ans) |
+| `NODE_IMAGE_TAG` / `TRAEFIK_IMAGE_TAG` / `CLOUDFLARED_IMAGE_TAG` | **Obligatoires**. Versions exactes des images Docker (valeurs de référence dans `.env.example`, D-043). Sans elles, `docker compose` s'arrête avant tout build  Mêmes noms qu'en prod, sans préfixe |
 
 **Ne jamais** réutiliser une valeur de production pour l'une de ces
 variables — l'isolation staging/prod (RGPD, sécurité) en dépend directement.
@@ -152,6 +153,7 @@ manuellement) :
 | Variable | Contenu |
 |---|---|
 | `CLOUDFLARE_TUNNEL_TOKEN` | Token du tunnel Cloudflare de prod (existant, inchangé) |
+| `NODE_IMAGE_TAG` / `TRAEFIK_IMAGE_TAG` / `CLOUDFLARED_IMAGE_TAG` | **Obligatoires**. Versions exactes des images Docker (valeurs de référence dans `.env.example`, D-043). Sans elles, `docker compose` s'arrête avant tout build |
 | `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` | Existants, inchangés |
 | `TRAEFIK_DOMAIN` | Domaine public de prod, existant, inchangé |
 | `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | Optionnels, existants |

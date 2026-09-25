@@ -23,6 +23,9 @@ interface UserAccountFormProps {
     canLogin: boolean;
     birthDate: string | null;
   };
+  // Modifier l'email donne l'accès au compte (« mot de passe oublié ») :
+  // ADMIN seul (`user.email.set`). Sinon le champ est affiché en lecture seule.
+  canEditEmail: boolean;
 }
 
 // US-CM-01 (évolution) — édition complète d'un compte par l'admin/secrétaire.
@@ -32,7 +35,7 @@ interface UserAccountFormProps {
 // Reste sur la page après l'enregistrement (point central de gestion du
 // compte, cf. section "Gestion du compte" plus bas) plutôt que de renvoyer
 // vers la liste.
-export function UserAccountForm({ user }: UserAccountFormProps) {
+export function UserAccountForm({ user, canEditEmail }: UserAccountFormProps) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(
     updateUserAccount,
@@ -80,9 +83,11 @@ export function UserAccountForm({ user }: UserAccountFormProps) {
         <p className="rounded-md border border-forest/30 bg-forest-soft px-3 py-2 text-sm text-forest-ink">
           Ce compte n&apos;a pas de connexion propre (compte enfant, cf.
           US-CM-01).{" "}
-          {canEnableLogin(user.birthDate)
-            ? "Renseigner une vraie adresse email ici rendra ce compte connectable."
-            : "Ce jeune a moins de 15 ans : son compte reste géré par un parent, il ne peut pas devenir connectable."}
+          {!canEnableLogin(user.birthDate)
+            ? "Ce jeune a moins de 15 ans : son compte reste géré par un parent, il ne peut pas devenir connectable."
+            : canEditEmail
+              ? "Renseigner une vraie adresse email ici rendra ce compte connectable."
+              : "Pour le rendre connectable, l'administrateur doit lui attribuer une vraie adresse email."}
         </p>
       ) : null}
 
@@ -94,7 +99,15 @@ export function UserAccountForm({ user }: UserAccountFormProps) {
           type="email"
           defaultValue={user.email}
           required
+          readOnly={!canEditEmail}
+          aria-describedby={canEditEmail ? undefined : "email-hint"}
         />
+        {canEditEmail ? null : (
+          <p id="email-hint" className="text-xs text-trail">
+            Seul l&apos;administrateur peut modifier l&apos;adresse email d&apos;un
+            compte.
+          </p>
+        )}
       </div>
 
       <div className="space-y-1.5">

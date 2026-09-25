@@ -867,6 +867,18 @@ export async function updateUserAccount(
     where: { id: userId },
     select: { canLogin: true, birthDate: true, email: true },
   });
+  // Changer l'email d'un compte, c'est pouvoir s'y connecter via « mot de passe
+  // oublié » : réservé à l'ADMIN, comme user.password.set. Aucun TOCTOU à
+  // craindre : seul l'ADMIN peut modifier cet email entre-temps.
+  if (
+    targetBeforeUpdate &&
+    targetBeforeUpdate.email.toLowerCase() !== email &&
+    !can(actor, "user.email.set")
+  ) {
+    return {
+      error: "Seul l'administrateur peut modifier l'adresse email d'un compte.",
+    };
+  }
   if (
     targetBeforeUpdate?.canLogin === false &&
     // #149 — sans tenir compte de la casse : un email stocké avant la mise en

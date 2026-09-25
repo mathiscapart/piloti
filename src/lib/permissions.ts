@@ -53,6 +53,7 @@ export const ACTIONS = [
   "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "user.password.set", // définir le mot de passe d'un compte (ADMIN seul, #173)
+  "user.email.set", // modifier l'email d'un compte (ADMIN seul)
   "user.delete", // supprimer (anonymiser) un compte (ADMIN seul, #173)
   "member.view",
   "member.family.manage", // rattachement parent ↔ jeune (CHEF, RG, SEC)
@@ -167,6 +168,10 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // #173 — se connecter à la place de quelqu'un ou effacer un compte sont
   // réservés à l'ADMIN, secrétaire et RG compris (décision du 2026-09-24).
   "user.password.set": [],
+  // Changer l'email d'un compte donne l'accès au compte : « mot de passe
+  // oublié » envoie le lien à la nouvelle adresse. Même règle que
+  // user.password.set, sinon celle-ci se contourne.
+  "user.email.set": [],
   "user.delete": [],
   "member.view": [CHEF, RG, SEC, TRES],
   // Rattachement familial parent ↔ jeune. Permission DÉDIÉE, volontairement

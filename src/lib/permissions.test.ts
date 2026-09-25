@@ -569,6 +569,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     "pedago.manage",
     "pedago.referential",
     "user.password.set",
+    "user.email.set",
     "user.delete",
     "message.edit_any",
   ];
@@ -727,8 +728,14 @@ describe("can — channel.moderate", () => {
 
 // #173 — définir le mot de passe d'un compte et supprimer un compte : ADMIN seul
 // (décision du 2026-09-24). La SECRÉTAIRE et le RG gardent le reste de user.manage.
-describe("can — user.password.set / user.delete (ADMIN seul)", () => {
-  it.each([["user.password.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
+// Changer l'email d'un compte revient à pouvoir s'y connecter (« mot de passe
+// oublié » vers la nouvelle adresse) : même règle que user.password.set.
+describe("can — user.password.set / user.email.set / user.delete (ADMIN seul)", () => {
+  it("user.email.set est une action déclarée de la matrice", () => {
+    expect(ACTIONS).toContain("user.email.set");
+  });
+
+  it.each([["user.password.set"], ["user.email.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
     expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, action)).toBe(true);
     for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE", "CHEF", "TRESORIER"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, action)).toBe(false);

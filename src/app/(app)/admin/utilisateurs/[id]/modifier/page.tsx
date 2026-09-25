@@ -109,6 +109,7 @@ export default async function EditUserAccountPage({ params }: PageProps) {
           canLogin: target.canLogin,
           birthDate: toDateInput(target.birthDate),
         }}
+        canEditEmail={can(currentUser, "user.email.set")}
       />
 
       <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">

@@ -867,6 +867,22 @@ export async function updateUserAccount(
     where: { id: userId },
     select: { canLogin: true, birthDate: true, email: true },
   });
+  // Changer l'email d'un compte, c'est pouvoir s'y connecter via « mot de passe
+  // oublié » : réservé à l'ADMIN, comme user.password.set. Ce refus ne sert
+  // qu'au message ; la garantie est dans la transaction, qui n'écrit l'email
+  // que pour l'ADMIN.
+  if (
+    targetBeforeUpdate &&
+    targetBeforeUpdate.email.toLowerCase() !== email &&
+    !can(actor, "user.email.set")
+  ) {
+    return {
+      // Deux causes possibles : email modifié dans le formulaire, ou page
+      // ouverte avant un changement d'email fait entre-temps par l'ADMIN.
+      error:
+        "Seul l'administrateur peut modifier l'adresse email d'un compte. Si elle vient de changer, rechargez la page.",
+    };
+  }
   if (
     targetBeforeUpdate?.canLogin === false &&
     // #149 — sans tenir compte de la casse : un email stocké avant la mise en
@@ -890,7 +906,11 @@ export async function updateUserAccount(
         });
         if (!target) throw new Error("Utilisateur introuvable.");
 
-        const emailChanged = target.email !== email;
+        // Sans user.email.set, on garde l'email relu ici plutôt que celui du
+        // formulaire : un enregistrement concurrent n'écrase pas un changement
+        // fait entre-temps par l'ADMIN.
+        const nextEmail = can(actor, "user.email.set") ? email : target.email;
+        const emailChanged = target.email !== nextEmail;
         // US-CM-01 — un compte enfant devient connectable dès qu'on lui
         // renseigne une vraie adresse (qui ne correspond plus au pattern
         // placeholder), sans case à cocher séparée — mais seulement si l'âge
@@ -900,7 +920,7 @@ export async function updateUserAccount(
         // connexion d'un compte rajeuni entre-temps (TOCTOU).
         const canLoginEnabled =
           target.canLogin === false &&
-          !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
+          !nextEmail.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
           canEnableLogin(target.birthDate);
 
         return {
@@ -910,7 +930,7 @@ export async function updateUserAccount(
               firstName,
               lastName,
               name: `${firstName} ${lastName}`,
-              email,
+              email: nextEmail,
               phone,
               ...(emailChanged ? { emailVerified: false } : {}),
               ...(canLoginEnabled ? { canLogin: true } : {}),

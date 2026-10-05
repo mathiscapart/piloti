@@ -376,19 +376,29 @@ export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boo
   return canActOnUnit(user, "pedago.manage", jeuneUnit);
 }
 
+// Adresse provisoire d'un compte enfant, qui n'a pas d'email réel
+// (createChildAccount). Domaine réservé (RFC 2606) : jamais délivrable.
+export const PLACEHOLDER_EMAIL_SUFFIX = "@piloti.invalid";
+
 /**
- * Modifier l'email d'un compte. Sur un compte qui se connecte, c'est pouvoir
- * s'y connecter à sa place (« mot de passe oublié ») : ADMIN seul
- * (`user.email.set`). Un compte sans connexion (compte enfant) peut recevoir
- * sa première adresse de qui gère les comptes (`user.manage`) ; l'appelant
- * prévient alors les parents rattachés.
+ * Modifier l'email d'un compte. Sur un compte qui a une adresse réelle, c'est
+ * pouvoir s'y connecter à sa place (« mot de passe oublié ») : ADMIN seul
+ * (`user.email.set`). Un compte enfant sans connexion peut recevoir sa
+ * PREMIÈRE adresse de qui gère les comptes (`user.manage`) ; l'appelant
+ * prévient alors les parents rattachés. Exiger l'adresse provisoire, et pas
+ * seulement canLogin=false : retirer ses rôles à un adulte puis lui donner une
+ * date de moins de 15 ans le passe en canLogin=false sans changer son adresse.
  */
 export function canChangeAccountEmail(
   user: AuthCtx,
-  target: { canLogin: boolean },
+  target: { canLogin: boolean; email: string },
 ): boolean {
   if (can(user, "user.email.set")) return true;
-  return target.canLogin === false && can(user, "user.manage");
+  return (
+    target.canLogin === false &&
+    target.email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
+    can(user, "user.manage")
+  );
 }
 
 /**

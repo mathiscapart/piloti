@@ -16,7 +16,13 @@ import { assignableRolesForBirthDate, birthDateSchema, canCreateChildAccount, ca
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
-import { can, canAssignRole, canChangeAccountEmail, type Action } from "@/lib/permissions";
+import {
+  can,
+  canAssignRole,
+  canChangeAccountEmail,
+  PLACEHOLDER_EMAIL_SUFFIX,
+  type Action,
+} from "@/lib/permissions";
 import { notify } from "@/modules/notifications/notify";
 import { ROLE_LABEL, ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
@@ -811,8 +817,6 @@ export async function changeUserPassword(
   return { error: null };
 }
 
-const PLACEHOLDER_EMAIL_SUFFIX = "@piloti.invalid";
-
 // US-CM-01 (évolution) / #122 — édition complète d'un compte par
 // l'admin/secrétaire. Cas d'usage clé : un compte enfant (canLogin: false)
 // grandit → on lui renseigne une vraie adresse email ici, ce qui bascule
@@ -880,7 +884,7 @@ export async function updateUserAccount(
       // Deux causes possibles : email modifié dans le formulaire, ou page
       // ouverte avant un changement d'email fait entre-temps par l'ADMIN.
       error:
-        "Seul l'administrateur peut modifier l'adresse email d'un compte qui se connecte. Si elle vient de changer, rechargez la page.",
+        "Seul l'administrateur peut modifier une adresse email déjà attribuée. Si elle vient de changer, rechargez la page.",
     };
   }
   if (
@@ -910,7 +914,9 @@ export async function updateUserAccount(
         // formulaire : un enregistrement concurrent n'écrase pas un changement
         // fait entre-temps par l'ADMIN.
         const nextEmail = canChangeAccountEmail(actor, target) ? email : target.email;
-        const emailChanged = target.email !== nextEmail;
+        // #149 — sans tenir compte de la casse : un email stocké avant la mise en
+        // minuscules ne doit pas déclencher audit et alerte sans vrai changement.
+        const emailChanged = target.email.toLowerCase() !== nextEmail.toLowerCase();
         // US-CM-01 — un compte enfant devient connectable dès qu'on lui
         // renseigne une vraie adresse (qui ne correspond plus au pattern
         // placeholder), sans case à cocher séparée — mais seulement si l'âge

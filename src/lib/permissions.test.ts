@@ -769,8 +769,8 @@ describe("can — message.edit_any (ADMIN seul)", () => {
 // (compte enfant) peut recevoir sa première adresse de qui gère les comptes.
 describe("canChangeAccountEmail", () => {
   const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
-  const connectable = { canLogin: true };
-  const childAccount = { canLogin: false };
+  const connectable = { canLogin: true, email: "adulte@example.fr" };
+  const childAccount = { canLogin: false, email: "enfant-abc@piloti.invalid" };
 
   it("ADMIN : tout compte", () => {
     expect(canChangeAccountEmail(u("ADMIN"), connectable)).toBe(true);
@@ -786,6 +786,16 @@ describe("canChangeAccountEmail", () => {
     expect(canChangeAccountEmail(u(role), childAccount)).toBe(false);
     expect(canChangeAccountEmail(u(role), connectable)).toBe(false);
   });
+
+  // Revue : retirer les rôles d'un adulte puis lui donner une date de moins de
+  // 15 ans le passe en canLogin=false sans toucher à son adresse réelle. Seule
+  // l'adresse provisoire d'un compte enfant peut être remplacée.
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])(
+    "%s : refusé sur un compte sans connexion qui a déjà une adresse réelle",
+    (role) => {
+      expect(canChangeAccountEmail(u(role), { canLogin: false, email: "adulte@example.fr" })).toBe(false);
+    },
+  );
 
   it("un compte suspendu ne change rien", () => {
     const suspended = { id: "sec-1", role: "SECRETAIRE", roles: ["SECRETAIRE"], status: "SUSPENDED" };

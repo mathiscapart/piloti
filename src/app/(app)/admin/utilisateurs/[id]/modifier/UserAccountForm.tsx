@@ -23,9 +23,9 @@ interface UserAccountFormProps {
     canLogin: boolean;
     birthDate: string | null;
   };
-  // Modifier l'email d'un compte qui se connecte donne l'accès au compte
-  // (« mot de passe oublié ») : canChangeAccountEmail. Sinon le champ est
-  // affiché en lecture seule.
+  // Remplacer une adresse réelle donne l'accès au compte (« mot de passe
+  // oublié ») : canChangeAccountEmail. Sinon le champ est affiché en lecture
+  // seule.
   canEditEmail: boolean;
 }
 
@@ -103,8 +103,8 @@ export function UserAccountForm({ user, canEditEmail }: UserAccountFormProps) {
         />
         {canEditEmail ? null : (
           <p id="email-hint" className="text-xs text-trail">
-            Seul l&apos;administrateur peut modifier l&apos;adresse email d&apos;un
-            compte qui se connecte.
+            Seul l&apos;administrateur peut modifier une adresse email déjà
+            attribuée.
           </p>
         )}
       </div>

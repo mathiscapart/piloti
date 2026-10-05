@@ -90,6 +90,48 @@ on amende, on n'efface pas. Commits en **conventional commits, en français**, s
 référence de user story quand elle existe (`feat(finances): US-F06 — …`). Travail sur branche
 `feat/<sujet>`, fusion dans `main`. Pas de push/déploiement sans validation humaine explicite.
 
+### Sources de travail
+
+- **Bugs et fixes** → GitHub Issues. La PR ferme l'issue (`Closes #N`).
+- **Features** → backlog Notion (user stories `US-XX`). La PR cite l'US et le lien de la page Notion.
+
+### Modèle de PR (obligatoire)
+
+Toute PR, ouverte par un humain ou un agent, suit ce modèle. Ce corps sert aussi de récap
+envoyé pour relecture : il doit se lire **sans ouvrir le diff**. Une section sans objet porte
+« Sans objet », jamais une case vide. Aucune preuve inventée : ce qui n'a pas été exécuté est écrit
+comme tel.
+
+```markdown
+## Origine
+Closes #N — ou — US-XX : <lien Notion>
+
+## Ce qui change
+<2 à 5 puces, du point de vue de l'utilisateur de Piloti, pas des fichiers>
+
+## Pourquoi
+<le problème ou le besoin, en une ou deux phrases>
+
+## Preuves
+- `pnpm lint` : ✅ / ❌ <extrait si ❌>
+- `pnpm typecheck` : ✅ / ❌
+- `pnpm test` : ✅ N tests / ❌ — tests ajoutés : <fichiers, ou « Sans objet »>
+- Parcours réel : <rôle utilisé, URL, étapes> + captures — ou « non exécuté : <raison> »
+
+## Invariants
+- [ ] Mutations sous `withAudit()`
+- [ ] Actions/pages sensibles gardées par `can(user, "…")`
+- [ ] Migration Prisma : <nom> / Sans objet
+- [ ] CSP Traefik mise à jour si nouveau domaine externe / Sans objet
+- [ ] Données de mineurs / RGPD touchées : <comment> / Sans objet
+
+## Décisions prises
+<choix non évidents faits en route ; entrée `DECISIONS.md` si structurant — ou « Aucune »>
+
+## Risques et points à vérifier
+<ce que le relecteur doit regarder en priorité, régressions possibles, hors périmètre laissé de côté>
+```
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

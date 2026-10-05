@@ -1,0 +1,6 @@
+# Configuration Orca du dépôt — https://www.onorca.dev/docs/model/worktrees
+# Chaque worktree reçoit ses dépendances, sa base SQLite et son port
+# (cf. scripts/worktree-setup.sh).
+scripts:
+  setup: |
+    bash scripts/worktree-setup.sh

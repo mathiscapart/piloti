@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import { db } from "@/lib/db";
 import { assignableRolesForBirthDate } from "@/lib/legal/age";
-import { can, canAssignRole } from "@/lib/permissions";
+import { can, canAssignRole, canChangeAccountEmail } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import {
   BirthDateEditor,
@@ -109,7 +109,7 @@ export default async function EditUserAccountPage({ params }: PageProps) {
           canLogin: target.canLogin,
           birthDate: toDateInput(target.birthDate),
         }}
-        canEditEmail={can(currentUser, "user.email.set")}
+        canEditEmail={canChangeAccountEmail(currentUser, target)}
       />
 
       <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">

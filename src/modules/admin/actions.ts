@@ -16,7 +16,7 @@ import { assignableRolesForBirthDate, birthDateSchema, canCreateChildAccount, ca
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
-import { can, canAssignRole, type Action } from "@/lib/permissions";
+import { can, canAssignRole, canChangeAccountEmail, type Action } from "@/lib/permissions";
 import { notify } from "@/modules/notifications/notify";
 import { ROLE_LABEL, ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
@@ -867,20 +867,20 @@ export async function updateUserAccount(
     where: { id: userId },
     select: { canLogin: true, birthDate: true, email: true },
   });
-  // Changer l'email d'un compte, c'est pouvoir s'y connecter via « mot de passe
-  // oublié » : réservé à l'ADMIN, comme user.password.set. Ce refus ne sert
-  // qu'au message ; la garantie est dans la transaction, qui n'écrit l'email
-  // que pour l'ADMIN.
+  // Changer l'email d'un compte qui se connecte, c'est pouvoir s'y connecter
+  // via « mot de passe oublié » : ADMIN seul (canChangeAccountEmail). Ce refus
+  // ne sert qu'au message ; la garantie est dans la transaction, qui n'écrit
+  // l'email que si la règle l'autorise.
   if (
     targetBeforeUpdate &&
     targetBeforeUpdate.email.toLowerCase() !== email &&
-    !can(actor, "user.email.set")
+    !canChangeAccountEmail(actor, targetBeforeUpdate)
   ) {
     return {
       // Deux causes possibles : email modifié dans le formulaire, ou page
       // ouverte avant un changement d'email fait entre-temps par l'ADMIN.
       error:
-        "Seul l'administrateur peut modifier l'adresse email d'un compte. Si elle vient de changer, rechargez la page.",
+        "Seul l'administrateur peut modifier l'adresse email d'un compte qui se connecte. Si elle vient de changer, rechargez la page.",
     };
   }
   if (
@@ -898,7 +898,7 @@ export async function updateUserAccount(
   }
 
   try {
-    await withAudit(
+    const result = await withAudit(
       async (tx) => {
         const target = await tx.user.findUnique({
           where: { id: userId },
@@ -906,10 +906,10 @@ export async function updateUserAccount(
         });
         if (!target) throw new Error("Utilisateur introuvable.");
 
-        // Sans user.email.set, on garde l'email relu ici plutôt que celui du
+        // Sans le droit, on garde l'email relu ici plutôt que celui du
         // formulaire : un enregistrement concurrent n'écrase pas un changement
         // fait entre-temps par l'ADMIN.
-        const nextEmail = can(actor, "user.email.set") ? email : target.email;
+        const nextEmail = canChangeAccountEmail(actor, target) ? email : target.email;
         const emailChanged = target.email !== nextEmail;
         // US-CM-01 — un compte enfant devient connectable dès qu'on lui
         // renseigne une vraie adresse (qui ne correspond plus au pattern
@@ -937,18 +937,55 @@ export async function updateUserAccount(
             },
           }),
           canLoginEnabled,
+          emailChanged,
+          previousEmail: target.email,
+          nextEmail,
+          wasChildAccount: target.canLogin === false,
         };
       },
-      ({ canLoginEnabled }) => ({
+      ({ canLoginEnabled, emailChanged, previousEmail, nextEmail }) => ({
         action: "USER_ACCOUNT_UPDATED",
         userId: actor.id,
         metadata: {
           targetUserId: userId,
           fields: ["firstName", "lastName", "email", "phone"],
           canLoginEnabled,
+          // Trace qui a mis quelle adresse : seule preuve d'un détournement.
+          // Effacées à l'anonymisation (audit-redaction.ts, liste blanche).
+          ...(emailChanged ? { previousEmail, newEmail: nextEmail } : {}),
         },
       }),
     );
+    // Compte enfant qui reçoit une adresse réelle : les parents rattachés sont
+    // prévenus, seule parade si quelqu'un y met la sienne pour s'y connecter.
+    if (
+      result.emailChanged &&
+      result.wasChildAccount &&
+      !result.nextEmail.endsWith(PLACEHOLDER_EMAIL_SUFFIX)
+    ) {
+      const parents = await db.familyLink.findMany({
+        where: { childId: userId },
+        select: { parentId: true },
+      });
+      const newEmail = result.nextEmail;
+      after(() =>
+        Promise.all(
+          parents.map(({ parentId }) =>
+            notify({
+              userId: parentId,
+              type: "SECURITY_ALERT",
+              title: `Adresse de connexion ajoutée au compte de ${firstName}`,
+              body:
+                `L'adresse ${newEmail} a été attribuée au compte de ${firstName} ${lastName} ` +
+                "dans Piloti. Ce compte peut désormais se connecter avec cette adresse. " +
+                "Si ce n'était pas prévu, prévenez un administrateur du groupe.",
+              link: "/compte",
+              force: true,
+            }),
+          ),
+        ),
+      );
+    }
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { error: "Cette adresse email est déjà utilisée." };

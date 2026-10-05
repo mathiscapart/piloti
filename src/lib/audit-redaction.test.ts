@@ -84,6 +84,25 @@ describe("redactAuditMetadata", () => {
     }
   });
 
+  it("retire les adresses email d'un changement d'email (USER_ACCOUNT_UPDATED)", () => {
+    const out = redactAuditMetadata(
+      JSON.stringify({
+        targetUserId: USER_ID,
+        fields: ["firstName", "lastName", "email", "phone"],
+        canLoginEnabled: true,
+        previousEmail: "ancienne@example.invalid",
+        newEmail: "nouvelle@example.invalid",
+      }),
+      USER_ID,
+    );
+    expect(JSON.parse(out!)).toEqual({
+      targetUserId: USER_ID,
+      fields: ["firstName", "lastName", "email", "phone"],
+      canLoginEnabled: true,
+      redacted: true,
+    });
+  });
+
   it("conserve la trace de la purge automatique", () => {
     const raw = JSON.stringify({
       targetUserId: USER_ID,

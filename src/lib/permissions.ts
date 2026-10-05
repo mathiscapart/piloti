@@ -53,7 +53,7 @@ export const ACTIONS = [
   "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "user.password.set", // définir le mot de passe d'un compte (ADMIN seul, #173)
-  "user.email.set", // modifier l'email d'un compte (ADMIN seul)
+  "user.email.set", // modifier l'email d'un compte qui se connecte (ADMIN seul)
   "user.delete", // supprimer (anonymiser) un compte (ADMIN seul, #173)
   "member.view",
   "member.family.manage", // rattachement parent ↔ jeune (CHEF, RG, SEC)
@@ -168,9 +168,10 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // #173 — se connecter à la place de quelqu'un ou effacer un compte sont
   // réservés à l'ADMIN, secrétaire et RG compris (décision du 2026-09-24).
   "user.password.set": [],
-  // Changer l'email d'un compte donne l'accès au compte : « mot de passe
-  // oublié » envoie le lien à la nouvelle adresse. Même règle que
-  // user.password.set, sinon celle-ci se contourne.
+  // Changer l'email d'un compte qui se connecte donne l'accès au compte :
+  // « mot de passe oublié » envoie le lien à la nouvelle adresse. Même règle
+  // que user.password.set, sinon celle-ci se contourne. Les comptes sans
+  // connexion suivent canChangeAccountEmail.
   "user.email.set": [],
   "user.delete": [],
   "member.view": [CHEF, RG, SEC, TRES],
@@ -373,6 +374,21 @@ export function canActOnUnit(
  */
 export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
   return canActOnUnit(user, "pedago.manage", jeuneUnit);
+}
+
+/**
+ * Modifier l'email d'un compte. Sur un compte qui se connecte, c'est pouvoir
+ * s'y connecter à sa place (« mot de passe oublié ») : ADMIN seul
+ * (`user.email.set`). Un compte sans connexion (compte enfant) peut recevoir
+ * sa première adresse de qui gère les comptes (`user.manage`) ; l'appelant
+ * prévient alors les parents rattachés.
+ */
+export function canChangeAccountEmail(
+  user: AuthCtx,
+  target: { canLogin: boolean },
+): boolean {
+  if (can(user, "user.email.set")) return true;
+  return target.canLogin === false && can(user, "user.manage");
 }
 
 /**

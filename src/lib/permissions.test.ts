@@ -13,6 +13,7 @@ import {
   canAccessAdminZone,
   canActOnUnit,
   canAssignRole,
+  canChangeAccountEmail,
   canManagePlace,
   canReadPedagoNotes,
   canReviewExpense,
@@ -760,5 +761,34 @@ describe("can — message.edit_any (ADMIN seul)", () => {
     for (const role of ["CHEF", "SECRETAIRE", "PARENT", "SCOUT"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "message.edit_any")).toBe(false);
     }
+  });
+});
+
+// Changer l'email d'un compte qui se connecte, c'est pouvoir s'y connecter à sa
+// place (« mot de passe oublié ») : ADMIN seul. Un compte sans connexion
+// (compte enfant) peut recevoir sa première adresse de qui gère les comptes.
+describe("canChangeAccountEmail", () => {
+  const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
+  const connectable = { canLogin: true };
+  const childAccount = { canLogin: false };
+
+  it("ADMIN : tout compte", () => {
+    expect(canChangeAccountEmail(u("ADMIN"), connectable)).toBe(true);
+    expect(canChangeAccountEmail(u("ADMIN"), childAccount)).toBe(true);
+  });
+
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : compte sans connexion seulement", (role) => {
+    expect(canChangeAccountEmail(u(role), childAccount)).toBe(true);
+    expect(canChangeAccountEmail(u(role), connectable)).toBe(false);
+  });
+
+  it.each(["CHEF", "TRESORIER", "PARENT"])("%s : jamais", (role) => {
+    expect(canChangeAccountEmail(u(role), childAccount)).toBe(false);
+    expect(canChangeAccountEmail(u(role), connectable)).toBe(false);
+  });
+
+  it("un compte suspendu ne change rien", () => {
+    const suspended = { id: "sec-1", role: "SECRETAIRE", roles: ["SECRETAIRE"], status: "SUSPENDED" };
+    expect(canChangeAccountEmail(suspended, childAccount)).toBe(false);
   });
 });

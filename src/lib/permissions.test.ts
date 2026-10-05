@@ -14,6 +14,7 @@ import {
   canActOnUnit,
   canAssignRole,
   canChangeAccountEmail,
+  canSetEmailTo,
   canManagePlace,
   canReadPedagoNotes,
   canReviewExpense,
@@ -769,8 +770,8 @@ describe("can — message.edit_any (ADMIN seul)", () => {
 // (compte enfant) peut recevoir sa première adresse de qui gère les comptes.
 describe("canChangeAccountEmail", () => {
   const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
-  const connectable = { canLogin: true, email: "adulte@example.fr" };
-  const childAccount = { canLogin: false, email: "enfant-abc@piloti.invalid" };
+  const connectable = { canLogin: true, email: "adulte@example.fr", status: "ACTIVE" };
+  const childAccount = { canLogin: false, email: "enfant-abc@piloti.invalid", status: "ACTIVE" };
 
   it("ADMIN : tout compte", () => {
     expect(canChangeAccountEmail(u("ADMIN"), connectable)).toBe(true);
@@ -793,12 +794,39 @@ describe("canChangeAccountEmail", () => {
   it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])(
     "%s : refusé sur un compte sans connexion qui a déjà une adresse réelle",
     (role) => {
-      expect(canChangeAccountEmail(u(role), { canLogin: false, email: "adulte@example.fr" })).toBe(false);
+      expect(
+        canChangeAccountEmail(u(role), { canLogin: false, email: "adulte@example.fr", status: "ACTIVE" }),
+      ).toBe(false);
     },
   );
+
+  // Revue : un compte anonymisé garde canLogin=false et une adresse provisoire.
+  // Lui en donner une réelle réintroduirait de la PII dans une fiche effacée.
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : refusé sur un compte supprimé", (role) => {
+    const deleted = { canLogin: false, email: "deleted+abc@piloti.invalid", status: "DELETED" };
+    expect(canChangeAccountEmail(u(role), deleted)).toBe(false);
+    expect(canChangeAccountEmail(u("ADMIN"), deleted)).toBe(true);
+  });
 
   it("un compte suspendu ne change rien", () => {
     const suspended = { id: "sec-1", role: "SECRETAIRE", roles: ["SECRETAIRE"], status: "SUSPENDED" };
     expect(canChangeAccountEmail(suspended, childAccount)).toBe(false);
+  });
+});
+
+// Revue : poser à la main une adresse provisoire (ex. `deleted+<id>@piloti.invalid`
+// d'un autre compte) bloquerait l'anonymisation de ce compte (unicité). Aucun
+// usage légitime hors ADMIN.
+describe("canSetEmailTo", () => {
+  const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
+
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : adresse réelle oui, provisoire non", (role) => {
+    expect(canSetEmailTo(u(role), "jeune@example.fr")).toBe(true);
+    expect(canSetEmailTo(u(role), "deleted+abc@piloti.invalid")).toBe(false);
+    expect(canSetEmailTo(u(role), "enfant-xyz@piloti.invalid")).toBe(false);
+  });
+
+  it("ADMIN : toute adresse", () => {
+    expect(canSetEmailTo(u("ADMIN"), "enfant-xyz@piloti.invalid")).toBe(true);
   });
 });

@@ -20,6 +20,7 @@ import {
   can,
   canAssignRole,
   canChangeAccountEmail,
+  canSetEmailTo,
   PLACEHOLDER_EMAIL_SUFFIX,
   type Action,
 } from "@/lib/permissions";
@@ -869,7 +870,7 @@ export async function updateUserAccount(
   // relu ici avant le verrou, donc sujet à TOCTOU sur canLogin/birthDate.
   const targetBeforeUpdate = await db.user.findUnique({
     where: { id: userId },
-    select: { canLogin: true, birthDate: true, email: true },
+    select: { canLogin: true, birthDate: true, email: true, status: true },
   });
   // Changer l'email d'un compte qui se connecte, c'est pouvoir s'y connecter
   // via « mot de passe oublié » : ADMIN seul (canChangeAccountEmail). Ce refus
@@ -886,6 +887,13 @@ export async function updateUserAccount(
       error:
         "Seul l'administrateur peut modifier une adresse email déjà attribuée. Si elle vient de changer, rechargez la page.",
     };
+  }
+  if (
+    targetBeforeUpdate &&
+    targetBeforeUpdate.email.toLowerCase() !== email &&
+    !canSetEmailTo(actor, email)
+  ) {
+    return { error: "Cette adresse email est réservée à l'usage interne de Piloti." };
   }
   if (
     targetBeforeUpdate?.canLogin === false &&
@@ -906,14 +914,17 @@ export async function updateUserAccount(
       async (tx) => {
         const target = await tx.user.findUnique({
           where: { id: userId },
-          select: { canLogin: true, email: true, birthDate: true },
+          select: { canLogin: true, email: true, birthDate: true, status: true },
         });
         if (!target) throw new Error("Utilisateur introuvable.");
 
         // Sans le droit, on garde l'email relu ici plutôt que celui du
         // formulaire : un enregistrement concurrent n'écrase pas un changement
         // fait entre-temps par l'ADMIN.
-        const nextEmail = canChangeAccountEmail(actor, target) ? email : target.email;
+        const nextEmail =
+          canChangeAccountEmail(actor, target) && canSetEmailTo(actor, email)
+            ? email
+            : target.email;
         // #149 — sans tenir compte de la casse : un email stocké avant la mise en
         // minuscules ne doit pas déclencher audit et alerte sans vrai changement.
         const emailChanged = target.email.toLowerCase() !== nextEmail.toLowerCase();

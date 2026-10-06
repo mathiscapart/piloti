@@ -47,11 +47,11 @@ Ports et réseaux à viser (le principe hôte/conteneur est dans le CLAUDE.md gl
 | `pnpm dev` | `localhost:3000` | `host.docker.internal:3000` |
 | `docker-compose.dev.yml` | `localhost:4000` (publie `4000:3000`, le 3000 hôte est exclu par Windows) | `host.docker.internal:4000` |
 | `pnpm dev:worktree` (worktree Orca) | `localhost:<PORT>` — `PORT` dans `.env.local`, entre 3101 et 3199 | `host.docker.internal:<PORT>` |
+| stack prod locale | `https://piloti.mathiscapart.xyz` — aucun port publié | `--network piloti_internal` puis `http://piloti-app-1:3000` |
 
 **Worktrees Orca** : `orca.yaml` lance `scripts/worktree-setup.sh` à la création. Chaque worktree
 a ses dépendances, **sa propre base** `dev.db` seedée (mot de passe `SEED_PASSWORD` dans `.env`)
 et un port réservé. Ne jamais pointer un worktree vers la base d'un autre.
-| stack prod locale | `https://piloti.mathiscapart.xyz` — aucun port publié | `--network piloti_internal` puis `http://piloti-app-1:3000` |
 
 Le nom de service est `app` : depuis un navigateur c'est **inutilisable**, `app`
 est un TLD préchargé HSTS et Chromium force le HTTPS (`ERR_SSL_PROTOCOL_ERROR`).

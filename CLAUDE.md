@@ -93,7 +93,8 @@ interroge `context7`. Ne devine jamais une signature.
 Décisions techniques structurantes → une entrée dans `DECISIONS.md` (Contexte / Choix / Conséquences),
 on amende, on n'efface pas. Commits en **conventional commits, en français**, scope = domaine et
 référence de user story quand elle existe (`feat(finances): US-F06 — …`). Travail sur branche
-`feat/<sujet>`, fusion dans `main`. Pas de push/déploiement sans validation humaine explicite.
+`feat/<sujet>` ou `fix/<sujet>` partie de `develop`, **PR vers `develop`** — jamais vers `main`,
+qui ne reçoit que `develop` au moment de livrer. Pas de push/déploiement sans validation humaine explicite.
 
 ### Sources de travail
 

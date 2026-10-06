@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { ORG_GROUP, ORG_NAME, ORG_PRIVACY_EMAIL } from "@/lib/legal/organization";
-import { PRIVACY_VERSION } from "@/lib/legal/versions";
+import { THIRD_PARTY_NOTICE_VERSION } from "@/lib/legal/versions";
 
 export const metadata: Metadata = { title: "Information — Piloti" };
 
@@ -20,7 +20,7 @@ export default function InformationTiersPage() {
       <h1 className="text-3xl font-black text-forest">
         Information aux personnes extérieures au groupe
       </h1>
-      <p className="text-sm text-trail">Dernière mise à jour : {PRIVACY_VERSION}</p>
+      <p className="text-sm text-trail">Dernière mise à jour : {THIRD_PARTY_NOTICE_VERSION}</p>
 
       <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Pourquoi cette page</h2>

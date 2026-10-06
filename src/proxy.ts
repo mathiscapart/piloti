@@ -2,6 +2,7 @@ import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { canEnableLogin } from "@/lib/legal/age";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password"]);
 // RGPD-01 — pages légales, accessibles à tous sans compte ni base de données
@@ -77,15 +78,16 @@ export async function proxy(request: NextRequest) {
   // session valide (même si un cookie a été forgé/rejoué) : même traitement
   // qu'un statut non-ACTIVE.
   const canLogin = (session?.user as { canLogin?: boolean } | undefined)?.canLogin;
-  // SAFE-01 — date de naissance manquante. Les quatre chemins de création
-  // l'imposent (register, setup, createChildAccount, seed) : un compte ACTIVE
-  // sans date est donc une anomalie de données, pas une étape utilisateur. On
-  // refuse la session au lieu de proposer de la compléter soi-même — la date
-  // gouverne la protection des mineurs, elle ne se déclare pas en libre-service
-  // (correction par un administrateur, cf. setUserBirthDate).
-  const birthDate = (session?.user as { birthDate?: unknown } | undefined)?.birthDate;
+  // SAFE-01/#122 — date de naissance manquante ou compte de moins de 15 ans.
+  // Les quatre chemins de création imposent la date (register, setup,
+  // createChildAccount, seed) : une date absente est donc une anomalie de
+  // données. `canEnableLogin` couvre les deux cas (fail-closed sur date
+  // absente) et rattrape aussi une session déjà ouverte par un jeune devenu
+  // mineur de moins de 15 ans entre-temps (cf. setUserBirthDate).
+  const birthDate = (session?.user as { birthDate?: Date | string | null } | undefined)
+    ?.birthDate;
 
-  if (!session?.user || status !== "ACTIVE" || canLogin === false || !birthDate) {
+  if (!session?.user || status !== "ACTIVE" || canLogin === false || !canEnableLogin(birthDate)) {
     // Cookie stale, compte non-ACTIVE, compte enfant sans connexion ou profil
     // incomplet → clear + reroute
     const isPublic = PUBLIC_PATHS.has(pathname);

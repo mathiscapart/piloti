@@ -165,6 +165,13 @@ export function Step2Select({
                         {eq.totalQty > 1 ? "s" : ""} sur la période
                         {eq.location ? ` · ${eq.location}` : ""}
                       </p>
+                      {/* Issue #107 — incident Gênant / Mineur ouvert : prêt
+                          possible, mais on prévient. */}
+                      {eq.incidentWarning && !eq.disabled ? (
+                        <p className="text-xs font-bold text-earth">
+                          Incident non bloquant signalé
+                        </p>
+                      ) : null}
                     </div>
                     {eq.disabled ? (
                       <span className="rounded-full bg-stone px-2.5 py-0.5 text-xs font-bold text-earth">
@@ -172,6 +179,17 @@ export function Step2Select({
                       </span>
                     ) : null}
                   </label>
+
+                  {/* Issue #107 — lien vers l'incident qui bloque l'article. */}
+                  {eq.blockedByIncident ? (
+                    <Link
+                      href={`/stock/${eq.id}?tab=incidents`}
+                      target="_blank"
+                      className="ml-8 inline-block text-xs font-bold text-forest underline"
+                    >
+                      Voir l&apos;incident
+                    </Link>
+                  ) : null}
 
                   {/* US-30/US-32 — pour un article coché : quantité + date de
                       retour propre (défaut = date commune). */}

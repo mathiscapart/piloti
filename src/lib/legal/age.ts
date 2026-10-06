@@ -7,6 +7,8 @@
 
 import { z } from "zod";
 
+import { ROLES, YOUTH_UNITS, type Role, type Unit } from "../enums";
+
 // SAFE-01 — bornes de plausibilité. L'âge est déclaratif, donc invérifiable en
 // soi, mais rien n'obligeait la date à être crédible : une saisie à quelques
 // mois passait sans broncher, et surtout « 1900 » suffisait à un jeune pour se
@@ -126,4 +128,39 @@ export function isMinor(birthDate: Date | string | null | undefined): boolean {
 export function canUseDirectMessages(birthDate: Date | string | null | undefined): boolean {
   const age = computeAge(birthDate);
   return age !== null && age >= DIRECT_MESSAGE_MIN_AGE;
+}
+
+/**
+ * #122/#114 — ce compte peut-il se connecter lui-même ? Remplace l'ancienne
+ * règle par branche (NO_LOGIN_UNITS) : un compte de moins de 15 ans ne se
+ * connecte jamais, quelle que soit son unité. Même seuil (`MIN_LOGIN_AGE`) que
+ * `canSelfRegister` : s'inscrire seul et se connecter soi-même sont la même
+ * capacité, d'où l'alias plutôt qu'une redéfinition.
+ */
+export const canEnableLogin = canSelfRegister;
+
+/**
+ * #122/#96 — un compte enfant (créé par un parent/chef, sans connexion
+ * propre) n'a de sens que pour une branche jeune et un âge sous
+ * `MIN_LOGIN_AGE` : au-delà, la personne s'inscrit elle-même
+ * (`canSelfRegister`). Unité ou date inconnue : `false`.
+ */
+export function canCreateChildAccount(
+  birthDate: Date | string | null | undefined,
+  unit: Unit | string | null | undefined,
+): boolean {
+  if (!unit || !(YOUTH_UNITS as readonly string[]).includes(unit)) return false;
+  const age = computeAge(birthDate);
+  return age !== null && age < MIN_LOGIN_AGE;
+}
+
+/**
+ * #122 — rôles proposables à la création/modification d'un compte. Un mineur
+ * (isAdult === false, y compris date inconnue — fail-safe) ne peut recevoir
+ * que le rôle Jeune, jamais un rôle d'encadrement.
+ */
+export function assignableRolesForBirthDate(
+  birthDate: Date | string | null | undefined,
+): Role[] {
+  return isAdult(birthDate) ? [...ROLES] : ["SCOUT"];
 }

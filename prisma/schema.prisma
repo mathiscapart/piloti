@@ -41,6 +41,9 @@ model User {
   unit           String? // Unit: FARFADETS | LOUVETEAUX | SCOUTS | PIONNIERS | COMPAGNONS | ADULTES
   phone          String?
   rejectedReason String?
+  // RGPD — date de refus, sert de point de départ à la conservation de 30 j
+  // avant anonymisation automatique (cf. src/modules/admin/rejected-purge.ts).
+  rejectedAt     DateTime?
   // US-26 — profil demandé à l'inscription (ex. "PARENT") : simple indication
   // pour aider l'admin à attribuer le bon rôle à la validation. Non privilégié.
   requestedRole  String?
@@ -636,6 +639,11 @@ model CampaignPayment {
   note         String?
   recordedById String?
   createdAt    DateTime @default(now())
+  // #121 — annulation logique d'une saisie erronée : le paiement reste dans
+  // l'historique mais sort de tous les totaux.
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelReason  String?
 
   campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   user     User     @relation("CampaignPaymentUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -1060,6 +1068,11 @@ model Report {
   // à chaque lecture : un CHEF ne voit/traite que les signalements de son unité,
   // l'ADMIN voit tout. Null si l'auteur n'a pas d'unité renseignée (ex. ADULTES).
   concernedUnit String?
+  // #92 — copie du message au moment du signalement (JSON { body, authorId }),
+  // preuve de référence : l'auteur peut toujours modifier ou supprimer son
+  // message. L'auteur est un id, son nom se résout à la lecture (anonymisation).
+  // Null pour les signalements antérieurs.
+  targetSnapshot String?
 
   reporter  User  @relation("ReportReporter", fields: [reporterId], references: [id])
   moderator User? @relation("ReportModerator", fields: [moderatorId], references: [id])

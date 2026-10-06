@@ -9,10 +9,12 @@ import { db } from "@/lib/db";
 import { PAYMENT_METHODS, UNITS } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
-import type { ActionResult } from "@/lib/types";
+import type { ActionResult, PaymentActionResult } from "@/lib/types";
 import { resolveUnitAudience } from "@/modules/audience/unit-audience";
 import { notifyMany } from "@/modules/notifications/notify";
 
+import { getCampaignDetail } from "./campaigns";
+import { overpaymentCents } from "./collection";
 import { formatEuros, parseAmountToCents } from "./format";
 
 function parseDate(raw: string): Date | null {
@@ -101,14 +103,17 @@ export async function createCampaign(
   redirect("/finances/cotisations?notice=campaign-created");
 }
 
-// US-F02 — enregistrer un paiement (total ou partiel) d'un jeune.
+// US-F02 — enregistrer un paiement (total ou partiel) d'un jeune. Au-delà de
+// son reste dû, le trop-perçu doit être confirmé explicitement (#121) : un
+// parent peut régler plusieurs enfants d'un seul chèque.
 export async function recordPayment(
   campaignId: string,
   userId: string,
   amountStr: string,
   method: string,
   dateStr: string,
-): Promise<ActionResult> {
+  confirmOverpayment = false,
+): Promise<PaymentActionResult> {
   const actor = await getCurrentUser();
   if (!can(actor, "campaign.manage")) {
     return { error: "Réservé au trésorier." };
@@ -121,11 +126,18 @@ export async function recordPayment(
   }
   const paidAt = parseDate(dateStr) ?? new Date();
 
-  const [campaign, jeune] = await Promise.all([
-    db.campaign.findUnique({ where: { id: campaignId }, select: { id: true } }),
-    db.user.findUnique({ where: { id: userId }, select: { id: true } }),
-  ]);
-  if (!campaign || !jeune) return { error: "Campagne ou jeune introuvable." };
+  const row = (await getCampaignDetail(campaignId))?.rows.find(
+    (r) => r.user.id === userId,
+  );
+  if (!row) return { error: "Campagne ou jeune introuvable." };
+
+  const overpaid = overpaymentCents(row.expectedCents, row.paidCents, amountCents);
+  if (overpaid > 0 && !confirmOverpayment) {
+    return {
+      error: `Trop-perçu de ${formatEuros(overpaid)} : confirmez le montant.`,
+      overpaymentCents: overpaid,
+    };
+  }
 
   await withAudit(
     (tx) =>
@@ -142,11 +154,55 @@ export async function recordPayment(
     {
       action: "CAMPAIGN_PAYMENT_RECORDED",
       userId: actor.id,
-      metadata: { campaignId, userId, amountCents, method },
+      metadata: { campaignId, userId, amountCents, method, overpaidCents: overpaid },
     },
   );
 
   revalidatePath(`/finances/cotisations/${campaignId}`);
+  return { error: null };
+}
+
+// #121 — annuler un paiement mal saisi. Annulation logique : il reste dans
+// l'historique du jeune, avec son motif, mais sort de tous les totaux.
+export async function cancelPayment(
+  paymentId: string,
+  reason: string,
+): Promise<ActionResult> {
+  const actor = await getCurrentUser();
+  if (!can(actor, "campaign.manage")) {
+    return { error: "Réservé au trésorier." };
+  }
+
+  const motive = reason.trim();
+  if (motive.length === 0) return { error: "Motif d'annulation requis." };
+
+  const payment = await db.campaignPayment.findUnique({
+    where: { id: paymentId },
+    select: { campaignId: true, userId: true, amountCents: true, cancelledAt: true },
+  });
+  if (!payment) return { error: "Paiement introuvable." };
+  if (payment.cancelledAt) return { error: "Paiement déjà annulé." };
+
+  await withAudit(
+    (tx) =>
+      tx.campaignPayment.update({
+        where: { id: paymentId },
+        data: { cancelledAt: new Date(), cancelledById: actor.id, cancelReason: motive },
+      }),
+    {
+      action: "CAMPAIGN_PAYMENT_CANCELLED",
+      userId: actor.id,
+      metadata: {
+        paymentId,
+        campaignId: payment.campaignId,
+        userId: payment.userId,
+        amountCents: payment.amountCents,
+        reason: motive,
+      },
+    },
+  );
+
+  revalidatePath(`/finances/cotisations/${payment.campaignId}`);
   return { error: null };
 }
 

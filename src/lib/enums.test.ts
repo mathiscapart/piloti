@@ -1,30 +1,28 @@
-// Tests de src/lib/enums.ts — pour l'instant limités à `unitAllowsLogin`
-// (US-CM-01), seule fonction pure du fichier : le reste n'est que des listes
-// de constantes/labels, sans logique à verrouiller.
+// Tests de src/lib/enums.ts — pour l'instant limités à `YOUTH_UNITS` (#114) :
+// le reste n'est que des listes de constantes/labels, sans logique à
+// verrouiller. `unitAllowsLogin`/`NO_LOGIN_UNITS` sont supprimés : la règle
+// « pas de connexion sous 15 ans » ne dépend plus de la branche mais de l'âge
+// (cf. src/lib/legal/age.ts, canEnableLogin).
 
 import { describe, expect, it } from "vitest";
-import { NO_LOGIN_UNITS, unitAllowsLogin } from "./enums";
+import { UNITS, YOUTH_UNITS } from "./enums";
 
-describe("unitAllowsLogin (US-CM-01)", () => {
-  it("refuse la connexion pour les branches trop jeunes (Farfadets, Louveteaux)", () => {
-    expect(unitAllowsLogin("FARFADETS")).toBe(false);
-    expect(unitAllowsLogin("LOUVETEAUX")).toBe(false);
+describe("YOUTH_UNITS (#114)", () => {
+  it("contient toutes les branches UNITS sauf ADULTES", () => {
+    expect(YOUTH_UNITS).toEqual(UNITS.filter((unit) => unit !== "ADULTES"));
   });
 
-  it("autorise la connexion pour les autres branches", () => {
-    expect(unitAllowsLogin("SCOUTS")).toBe(true);
-    expect(unitAllowsLogin("PIONNIERS")).toBe(true);
-    expect(unitAllowsLogin("COMPAGNONS")).toBe(true);
-    expect(unitAllowsLogin("ADULTES")).toBe(true);
+  it("ne contient pas ADULTES", () => {
+    expect(YOUTH_UNITS).not.toContain("ADULTES");
   });
 
-  it("autorise par défaut une unité absente ou inconnue (aucune restriction sans branche)", () => {
-    expect(unitAllowsLogin(null)).toBe(true);
-    expect(unitAllowsLogin(undefined)).toBe(true);
-    expect(unitAllowsLogin("")).toBe(true);
-  });
-
-  it("NO_LOGIN_UNITS ne contient exactement que Farfadets et Louveteaux", () => {
-    expect(NO_LOGIN_UNITS).toEqual(["FARFADETS", "LOUVETEAUX"]);
+  it("contient bien les branches jeunes attendues", () => {
+    expect(YOUTH_UNITS).toEqual([
+      "FARFADETS",
+      "LOUVETEAUX",
+      "SCOUTS",
+      "PIONNIERS",
+      "COMPAGNONS",
+    ]);
   });
 });

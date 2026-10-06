@@ -76,6 +76,34 @@ export function startScheduler(): void {
     } catch (err) {
       console.error("[scheduler] échec des relances de cotisation:", err);
     }
+
+    try {
+      const { purgeExpiredRejectedUsers } = await import(
+        "@/modules/admin/rejected-purge"
+      );
+      const purged = await purgeExpiredRejectedUsers();
+      if (purged > 0) {
+        console.log(`[scheduler] ${purged} compte(s) refusé(s) anonymisé(s).`);
+      }
+    } catch (err) {
+      console.error("[scheduler] échec de la purge des comptes refusés:", err);
+    }
+
+    try {
+      const { redactExpiredMessageText, purgeExpiredAuditLog } = await import(
+        "@/modules/admin/audit-purge"
+      );
+      const redacted = await redactExpiredMessageText();
+      if (redacted > 0) {
+        console.log(`[scheduler] texte de ${redacted} message(s) retiré du journal d'audit.`);
+      }
+      const purgedLogs = await purgeExpiredAuditLog();
+      if (purgedLogs > 0) {
+        console.log(`[scheduler] ${purgedLogs} ligne(s) du journal d'audit supprimée(s).`);
+      }
+    } catch (err) {
+      console.error("[scheduler] échec de la conservation du journal d'audit:", err);
+    }
   };
 
   setTimeout(run, STARTUP_DELAY_MS);

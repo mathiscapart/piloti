@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import type { PaymentStatus } from "@/lib/enums";
 
+import { summarizeCollection } from "./collection";
 import { computeTiers } from "./tiers";
 
 // US-F01/F02 — campagnes de cotisation & suivi des paiements.
@@ -23,6 +24,7 @@ export async function listCampaigns() {
 
   const sums = await db.campaignPayment.groupBy({
     by: ["campaignId"],
+    where: { cancelledAt: null },
     _sum: { amountCents: true },
   });
   const collected = new Map(
@@ -62,9 +64,19 @@ export async function getCampaignDetail(id: string) {
 
   const jeuneIds = jeunes.map((j) => j.id);
   const [payments, exemptions, reminders, socialCases, links] = await Promise.all([
+    // Annulés compris : ils restent visibles dans l'historique du jeune (#121).
     db.campaignPayment.findMany({
       where: { campaignId: id },
-      select: { userId: true, amountCents: true },
+      orderBy: { paidAt: "asc" },
+      select: {
+        id: true,
+        userId: true,
+        amountCents: true,
+        method: true,
+        paidAt: true,
+        cancelledAt: true,
+        cancelReason: true,
+      },
     }),
     db.campaignExemption.findMany({
       where: { campaignId: id },
@@ -86,7 +98,11 @@ export async function getCampaignDetail(id: string) {
       : Promise.resolve([]),
   ]);
   const paidByUser = new Map<string, number>();
+  const paymentsByUser = new Map<string, typeof payments>();
   for (const p of payments) {
+    if (!paymentsByUser.has(p.userId)) paymentsByUser.set(p.userId, []);
+    paymentsByUser.get(p.userId)!.push(p);
+    if (p.cancelledAt) continue;
     paidByUser.set(p.userId, (paidByUser.get(p.userId) ?? 0) + p.amountCents);
   }
   const exemptSet = new Set(exemptions.map((e) => e.userId));
@@ -117,11 +133,9 @@ export async function getCampaignDetail(id: string) {
       status,
       exempt: exemptSet.has(j.id),
       reminded: remindedSet.has(j.id),
+      payments: paymentsByUser.get(j.id) ?? [],
     };
   });
-
-  const collected = payments.reduce((a, p) => a + p.amountCents, 0);
-  const expectedTotal = rows.reduce((a, r) => a + r.expectedCents, 0);
 
   return {
     campaign,
@@ -129,10 +143,17 @@ export async function getCampaignDetail(id: string) {
     stats: {
       total: rows.length,
       paidCount: rows.filter((r) => r.status === "PAID").length,
-      collectedCents: collected,
-      expectedCents: expectedTotal,
-      remainingCents: Math.max(0, expectedTotal - collected),
-      pct: expectedTotal > 0 ? Math.round((collected / expectedTotal) * 100) : 0,
+      // #121 — reste et trop-perçu calculés jeune par jeune.
+      ...summarizeCollection(
+        rows.map((r) => ({ expectedCents: r.expectedCents, paidCents: r.paidCents })),
+      ),
+      // Encaissé : tous les paiements non annulés, y compris ceux d'un jeune
+      // sorti de la liste (inactif, changé d'unité) — même total que la liste
+      // des campagnes et le tableau de bord.
+      collectedCents: payments.reduce(
+        (sum, p) => (p.cancelledAt ? sum : sum + p.amountCents),
+        0,
+      ),
     },
   };
 }

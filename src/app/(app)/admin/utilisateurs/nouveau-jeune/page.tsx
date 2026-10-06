@@ -6,9 +6,9 @@ import { listActiveParents } from "@/modules/family/queries";
 
 import { ChildAccountForm } from "./ChildAccountForm";
 
-// US-CM-01 — création d'un compte enfant sans connexion (Farfadets/
-// Louveteaux). Réservé à user.approve (SECRÉTAIRE + ADMIN), comme la
-// validation des inscriptions.
+// US-CM-01 — création d'un compte enfant sans connexion (toutes branches
+// jeunes, moins de 15 ans). Réservé à user.approve (SECRÉTAIRE + ADMIN),
+// comme la validation des inscriptions.
 export default async function NouveauJeunePage() {
   await requireCan("user.approve");
   const parents = await listActiveParents();
@@ -33,9 +33,9 @@ export default async function NouveauJeunePage() {
           Nouveau compte enfant
         </h1>
         <p className="text-trail">
-          Pour les Farfadets et Louveteaux-Jeannettes, trop jeunes pour se
-          connecter eux-mêmes : le compte est géré par un parent, à rattacher
-          ensuite depuis la fiche membre.
+          Pour les jeunes de moins de 15 ans, quelle que soit leur branche,
+          trop jeunes pour se connecter eux-mêmes : le compte est géré par un
+          parent, à rattacher ensuite depuis la fiche membre.
         </p>
       </header>
 

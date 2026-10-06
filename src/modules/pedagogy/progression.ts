@@ -5,13 +5,20 @@ import { db } from "@/lib/db";
 // US-S03 — fiche progression consolidée d'un jeune : frise d'étapes (avec
 // statut de validation), badges obtenus, objectifs, notes (sensibles) et
 // prochaine étape suggérée.
+//
+// `canReadNotes` reçoit la branche du jeune (connue seulement ici) : sans le
+// droit, les notes ne sont pas requêtées et `notes` vaut `null` (#98).
 
-export async function getProgression(jeuneId: string, includeNotes: boolean) {
+export async function getProgression(
+  jeuneId: string,
+  canReadNotes: (jeuneUnit: string | null) => boolean,
+) {
   const jeune = await db.user.findUnique({
     where: { id: jeuneId },
     select: { id: true, firstName: true, lastName: true, image: true, unit: true },
   });
   if (!jeune) return null;
+  const includeNotes = canReadNotes(jeune.unit);
 
   const [steps, validations, awards, goals, notes] = await Promise.all([
     jeune.unit
@@ -97,12 +104,14 @@ export async function getProgression(jeuneId: string, includeNotes: boolean) {
       dueDate: g.dueDate,
       target: g.step?.name ?? (g.badge ? `${g.badge.icon ?? ""} ${g.badge.name}`.trim() : null),
     })),
-    notes: notes.map((n) => ({
-      id: n.id,
-      content: n.content,
-      createdAt: n.createdAt,
-      author: n.authorId ? (actorById.get(n.authorId) ?? null) : null,
-    })),
+    notes: includeNotes
+      ? notes.map((n) => ({
+          id: n.id,
+          content: n.content,
+          createdAt: n.createdAt,
+          author: n.authorId ? (actorById.get(n.authorId) ?? null) : null,
+        }))
+      : null,
   };
 }
 

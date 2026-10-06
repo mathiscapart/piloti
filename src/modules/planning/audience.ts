@@ -1,3 +1,5 @@
+import { effectiveRoles } from "@/lib/permissions";
+
 // US-P04 — qui est CONCERNÉ par un événement, et peut donc s'y inscrire.
 //
 // Un événement porte une branche (`Event.unit`) ; `null` signifie « tout le
@@ -23,4 +25,21 @@ export function isConcernedByEvent(
 ): boolean {
   if (eventUnit === null) return true; // événement de groupe : tout le monde
   return targetUnit === eventUnit;
+}
+
+/**
+ * #99 — la FEUILLE DE POINTAGE d'un événement : les jeunes actifs concernés
+ * (même règle que `getAttendanceRoster`). Partagée par `setAttendance` et
+ * `addRegistration`, pour qu'aucune action n'accepte un compte que la feuille
+ * n'affiche pas — un jeune d'une autre branche, un parent.
+ */
+export function isOnAttendanceSheet(
+  eventUnit: string | null,
+  target: { status: string; roles: string[] | string | null; unit: string | null },
+): boolean {
+  return (
+    target.status === "ACTIVE" &&
+    effectiveRoles(target).includes("SCOUT") &&
+    isConcernedByEvent(eventUnit, target.unit)
+  );
 }

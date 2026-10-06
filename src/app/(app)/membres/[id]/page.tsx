@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can, canActOnUnit, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { getImageRightsStatus } from "@/modules/consent/queries";
 import {
@@ -77,12 +77,28 @@ export default async function MemberDetailPage({ params }: PageProps) {
 
   // Rattachement familial : liens du membre + (pour user.manage) listes
   // d'ajout selon son rôle. Affiché pour parents et jeunes.
+  // Périmètre d'unité (D-024, #83) : chaque lien se juge sur la branche du
+  // JEUNE — celle du membre affiché s'il est jeune, celle de l'enfant sinon.
   const canManageFamily = can(currentUser, "member.family.manage");
+  const canManageFamilyOf = (childUnit: string | null) =>
+    canActOnUnit(currentUser, "member.family.manage", childUnit);
   const family = await getFamilyForMember(user.id);
   const [linkableChildren, linkableParents] = await Promise.all([
-    canManageFamily && isParent ? listLinkableChildren(user.id) : Promise.resolve([]),
-    canManageFamily && isJeune ? listLinkableParents(user.id) : Promise.resolve([]),
+    canManageFamily && isParent && user.id !== currentUser.id
+      ? listLinkableChildren(user.id).then((cs) => cs.filter((c) => canManageFamilyOf(c.unit)))
+      : Promise.resolve([]),
+    canManageFamily && isJeune && canManageFamilyOf(user.unit)
+      ? listLinkableParents(user.id).then((ps) => ps.filter((p) => p.id !== currentUser.id))
+      : Promise.resolve([]),
   ]);
+  const childLinks = family.children.map((l) => ({
+    ...l,
+    canRemove: canManageFamilyOf(l.user.unit),
+  }));
+  const parentLinks = family.parents.map((l) => ({
+    ...l,
+    canRemove: canManageFamilyOf(user.unit),
+  }));
 
   // US-P08 — statistiques de présence (jeunes uniquement).
   const attendanceStats = isJeune
@@ -225,11 +241,10 @@ export default async function MemberDetailPage({ params }: PageProps) {
         memberId={user.id}
         isParent={isParent}
         isJeune={isJeune}
-        childLinks={family.children}
-        parentLinks={family.parents}
+        childLinks={childLinks}
+        parentLinks={parentLinks}
         linkableChildren={linkableChildren}
         linkableParents={linkableParents}
-        canManage={canManageFamily}
       />
 
       {/* US-C08 — droit à l'image (jeunes uniquement). */}

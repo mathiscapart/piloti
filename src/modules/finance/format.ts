@@ -21,3 +21,12 @@ export function parseAmountToCents(raw: string): number | null {
   if (cents <= 0 || cents > MAX_CENTS) return null;
   return cents;
 }
+
+// #121 — total encaissé ressaisi lors d'une correction : comme
+// parseAmountToCents, mais 0 est admis (annulation totale). Un champ vide
+// reste invalide : il ne doit pas remettre l'encaissé à 0.
+export function parseCorrectedTotalToCents(raw: string): number | null {
+  const cleaned = raw.trim().replace(/\s/g, "").replace(",", ".");
+  if (/^0+(\.0{1,2})?$/.test(cleaned)) return 0;
+  return parseAmountToCents(raw);
+}

@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import type { NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { canEnableLogin } from "@/lib/legal/age";
 import { subscribeUser, type UserEvent } from "@/lib/realtime";
 
 export const dynamic = "force-dynamic";
@@ -15,8 +16,14 @@ export async function GET(req: NextRequest) {
   // SEC-08 (Vuln 4) — cohérence avec /api/upload et
   // /api/channels/[id]/stream, qui vérifient tous deux le statut du compte
   // en plus de la session.
-  const status = (session.user as { status?: string }).status;
-  if (status !== "ACTIVE") return new Response("Forbidden", { status: 403 });
+  const { status, canLogin, birthDate } = session.user as {
+    status?: string;
+    canLogin?: boolean;
+    birthDate?: Date | string | null;
+  };
+  if (status !== "ACTIVE" || canLogin === false || !canEnableLogin(birthDate)) {
+    return new Response("Forbidden", { status: 403 });
+  }
 
   const userId = session.user.id;
   const encoder = new TextEncoder();

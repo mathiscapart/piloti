@@ -4,9 +4,15 @@ import { notFound, redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, effectiveRoles } from "@/lib/permissions";
+import { can, canManagePlace } from "@/lib/permissions";
+import { ownerContactVersion } from "@/modules/camp/owner-consent";
 
 import { PlaceForm, type PlaceFormValues } from "../../PlaceForm";
+
+const REFUSED_ON_FMT = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "2-digit",
+});
 
 function parseJsonArray(raw: string): string[] {
   try {
@@ -29,8 +35,14 @@ export default async function EditPlacePage({ params }: PageProps) {
   const place = await db.campPlace.findUnique({ where: { id } });
   if (!place || place.archived) notFound();
 
-  const isAdmin = effectiveRoles(user).includes("ADMIN");
-  if (!isAdmin && place.createdById !== user.id) redirect(`/lieux/${id}`);
+  if (!canManagePlace(user, place)) redirect(`/lieux/${id}`);
+
+  // #136 — sans accord, le contact reste masqué ici comme sur la fiche. Il
+  // n'entre ni dans les props ni, donc, dans le payload RSC : le formulaire
+  // propose seulement de le conserver ou de le remplacer.
+  const ownerContactPending =
+    place.ownerConsentStatus !== "GRANTED" &&
+    !!(place.ownerName || place.ownerPhone || place.ownerEmail);
 
   const initial: PlaceFormValues = {
     id: place.id,
@@ -39,11 +51,17 @@ export default async function EditPlacePage({ params }: PageProps) {
     region: place.region ?? "",
     capacity: place.capacity != null ? String(place.capacity) : "",
     equipment: parseJsonArray(place.equipmentJson),
-    ownerName: place.ownerName ?? "",
-    ownerPhone: place.ownerPhone ?? "",
-    ownerEmail: place.ownerEmail ?? "",
+    ownerName: ownerContactPending ? "" : (place.ownerName ?? ""),
+    ownerPhone: ownerContactPending ? "" : (place.ownerPhone ?? ""),
+    ownerEmail: ownerContactPending ? "" : (place.ownerEmail ?? ""),
+    ownerContactPending,
+    ownerContactVersion: ownerContactVersion(place),
     notes: place.notes ?? "",
     photos: parseJsonArray(place.photosJson),
+    ownerRefusedOn:
+      place.ownerConsentStatus === "REFUSED" && place.ownerConsentDecidedAt
+        ? REFUSED_ON_FMT.format(place.ownerConsentDecidedAt)
+        : undefined,
   };
 
   return (

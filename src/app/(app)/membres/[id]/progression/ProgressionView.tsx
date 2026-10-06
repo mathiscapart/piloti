@@ -45,12 +45,14 @@ export function ProgressionView({
   jeuneId,
   data,
   canManage,
+  canCancelConfirmed,
   currentUserId,
   awardableBadges,
 }: {
   jeuneId: string;
   data: Progression;
   canManage: boolean;
+  canCancelConfirmed: boolean;
   currentUserId: string;
   awardableBadges: BadgeOption[];
 }) {
@@ -134,9 +136,9 @@ export function ProgressionView({
                     </p>
                   ) : null}
 
-                  {canManage ? (
+                  {canManage || (s.status === "CONFIRMED" && canCancelConfirmed) ? (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {s.status === "NONE" ? (
+                      {canManage && s.status === "NONE" ? (
                         <Button
                           type="button"
                           size="sm"
@@ -147,7 +149,7 @@ export function ProgressionView({
                           Proposer la validation
                         </Button>
                       ) : null}
-                      {s.status === "PROPOSED" ? (
+                      {canManage && s.status === "PROPOSED" ? (
                         <>
                           {s.proposedBy?.id === currentUserId ? (
                             <span className="self-center text-xs text-trail">
@@ -174,13 +176,15 @@ export function ProgressionView({
                           </Button>
                         </>
                       ) : null}
-                      {s.status === "CONFIRMED" ? (
+                      {s.status === "CONFIRMED" && canCancelConfirmed ? (
                         <Button
                           type="button"
                           size="sm"
                           variant="ghost"
                           disabled={pending}
-                          onClick={() => run(() => removeValidation(jeuneId, s.id))}
+                          onClick={() =>
+                            run(() => removeValidation(jeuneId, s.id), "Validation annulée, la famille est prévenue.")
+                          }
                         >
                           Annuler la validation
                         </Button>
@@ -314,8 +318,8 @@ export function ProgressionView({
         ) : null}
       </section>
 
-      {/* Notes (encadrement uniquement) */}
-      {canManage ? (
+      {/* Notes sensibles : `null` quand l'utilisateur ne peut pas les lire (#98). */}
+      {data.notes ? (
         <section className="space-y-2">
           <h2 className="text-lg font-bold text-earth">
             Notes de suivi

@@ -5,9 +5,9 @@ import { LoginForm } from "./login-form";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string }>;
+  searchParams: Promise<{ reset?: string; locked?: string }>;
 }) {
-  const { reset } = await searchParams;
+  const { reset, locked } = await searchParams;
 
   return (
     <div className="w-full max-w-md space-y-6">
@@ -22,6 +22,14 @@ export default async function LoginPage({
         <p className="rounded-md border border-forest/30 bg-forest-soft px-3 py-2 text-center text-sm font-medium text-forest-ink">
           Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de
           passe.
+        </p>
+      ) : null}
+
+      {/* #153 — session déconnectée par changeOwnPassword après trop d'essais. */}
+      {locked === "1" ? (
+        <p className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-center text-sm font-medium text-brick-ink">
+          Votre session a été fermée après plusieurs mots de passe actuels
+          erronés. Reconnectez-vous, ou réinitialisez votre mot de passe.
         </p>
       ) : null}
 

@@ -1,16 +1,17 @@
 import { db } from "@/lib/db";
 import type { ReportStatus, ReportTargetType } from "@/lib/enums";
-import { effectiveRoles } from "@/lib/permissions";
+import type { CurrentUser } from "@/lib/get-current-user";
 
-import { isVisibleMessage } from "./moderation-policy";
+import {
+  canModerateReport,
+  isGroupWideModerator,
+  isVisibleMessage,
+  parseTargetSnapshot,
+  reportTargetState,
+  type ReportTargetState,
+} from "./moderation-policy";
 
 export type ReportStatusFilter = "PENDING" | "RESOLVED" | "DISMISSED" | "all";
-
-interface QueueUser {
-  role: string;
-  roles?: string[] | string | null;
-  unit?: string | null;
-}
 
 export interface ReportQueueEntry {
   id: string;
@@ -25,7 +26,12 @@ export interface ReportQueueEntry {
   resolution: string | null;
   createdAt: Date;
   resolvedAt: Date | null;
-  // null = le message a été supprimé/introuvable depuis (rare, defensive).
+  // #92 — copie prise au signalement (preuve de référence). null pour un
+  // signalement antérieur à la copie.
+  snapshot: { body: string; authorName: string } | null;
+  // État du message actuel par rapport à la copie ; null sans copie.
+  targetState: ReportTargetState | null;
+  // Message actuel. null = supprimé depuis (par son auteur, cf. #92).
   target: {
     body: string;
     authorName: string;
@@ -39,15 +45,18 @@ export interface ReportQueueEntry {
 // Routage (raffinement SAFE-02) : un CHEF ne voit que les signalements de SON
 // unité (`Report.concernedUnit`, l'unité de l'auteur du message visé) ; un
 // signalement dont `concernedUnit` est null (auteur sans unité) lui reste
-// invisible — fail-closed. L'ADMIN voit tout. Le RESPONSABLE_GROUPE (lecture
-// seule, `moderation.view`) garde une vue globale, alignée sur le reste de
-// l'appli où RG = lecture seule sur tout (arbitrage à confirmer, cf. la tâche).
+// invisible — fail-closed. L'ADMIN et le RESPONSABLE_GROUPE voient tout le
+// groupe.
+// #91 : un signalement visant un contenu de `user` lui est toujours masqué —
+// il y verrait le signalant.
+// #150 : la file applique `canModerateReport`, la règle des actions — un RG
+// également CHEF n'est pas borné à son unité, et un signalement dont l'auteur
+// est indéterminable reste invisible d'un CHEF.
 export async function listReports(
   status: ReportStatusFilter = "PENDING",
-  user: QueueUser,
+  user: CurrentUser,
 ): Promise<ReportQueueEntry[]> {
-  const roles = effectiveRoles(user);
-  const scopedToUnit = !roles.includes("ADMIN") && roles.includes("CHEF");
+  const scopedToUnit = !isGroupWideModerator(user);
   if (scopedToUnit && !user.unit) return [];
 
   const reports = await db.report.findMany({
@@ -90,7 +99,35 @@ export async function listReports(
   const messageById = new Map(channelMessages.map((m) => [m.id, m]));
   const dmById = new Map(directMessages.map((m) => [m.id, m]));
 
-  return reports.map((r) => {
+  const snapshotById = new Map(reports.map((r) => [r.id, parseTargetSnapshot(r.targetSnapshot)]));
+  // Nom de l'auteur résolu à la lecture, jamais copié : un compte anonymisé
+  // apparaît anonymisé ici aussi.
+  const snapshotAuthorIds = [
+    ...new Set([...snapshotById.values()].flatMap((s) => (s ? [s.authorId] : []))),
+  ];
+  const snapshotAuthors =
+    snapshotAuthorIds.length > 0
+      ? await db.user.findMany({
+          where: { id: { in: snapshotAuthorIds } },
+          select: { id: true, firstName: true, lastName: true },
+        })
+      : [];
+  const authorNameById = new Map(
+    snapshotAuthors.map((a) => [a.id, `${a.firstName} ${a.lastName}`]),
+  );
+
+  // Auteur lu dans la copie d'abord : le message a pu être supprimé depuis.
+  const authorIdOf = (r: (typeof reports)[number]): string | null =>
+    snapshotById.get(r.id)?.authorId ??
+    (r.targetType === "CHANNEL_MESSAGE"
+      ? messageById.get(r.targetId)?.authorId
+      : dmById.get(r.targetId)?.senderId) ??
+    null;
+
+  const visible = reports.filter((r) =>
+    canModerateReport(user, { concernedUnit: r.concernedUnit, targetAuthorId: authorIdOf(r) }),
+  );
+  return visible.map((r) => {
     let target: ReportQueueEntry["target"] = null;
     if (r.targetType === "CHANNEL_MESSAGE") {
       const m = messageById.get(r.targetId);
@@ -114,6 +151,14 @@ export async function listReports(
       }
     }
 
+    const rawSnapshot = snapshotById.get(r.id) ?? null;
+    const snapshot = rawSnapshot
+      ? {
+          body: rawSnapshot.body,
+          authorName: authorNameById.get(rawSnapshot.authorId) ?? "Compte inconnu",
+        }
+      : null;
+
     return {
       id: r.id,
       targetType: r.targetType as ReportTargetType,
@@ -127,6 +172,8 @@ export async function listReports(
       resolution: r.resolution,
       createdAt: r.createdAt,
       resolvedAt: r.resolvedAt,
+      snapshot,
+      targetState: reportTargetState(rawSnapshot, target),
       target,
     };
   });

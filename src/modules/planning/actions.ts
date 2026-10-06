@@ -14,7 +14,7 @@ import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
-import { isConcernedByEvent } from "./audience";
+import { isConcernedByEvent, isOnAttendanceSheet } from "./audience";
 import { maybeAlertAbsences, notifyEventAudience } from "./event-hooks";
 import { canActOnEvent, refuseIfEventOutOfScope } from "./event-scope";
 import { eventSchema, withdrawalReasonSchema } from "./types";
@@ -278,6 +278,15 @@ export async function setAttendance(
   if (!canActOnEvent(actor, "event.manage", event.unit)) {
     return { error: "Cet événement concerne une autre branche." };
   }
+  // #99 — on ne pointe que la feuille de l'événement : sans ce contrôle, un
+  // identifiant forgé (jeune d'une autre branche, parent) créait un pointage.
+  const target = await db.user.findUnique({
+    where: { id: userId },
+    select: { status: true, roles: true, unit: true },
+  });
+  if (!target || !isOnAttendanceSheet(event.unit, target)) {
+    return { error: "Cette personne ne fait pas partie de cet événement." };
+  }
 
   await withAudit(
     (tx) =>
@@ -457,12 +466,9 @@ export async function addRegistration(
     where: { id: userId },
     select: { status: true, roles: true, unit: true },
   });
-  const isEligible =
-    !!target &&
-    target.status === "ACTIVE" &&
-    (JSON.parse(target.roles || "[]") as string[]).includes("SCOUT") &&
-    (!event.unit || target.unit === event.unit);
-  if (!isEligible) return { error: "Jeune non éligible à cet événement." };
+  if (!target || !isOnAttendanceSheet(event.unit, target)) {
+    return { error: "Jeune non éligible à cet événement." };
+  }
 
   await withAudit(
     (tx) =>

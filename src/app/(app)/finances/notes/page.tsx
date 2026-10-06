@@ -14,7 +14,7 @@ import {
   type ReimbursementMethod,
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, canReviewExpense } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { formatEuros } from "@/modules/finance/format";
 import {
@@ -55,6 +55,9 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
   if (!can(user, "expense.view")) redirect("/dashboard");
   const canManage = can(user, "expense.manage");
   const canCreate = can(user, "expense.create");
+  // #173 — même règle que les actions : le RG ne traite pas ses propres notes.
+  const canReview = (e: { declarant: { id: string } }) =>
+    canReviewExpense(user, { declarantId: e.declarant.id });
 
   const { status } = await searchParams;
   const statusFilter: ExpenseStatusFilter =
@@ -135,7 +138,9 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
         <div className="flex flex-wrap items-center gap-2">
           {statusFilter === "pending" ? (
             <BatchApproveButton
-              ids={expenses.filter((e) => e.status === "PENDING").map((e) => e.id)}
+              ids={expenses
+                .filter((e) => e.status === "PENDING" && canReview(e))
+                .map((e) => e.id)}
             />
           ) : null}
           <Link
@@ -225,7 +230,11 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
                 </p>
               ) : null}
 
-              {canManage ? <ExpenseActions id={e.id} status={e.status} /> : null}
+              {canManage && canReview(e) ? (
+                <ExpenseActions id={e.id} status={e.status} />
+              ) : canManage && (e.status === "PENDING" || e.status === "APPROVED") ? (
+                <p className="text-xs text-trail">En attente d&apos;un autre valideur.</p>
+              ) : null}
             </li>
           ))}
         </ul>

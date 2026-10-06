@@ -6,7 +6,7 @@ import { z } from "zod";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { birthDateSchema } from "@/lib/legal/age";
+import { birthDateSchema, isAdult } from "@/lib/legal/age";
 import { passwordSchema } from "@/lib/password-policy";
 
 export interface SetupActionResult {
@@ -29,6 +29,13 @@ const schema = z
   .refine((d) => d.password === d.confirmPassword, {
     message: "Les mots de passe ne correspondent pas.",
     path: ["confirmPassword"],
+  })
+  // Le premier ADMIN doit être majeur : sans ce refus, une faute de frappe
+  // sur la date crée un compte ADMIN mineur, à jamais bloqué en session par
+  // le hook SAFE-01 (aucun autre ADMIN pour le corriger).
+  .refine((d) => isAdult(d.birthDate), {
+    message: "Le premier administrateur doit être majeur.",
+    path: ["birthDate"],
   });
 
 export async function setupAction(

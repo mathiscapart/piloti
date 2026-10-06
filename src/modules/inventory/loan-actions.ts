@@ -13,6 +13,7 @@ import { publishChannelEvent } from "@/lib/realtime";
 import { postLoanToEventChannel } from "@/modules/planning/event-hooks";
 
 import type { ActionResult } from "@/lib/types";
+import { availableQtyForPeriod, incidentAvailability } from "./availability";
 import { resolveOverdueNotifications } from "./overdue";
 import {
   createLoanSchema,
@@ -81,10 +82,15 @@ export async function createLoan(
         where: { status: { in: [...ACTIVE_LOAN_STATUSES] } },
         select: { quantity: true, startDate: true, expectedReturn: true },
       },
+      incidents: {
+        where: { resolvedAt: null },
+        select: { severity: true, resolvedAt: true },
+      },
     },
   });
   const byId = new Map(equipments.map((eq) => [eq.id, eq]));
   const start = parsed.data.startDate;
+  const now = new Date();
 
   for (const item of parsed.data.items) {
     const eq = byId.get(item.equipmentId);
@@ -94,17 +100,23 @@ export async function createLoan(
     if (eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE") {
       return { error: `« ${eq.name} » n'est pas empruntable (en réparation / hors service).` };
     }
+    // Issue #107 — un incident Bloquant ouvert rend l'article non empruntable.
+    if (incidentAvailability(eq.incidents).blocked) {
+      return { error: `« ${eq.name} » n'est pas empruntable (incident bloquant ouvert).` };
+    }
     const itemEnd = item.expectedReturn ?? parsed.data.expectedReturn;
     if (itemEnd < start) {
       return {
         error: `« ${eq.name} » : la date de retour doit être postérieure au départ.`,
       };
     }
-    // Deux périodes se chevauchent ssi start1 <= end2 && start2 <= end1.
-    const loaned = eq.loans
-      .filter((l) => l.startDate <= itemEnd && l.expectedReturn >= start)
-      .reduce((sum, l) => sum + l.quantity, 0);
-    const available = Math.max(0, eq.totalQty - loaned);
+    // Issue #73 — un prêt en retard non rendu bloque l'article indéfiniment.
+    const available = availableQtyForPeriod(
+      eq.totalQty,
+      eq.loans,
+      { start, end: itemEnd },
+      now,
+    );
     if (item.quantity > available) {
       return {
         error: `« ${eq.name} » : ${available} disponible(s) sur cette période, ${item.quantity} demandé(s).`,
@@ -266,7 +278,7 @@ export async function returnLoan(
       equipmentId: true,
       status: true,
       quantity: true,
-      equipment: { select: { category: true } },
+      equipment: { select: { category: true, condition: true } },
     },
   });
   if (!loan) return { error: "Prêt introuvable." };
@@ -312,10 +324,25 @@ export async function returnLoan(
     return { error: `Quantité rendue invalide (max ${loan.quantity}).` };
   }
   const isPartial = returnedQty < loan.quantity;
+  const damaged = parsed.data.condition !== "BON";
+  const previousCondition = loan.equipment.condition;
+  const nextCondition =
+    damaged && previousCondition !== "HORS_SERVICE"
+      ? "A_REPARER"
+      : previousCondition;
 
   await withAudit(
-    (tx) =>
-      tx.loan.update({
+    async (tx) => {
+      // #123 — un retour abîmé / à réparer rend l'article non empruntable tout
+      // de suite, que le signalement d'incident soit rempli ou non. Un article
+      // déjà hors service le reste.
+      if (damaged) {
+        await tx.equipment.updateMany({
+          where: { id: loan.equipmentId, condition: { not: "HORS_SERVICE" } },
+          data: { condition: "A_REPARER" },
+        });
+      }
+      return tx.loan.update({
         where: { id: loanId },
         data: isPartial
           ? {
@@ -332,7 +359,8 @@ export async function returnLoan(
               returnWeightKg: parsed.data.returnWeightKg ?? undefined,
               notes: parsed.data.notes ?? undefined,
             },
-      }),
+      });
+    },
     {
       action: "LOAN_RETURNED",
       userId: user.id,
@@ -343,6 +371,7 @@ export async function returnLoan(
         returnedQuantity: returnedQty,
         partial: isPartial,
         returnWeightKg: parsed.data.returnWeightKg,
+        equipmentCondition: { from: previousCondition, to: nextCondition },
       },
     },
   );
@@ -358,10 +387,15 @@ export async function returnLoan(
   revalidatePath("/dashboard");
 
   // Si abîmé / à réparer → on bascule vers le form incident préfilled.
-  if (parsed.data.condition !== "BON") {
-    redirect(
-      `/incidents/nouveau?equipmentId=${loan.equipmentId}&loanId=${loan.id}`,
-    );
+  // Les notes du retour préremplissent la description de l'incident.
+  if (damaged) {
+    const params = new URLSearchParams({
+      equipmentId: loan.equipmentId,
+      loanId: loan.id,
+    });
+    // Tronquée : une note très longue ferait dépasser la taille d'URL admise.
+    if (parsed.data.notes) params.set("notes", parsed.data.notes.slice(0, 1000));
+    redirect(`/incidents/nouveau?${params}`);
   }
 
   redirect("/prets?notice=loan-returned");

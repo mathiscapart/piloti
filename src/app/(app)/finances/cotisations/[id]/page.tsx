@@ -108,6 +108,11 @@ export default async function CampaignDetailPage({ params }: PageProps) {
             <p className="text-xs text-trail">Reste</p>
           </div>
         </div>
+        {stats.overpaidCents > 0 ? (
+          <p className="text-center text-xs font-bold text-brick">
+            dont {formatEuros(stats.overpaidCents)} de trop-perçu encaissé
+          </p>
+        ) : null}
       </div>
 
       {/* US-F03 — réglage des relances (trésorier) */}
@@ -140,6 +145,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
               tier={r.tier}
               exempt={r.exempt}
               reminded={r.reminded}
+              payments={canManage ? r.payments : []}
               canManage={canManage}
             />
           ))}

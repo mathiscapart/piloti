@@ -21,6 +21,8 @@ services:
     image: piloti:dev
     build:
       target: dev
+      args:
+        NODE_IMAGE_TAG: ${NODE_IMAGE_TAG:?NODE_IMAGE_TAG manquant (voir .env.example)}
     # Port hôte 4000 (et non 3000) : sur cette machine Windows, 3000 est tombé
     # dans une plage réservée par Hyper-V/WinNAT (2581-3780, cf.
     # `netsh int ipv4 show excludedportrange protocol=tcp`), Docker ne peut

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canEnableLogin } from "@/lib/legal/age";
 import { subscribeChannel, type ChannelEvent } from "@/lib/realtime";
 import { canAccessChannel } from "@/modules/communication/access";
 
@@ -22,11 +23,24 @@ export async function GET(
   const [user, channel] = await Promise.all([
     db.user.findUnique({
       where: { id: session.user.id },
-      select: { role: true, roles: true, unit: true, status: true },
+      select: {
+        role: true,
+        roles: true,
+        unit: true,
+        status: true,
+        canLogin: true,
+        birthDate: true,
+      },
     }),
     db.channel.findUnique({ where: { id } }),
   ]);
-  if (!user || user.status !== "ACTIVE" || !channel) {
+  if (
+    !user ||
+    user.status !== "ACTIVE" ||
+    user.canLogin === false ||
+    !canEnableLogin(user.birthDate) ||
+    !channel
+  ) {
     return new Response("Forbidden", { status: 403 });
   }
   if (!canAccessChannel(user, channel)) {

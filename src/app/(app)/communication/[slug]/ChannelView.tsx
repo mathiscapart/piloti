@@ -59,7 +59,7 @@ export function ChannelView({
   initialPolls,
   currentUserId,
   isStaff,
-  isAdmin,
+  canManageAny,
   canWrite,
 }: {
   channelId: string;
@@ -67,7 +67,7 @@ export function ChannelView({
   initialPolls: PollWithVotes[];
   currentUserId: string;
   isStaff: boolean;
-  isAdmin: boolean;
+  canManageAny: boolean;
   canWrite: boolean;
 }) {
   const [messages, setMessages] = useState<Msg[]>(initialMessages);
@@ -174,7 +174,7 @@ export function ChannelView({
               mine={m.author.id === currentUserId}
               currentUserId={currentUserId}
               isStaff={isStaff}
-              isAdmin={isAdmin}
+              canManageAny={canManageAny}
               onChanged={refetch}
             />
           ))
@@ -249,14 +249,14 @@ function MessageRow({
   mine,
   currentUserId,
   isStaff,
-  isAdmin,
+  canManageAny,
   onChanged,
 }: {
   msg: Msg;
   mine: boolean;
   currentUserId: string;
   isStaff: boolean;
-  isAdmin: boolean;
+  canManageAny: boolean;
   onChanged: () => void;
 }) {
   const [showEmoji, setShowEmoji] = useState(false);
@@ -333,7 +333,7 @@ function MessageRow({
     if (res.error) toast.error(res.error);
     else toast.success("Message signalé aux modérateurs.");
   }
-  const canDelete = mine || isAdmin;
+  const canDelete = mine || canManageAny;
 
   return (
     <div className="group rounded-xl px-2 py-1 hover:bg-sand/50">
@@ -346,7 +346,7 @@ function MessageRow({
           {msg.editedAt ? " · modifié" : ""}
           {msg.pinnedAt ? " · 📌" : ""}
         </time>
-        <span className="ml-auto flex items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+        <span className="ml-auto flex items-center gap-1 opacity-100 transition-opacity mouse:opacity-0 group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"
             onClick={() => setShowEmoji((v) => !v)}

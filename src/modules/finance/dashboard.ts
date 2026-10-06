@@ -13,7 +13,7 @@ export async function getFinancialDashboard(year: number) {
 
   const [payments, reimbursed] = await Promise.all([
     db.campaignPayment.findMany({
-      where: { paidAt: { gte: start, lt: end } },
+      where: { paidAt: { gte: start, lt: end }, cancelledAt: null },
       select: { amountCents: true, paidAt: true },
     }),
     db.expense.findMany({
@@ -62,7 +62,7 @@ export type FinancialDashboard = Awaited<
 // Années disponibles (présence de données), pour le sélecteur.
 export async function getFinancialYears(): Promise<number[]> {
   const [firstPayment, firstExpense] = await Promise.all([
-    db.campaignPayment.findFirst({ orderBy: { paidAt: "asc" }, select: { paidAt: true } }),
+    db.campaignPayment.findFirst({ where: { cancelledAt: null }, orderBy: { paidAt: "asc" }, select: { paidAt: true } }),
     db.expense.findFirst({
       where: { reimbursedAt: { not: null } },
       orderBy: { reimbursedAt: "asc" },

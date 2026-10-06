@@ -56,6 +56,14 @@ export function LoginForm() {
           className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink"
         >
           {state.error}
+          {state.rateLimited ? (
+            <>
+              {" "}
+              <Link href="/forgot-password" className="underline underline-offset-4">
+                Réinitialiser mon mot de passe
+              </Link>
+            </>
+          ) : null}
         </p>
       ) : null}
 

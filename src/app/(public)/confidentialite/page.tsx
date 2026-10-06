@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 
+import { MESSAGE_TEXT_RETENTION_YEARS, auditRetentionYears } from "@/lib/audit-retention";
+import { IMAGE_RIGHTS_LABEL } from "@/lib/enums";
 import {
   ORG_GROUP,
   ORG_HOSTING_PROVIDER,
   ORG_NAME,
   ORG_PRIVACY_EMAIL,
 } from "@/lib/legal/organization";
-import { PRIVACY_VERSION } from "@/lib/legal/versions";
+import { PRIVACY_VERSION, legalVersionDate } from "@/lib/legal/versions";
 
 export const metadata: Metadata = { title: "Politique de confidentialité — Piloti" };
 
@@ -20,10 +22,12 @@ export const dynamic = "force-dynamic";
 // de l'application (cf. src/lib/auth.ts, docker-compose.yml). L'identité du
 // groupe et de l'hébergeur vient de l'environnement (organization.ts).
 export default function ConfidentialitePage() {
+  // #163 — durée propre à l'instance (AUDIT_RETENTION_YEARS), lue au rendu.
+  const auditYears = auditRetentionYears();
   return (
     <article className="prose prose-sm max-w-none space-y-6 text-earth">
       <h1 className="text-3xl font-black text-forest">Politique de confidentialité</h1>
-      <p className="text-sm text-trail">Dernière mise à jour : {PRIVACY_VERSION}</p>
+      <p className="text-sm text-trail">Dernière mise à jour : {legalVersionDate(PRIVACY_VERSION)}</p>
 
       <section className="space-y-2">
         <h2 className="text-xl font-bold text-earth">Responsable de traitement</h2>
@@ -81,7 +85,13 @@ export default function ConfidentialitePage() {
           <li>
             L&apos;<strong>obligation légale</strong>{" "}
             de tenue d&apos;une comptabilité pour
-            les données financières (cotisations, notes de frais).
+            les données financières (cotisations, notes de frais) ;
+          </li>
+          <li>
+            Le <strong>consentement</strong>{" "}
+            du responsable légal — ou du jeune lui-même s&apos;il est majeur —
+            pour l&apos;utilisation de l&apos;image des jeunes (voir « Droit à
+            l&apos;image » ci-dessous).
           </li>
         </ul>
       </section>
@@ -103,6 +113,56 @@ export default function ConfidentialitePage() {
           Les échanges privés sont fermés aux moins de 15 ans ; au-delà et
           jusqu&apos;à leur majorité, ils restent limités aux encadrants de leur
           unité et à leurs responsables légaux.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Droit à l&apos;image</h2>
+        <p>
+          Le groupe prend des photos lors de ses activités. Il ne les utilise,
+          pour chaque jeune, que dans la limite de l&apos;autorisation donnée
+          par son responsable légal, ou par le jeune lui-même s&apos;il est
+          majeur. Cette autorisation est facultative.
+        </p>
+        <p>Trois réponses sont possibles :</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            <strong>« {IMAGE_RIGHTS_LABEL.OUI} »</strong> : communication
+            interne (Piloti, annonces aux familles) et publications externes
+            (site du groupe, réseaux sociaux, presse locale, supports des Scouts
+            et Guides de France) ;
+          </li>
+          <li>
+            <strong>« {IMAGE_RIGHTS_LABEL.RESTREINT_INTERNE} »</strong> :
+            communication interne seulement (Piloti, annonces aux familles),
+            aucune publication externe ;
+          </li>
+          <li>
+            <strong>« {IMAGE_RIGHTS_LABEL.NON} »</strong> : aucune diffusion de
+            l&apos;image du jeune.
+          </li>
+        </ul>
+        <p>
+          Tant qu&apos;aucune réponse n&apos;est enregistrée, le jeune est
+          considéré comme n&apos;ayant pas donné son autorisation.
+        </p>
+        <p>
+          La réponse est enregistrée sur la fiche du jeune dans Piloti par le
+          responsable de groupe ou la secrétaire. Elle y est visible des
+          encadrants (chefs, responsable de groupe, secrétaire, trésorier),
+          pour qu&apos;ils la respectent. Elle reste valable jusqu&apos;à ce
+          qu&apos;elle soit modifiée ; chaque modification est conservée avec
+          sa date, à titre de preuve.
+        </p>
+        <p>
+          Vous pouvez modifier ou retirer cette autorisation à tout moment, par
+          simple demande au responsable de groupe, à la secrétaire ou au
+          référent RGPD (<strong>{ORG_PRIVACY_EMAIL}</strong>) : elle est
+          enregistrée sur la fiche du jeune de la même manière que
+          l&apos;accord. Après un retrait, plus aucune nouvelle photo du jeune
+          n&apos;est diffusée, et celles déjà publiées sont retirées des
+          supports numériques que le groupe maîtrise (son site et ses comptes
+          de réseaux sociaux).
         </p>
       </section>
 
@@ -153,6 +213,32 @@ export default function ConfidentialitePage() {
           mineurs : la preuve d&apos;un dossier de modération doit survivre à
           l&apos;effacement de son auteur.
         </p>
+        <p>
+          Le journal d&apos;audit, qui conserve l&apos;auteur et la date des
+          opérations de gestion du groupe, est conservé{" "}
+          <strong>
+            {auditYears} an{auditYears > 1 ? "s" : ""}
+          </strong>
+          . Ses entrées plus anciennes sont supprimées automatiquement.
+        </p>
+        <p>
+          Quand un message de salon est modifié ou supprimé, son texte
+          d&apos;origine est conservé dans le journal d&apos;audit, consultable
+          par le responsable de groupe et l&apos;administrateur, au titre de la
+          modération et de la protection des mineurs. Supprimer un message le
+          retire donc des salons, mais pas immédiatement de ce journal. Ce
+          texte en est retiré automatiquement au bout de{" "}
+          <strong>
+            {MESSAGE_TEXT_RETENTION_YEARS} an{MESSAGE_TEXT_RETENTION_YEARS > 1 ? "s" : ""}
+          </strong>
+          , ou plus tôt lors de l&apos;anonymisation du compte de son auteur ;
+          seule reste la trace de l&apos;opération (qui, quoi, quand).
+        </p>
+        <p>
+          Une demande d&apos;inscription refusée est conservée 30 jours (le
+          temps d&apos;un recours ou d&apos;une nouvelle demande), puis
+          anonymisée automatiquement selon les mêmes principes.
+        </p>
       </section>
 
       <section className="space-y-2">
@@ -166,17 +252,93 @@ export default function ConfidentialitePage() {
         <ul className="list-disc space-y-1 pl-5">
           <li>
             <strong>Resend</strong> — envoi des emails transactionnels (ex.
-            réinitialisation de mot de passe) ;
+            réinitialisation de mot de passe) : adresse email et contenu du
+            message. Les données sont hébergées dans l&apos;Union européenne
+            (Irlande) ;
           </li>
           <li>
             <strong>Cloudflare</strong> — tunnel sécurisé et protection réseau
-            (CDN/WAF), sans exposition directe du serveur sur Internet ;
+            (CDN/WAF), sans exposition directe du serveur sur Internet : le
+            trafic transite par son réseau mondial, y compris aux États-Unis.
+            Le chiffrement de la connexion s&apos;arrête chez Cloudflare, qui
+            voit donc votre adresse IP, les requêtes et les contenus échangés
+            avec l&apos;application ;
+          </li>
+          <li>
+            <strong>Service de notification de votre navigateur</strong>{" "}
+            (par exemple Google, Microsoft, Mozilla ou Apple) — acheminement des
+            notifications push, uniquement si vous les activez sur un appareil,
+            ce qui reste facultatif. Leur contenu est chiffré entre le serveur
+            et votre appareil : ce service le transmet sans pouvoir le lire.
+            Piloti conserve l&apos;adresse d&apos;abonnement fournie par le
+            navigateur et les clés de chiffrement associées. Elles sont
+            supprimées lorsque vous cliquez sur « Désactiver le push sur cet
+            appareil », lorsque le service de notification signale que
+            l&apos;abonnement n&apos;est plus valide, et lors de la suppression
+            de votre compte. L&apos;interrupteur « Push (navigateur) » de vos
+            préférences coupe les notifications courantes mais conserve
+            l&apos;abonnement : les messages urgents du groupe et les alertes
+            de sécurité de votre compte restent envoyés tant qu&apos;il existe ;
           </li>
           <li>
             <strong>{ORG_HOSTING_PROVIDER}</strong> —
             hébergement du serveur applicatif et de la base de données.
           </li>
         </ul>
+        <p>
+          Resend et Cloudflare sont des sociétés de droit américain. Les
+          transferts de données vers les États-Unis — y compris un éventuel
+          accès depuis ce pays à des données hébergées dans l&apos;Union
+          européenne (support, maison mère) — sont encadrés par leur
+          certification au <strong>Data Privacy Framework</strong>{" "}
+          UE–États-Unis, reconnu par la décision d&apos;adéquation de la
+          Commission européenne du 10 juillet 2023 ; leurs contrats de
+          sous-traitance prévoient en outre les clauses contractuelles types de
+          la Commission européenne. Les services de notification des
+          navigateurs peuvent également être opérés hors de l&apos;Union
+          européenne. C&apos;est votre navigateur, et non Piloti, qui choisit
+          ce service : ces transferts ne font l&apos;objet d&apos;aucun
+          encadrement particulier, la seule garantie étant le chiffrement de
+          bout en bout du contenu des notifications.
+        </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-xl font-bold text-earth">Sécurité</h2>
+        <p>
+          Des mesures techniques et organisationnelles protègent vos données
+          contre l&apos;accès non autorisé, la perte ou l&apos;altération :
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>
+            L&apos;application n&apos;est accessible que par une connexion
+            chiffrée, et le serveur n&apos;est pas exposé directement sur
+            Internet ;
+          </li>
+          <li>
+            Chaque utilisateur n&apos;accède qu&apos;aux données nécessaires à
+            son rôle dans le groupe ;
+          </li>
+          <li>Les mots de passe ne sont jamais conservés en clair ;</li>
+          <li>Les tentatives de connexion répétées sont bloquées ;</li>
+          <li>
+            Les opérations de gestion du groupe (matériel, finances, planning,
+            suivi pédagogique…) sont enregistrées dans un journal qui en
+            conserve l&apos;auteur et la date ;
+          </li>
+          <li>
+            Des protections du navigateur limitent l&apos;injection de contenu
+            malveillant dans les pages ;
+          </li>
+          <li>Les sauvegardes de la base de données sont chiffrées.</li>
+        </ul>
+        <p>
+          En cas de violation de données présentant un risque pour vos droits
+          et libertés, <strong>{ORG_NAME}</strong>{" "}
+          la notifie à la CNIL dans les 72 heures suivant sa découverte et, si
+          le risque est élevé, en informe également les personnes concernées
+          dans les meilleurs délais.
+        </p>
       </section>
 
       <section className="space-y-2">

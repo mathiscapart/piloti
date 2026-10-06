@@ -15,10 +15,13 @@ describe("buildManageableUserWhere — périmètre des comptes", () => {
     });
   });
 
-  it("accepte les deux statuts légitimes", () => {
+  it("accepte les trois statuts légitimes", () => {
     expect(buildManageableUserWhere({ status: "ACTIVE" }).status).toBe("ACTIVE");
     expect(buildManageableUserWhere({ status: "SUSPENDED" }).status).toBe(
       "SUSPENDED",
+    );
+    expect(buildManageableUserWhere({ status: "REJECTED" }).status).toBe(
+      "REJECTED",
     );
   });
 
@@ -26,7 +29,7 @@ describe("buildManageableUserWhere — périmètre des comptes", () => {
     // Sans ce repli, `?status=PENDING` exposerait les inscriptions en attente
     // depuis un écran qui n'est pas fait pour les montrer (elles vivent dans
     // /admin/inscriptions, avec leurs propres actions).
-    for (const forge of ["PENDING", "REJECTED", "", "'; --"]) {
+    for (const forge of ["PENDING", "", "'; --"]) {
       expect(buildManageableUserWhere({ status: forge }).status).toEqual({
         in: ["ACTIVE", "SUSPENDED"],
       });

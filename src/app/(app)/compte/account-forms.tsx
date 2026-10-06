@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { authClient } from "@/lib/auth-client";
+import { PASSWORD_HINT } from "@/lib/password-policy";
 import type { ActionResult } from "@/lib/types";
 
 import {
+  changeOwnPassword,
   updateOwnAvatar,
   updateOwnProfile,
   updateOwnSkillsProfile,
@@ -261,52 +262,30 @@ export function SkillsProfileForm({
   );
 }
 
-// Changement de mot de passe en auto-service (better-auth, exige l'actuel).
+// Changement de mot de passe en auto-service (Server Action : politique
+// `passwordSchema`, mot de passe actuel exigé, audit).
 export function PasswordForm() {
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [pending, start] = useTransition();
+  const [state, formAction, pending] = useActionState<ActionResult, FormData>(
+    changeOwnPassword,
+    emptyState,
+  );
 
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (next !== confirm) {
-      setError("Les nouveaux mots de passe ne correspondent pas.");
-      return;
-    }
-    start(async () => {
-      const { error: authError } = await authClient.changePassword({
-        currentPassword: current,
-        newPassword: next,
-        revokeOtherSessions: true,
-      });
-      if (authError) {
-        setError(
-          authError.message ??
-            "Impossible de changer le mot de passe (mot de passe actuel incorrect ?).",
-        );
-        return;
-      }
+  useEffect(() => {
+    if (state.error === null && state !== emptyState) {
       toast.success("Mot de passe modifié.");
-      setCurrent("");
-      setNext("");
-      setConfirm("");
-    });
-  }
+    }
+  }, [state]);
 
   return (
     <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
       <h2 className="font-bold text-earth">Changer mon mot de passe</h2>
-      <form onSubmit={onSubmit} className="space-y-4">
+      <form action={formAction} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="current">Mot de passe actuel</Label>
           <Input
             id="current"
+            name="currentPassword"
             type="password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
             required
             autoComplete="current-password"
           />
@@ -315,30 +294,28 @@ export function PasswordForm() {
           <Label htmlFor="next">Nouveau mot de passe</Label>
           <Input
             id="next"
+            name="newPassword"
             type="password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
             required
             minLength={12}
             autoComplete="new-password"
           />
-          <p className="text-xs text-trail">12 caractères minimum.</p>
+          <p className="text-xs text-trail">{PASSWORD_HINT}</p>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="confirm">Confirmer le nouveau mot de passe</Label>
           <Input
             id="confirm"
+            name="confirmPassword"
             type="password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
             required
             minLength={12}
             autoComplete="new-password"
           />
         </div>
-        {error ? (
+        {state.error ? (
           <p className="rounded-md border border-brick/30 bg-brick-soft px-3 py-2 text-sm font-medium text-brick-ink">
-            {error}
+            {state.error}
           </p>
         ) : null}
         <Button type="submit" disabled={pending}>

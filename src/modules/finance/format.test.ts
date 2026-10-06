@@ -4,7 +4,7 @@
 // se traduit directement par un montant faux en base.
 
 import { describe, expect, it } from "vitest";
-import { formatEuros, parseAmountToCents } from "./format";
+import { formatEuros, parseAmountToCents, parseCorrectedTotalToCents } from "./format";
 
 describe("parseAmountToCents", () => {
   it("parse un entier", () => {
@@ -76,5 +76,30 @@ describe("formatEuros", () => {
 
   it("formate un montant négatif", () => {
     expect(formatEuros(-500)).toMatch(/-5,00\s?€/);
+  });
+});
+
+// #121 — correction du total encaissé d'un événement : 0 est admis (annulation
+// totale), mais un champ vide ne doit jamais remettre l'encaissé à 0.
+describe("parseCorrectedTotalToCents", () => {
+  it("admet 0 sous ses différentes écritures", () => {
+    expect(parseCorrectedTotalToCents("0")).toBe(0);
+    expect(parseCorrectedTotalToCents("0,00")).toBe(0);
+    expect(parseCorrectedTotalToCents(" 0.0 ")).toBe(0);
+  });
+
+  it("parse un montant positif comme parseAmountToCents", () => {
+    expect(parseCorrectedTotalToCents("15,50")).toBe(1550);
+  });
+
+  it("refuse un champ vide ou blanc", () => {
+    expect(parseCorrectedTotalToCents("")).toBeNull();
+    expect(parseCorrectedTotalToCents("   ")).toBeNull();
+  });
+
+  it("refuse une saisie invalide", () => {
+    expect(parseCorrectedTotalToCents("abc")).toBeNull();
+    expect(parseCorrectedTotalToCents("-5")).toBeNull();
+    expect(parseCorrectedTotalToCents("0x0")).toBeNull();
   });
 });

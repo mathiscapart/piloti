@@ -18,8 +18,16 @@ import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import { listManageableUsers } from "@/modules/admin/queries";
+import { rejectedPurgeDate } from "@/modules/admin/rejected-retention";
 
+import { DeleteUserButton } from "./user-actions";
 import { UserFiltersForm } from "./user-filters-form";
+
+const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
 
 // US-29 — parse le JSON des rôles additionnels de façon défensive.
 function parseRoles(raw: unknown): string[] {
@@ -137,6 +145,8 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
   // passe) restent réservées à l'ADMIN ; la SECRÉTAIRE n'attribue que les rôles
   // (sauf ADMIN/RG, cf. canAssignRole).
   const isAdmin = can(currentUser, "admin.access");
+  // #173 — supprimer un compte : ADMIN seul.
+  const canDelete = can(currentUser, "user.delete");
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-6 md:px-8 md:py-10">
@@ -230,6 +240,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
             <option value="">Actifs et suspendus</option>
             <option value="ACTIVE">Actifs</option>
             <option value="SUSPENDED">Suspendus</option>
+            <option value="REJECTED">Refusés</option>
           </select>
         </label>
         <div className="flex items-end gap-2">
@@ -282,6 +293,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
             {users.map((u) => {
               const isSelf = u.id === currentUser.id;
               const suspended = u.status === "SUSPENDED";
+              const rejected = u.status === "REJECTED";
               const roles = parseRoles(u.roles);
               // La SECRÉTAIRE ne peut pas gérer un compte ADMIN/RG (l'ADMIN, si).
               const canManage =
@@ -291,7 +303,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                   key={u.id}
                   className={cn(
                     "rounded-2xl bg-snow p-4 shadow-card space-y-3",
-                    suspended && "opacity-60",
+                    (suspended || rejected) && "opacity-60",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -316,21 +328,40 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                     <span
                       className={cn(
                         "shrink-0 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold",
-                        suspended ? "bg-brick-soft text-brick-ink" : "bg-forest-soft text-forest-ink",
+                        suspended || rejected
+                          ? "bg-brick-soft text-brick-ink"
+                          : "bg-forest-soft text-forest-ink",
                       )}
                     >
-                      {suspended ? "Suspendu" : "Actif"}
+                      {rejected ? "Refusé" : suspended ? "Suspendu" : "Actif"}
                     </span>
                   </div>
+                  {rejected ? (
+                    <p className="text-xs text-trail">
+                      Anonymisation automatique le{" "}
+                      {u.rejectedAt ? DATE_FMT.format(rejectedPurgeDate(u.rejectedAt)) : "—"}
+                    </p>
+                  ) : null}
                   <div className="space-y-1">
                     <p className="text-xs text-trail">{roleLabels(roles)}</p>
                     {canManage ? (
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/admin/utilisateurs/${u.id}/modifier`}>
-                          <Pencil className="size-4" />
-                          Modifier
-                        </Link>
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        {rejected ? null : (
+                          <Button asChild variant="outline" size="sm">
+                            <Link href={`/admin/utilisateurs/${u.id}/modifier`}>
+                              <Pencil className="size-4" />
+                              Modifier
+                            </Link>
+                          </Button>
+                        )}
+                        {rejected && canDelete ? (
+                          <DeleteUserButton
+                            userId={u.id}
+                            fullName={`${u.firstName} ${u.lastName}`}
+                            label="Supprimer maintenant"
+                          />
+                        ) : null}
+                      </div>
                     ) : (
                       <p className="inline-flex items-center gap-1 rounded-full bg-sand px-2 py-0.5 text-[11px] font-bold text-trail">
                         <Lock className="size-3" />
@@ -365,13 +396,17 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                 {users.map((u) => {
                   const isSelf = u.id === currentUser.id;
                   const suspended = u.status === "SUSPENDED";
+                  const rejected = u.status === "REJECTED";
                   const roles = parseRoles(u.roles);
                   const canManage =
                     isAdmin || !roles.some((r) => PRIVILEGED_ROLES.has(r));
                   return (
                     <tr
                       key={u.id}
-                      className={cn("border-t border-stone/60", suspended && "opacity-60")}
+                      className={cn(
+                        "border-t border-stone/60",
+                        (suspended || rejected) && "opacity-60",
+                      )}
                     >
                       <td className="px-4 py-3">
                         <p className="font-bold text-earth">
@@ -389,6 +424,12 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                         ) : (
                           <p className="text-xs text-trail">{u.email}</p>
                         )}
+                        {rejected ? (
+                          <p className="text-xs text-trail">
+                            Anonymisation automatique le{" "}
+                            {u.rejectedAt ? DATE_FMT.format(rejectedPurgeDate(u.rejectedAt)) : "—"}
+                          </p>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-trail">{u.unit ?? "—"}</span>
@@ -400,10 +441,12 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                         <span
                           className={cn(
                             "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold",
-                            suspended ? "bg-brick-soft text-brick-ink" : "bg-forest-soft text-forest-ink",
+                            suspended || rejected
+                              ? "bg-brick-soft text-brick-ink"
+                              : "bg-forest-soft text-forest-ink",
                           )}
                         >
-                          {suspended ? "Suspendu" : "Actif"}
+                          {rejected ? "Refusé" : suspended ? "Suspendu" : "Actif"}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -414,12 +457,23 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                               Protégé
                             </span>
                           ) : (
-                            <Button asChild variant="outline" size="sm">
-                              <Link href={`/admin/utilisateurs/${u.id}/modifier`}>
-                                <Pencil className="size-4" />
-                                Modifier
-                              </Link>
-                            </Button>
+                            <>
+                              {rejected ? null : (
+                                <Button asChild variant="outline" size="sm">
+                                  <Link href={`/admin/utilisateurs/${u.id}/modifier`}>
+                                    <Pencil className="size-4" />
+                                    Modifier
+                                  </Link>
+                                </Button>
+                              )}
+                              {rejected && canDelete ? (
+                                <DeleteUserButton
+                                  userId={u.id}
+                                  fullName={`${u.firstName} ${u.lastName}`}
+                                  label="Supprimer maintenant"
+                                />
+                              ) : null}
+                            </>
                           )}
                         </div>
                       </td>

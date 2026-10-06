@@ -14,7 +14,7 @@ import {
   type ReimbursementMethod,
 } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can } from "@/lib/permissions";
+import { can, canReviewExpense } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 import { saveUploadedPhoto, UploadError } from "@/lib/upload";
 import { notify } from "@/modules/notifications/notify";
@@ -22,6 +22,9 @@ import { refuseIfEventOutOfScope } from "@/modules/planning/event-scope";
 
 import { notifyTreasurers } from "./expense-notify";
 import { formatEuros, parseAmountToCents } from "./format";
+
+// #173 — cf. canReviewExpense : le RG ne traite pas sa propre note.
+const OWN_NOTE = "Tu ne peux pas valider ta propre note de frais.";
 
 function parseDate(raw: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
@@ -139,6 +142,7 @@ export async function approveExpense(id: string): Promise<ActionResult> {
     select: { status: true, declarantId: true, amountCents: true },
   });
   if (!e) return { error: "Note introuvable." };
+  if (!canReviewExpense(user, e)) return { error: OWN_NOTE };
   if (e.status !== "PENDING") return { error: "Cette note n'est pas en attente." };
 
   await withAudit(
@@ -169,31 +173,36 @@ export async function approveExpenses(
     where: { id: { in: ids }, status: "PENDING" },
     select: { id: true, declarantId: true, amountCents: true },
   });
-  if (pending.length === 0) {
-    return { error: "Aucune note en attente dans la sélection." };
+  // #173 — le RG ne valide pas ses propres notes : elles sont ignorées du lot.
+  const reviewable = pending.filter((e) => canReviewExpense(user, e));
+  if (reviewable.length === 0) {
+    return {
+      error:
+        pending.length > 0 ? OWN_NOTE : "Aucune note en attente dans la sélection.",
+    };
   }
 
   await withAudit(
     (tx) =>
       tx.expense.updateMany({
-        where: { id: { in: pending.map((p) => p.id) }, status: "PENDING" },
+        where: { id: { in: reviewable.map((p) => p.id) }, status: "PENDING" },
         data: { status: "APPROVED", reviewedById: user.id, reviewedAt: new Date() },
       }),
     {
       action: "EXPENSE_APPROVED",
       userId: user.id,
-      metadata: { batch: true, count: pending.length },
+      metadata: { batch: true, count: reviewable.length },
     },
   );
 
   after(async () => {
-    for (const e of pending) {
+    for (const e of reviewable) {
       await notifyDeclarant(e.declarantId, e.id, "approuvée", e.amountCents);
     }
   });
 
   revalidatePath("/finances/notes");
-  return { error: null, approved: pending.length };
+  return { error: null, approved: reviewable.length };
 }
 
 // US-F07 — refuser une note de frais avec motif (trésorier).
@@ -209,6 +218,7 @@ export async function rejectExpense(
     select: { status: true, declarantId: true, amountCents: true },
   });
   if (!e) return { error: "Note introuvable." };
+  if (!canReviewExpense(user, e)) return { error: OWN_NOTE };
   if (e.status !== "PENDING") return { error: "Cette note n'est pas en attente." };
 
   const motif = reason.trim() || "Sans motif précisé.";
@@ -247,6 +257,7 @@ export async function reimburseExpense(
     select: { status: true, declarantId: true, amountCents: true },
   });
   if (!e) return { error: "Note introuvable." };
+  if (!canReviewExpense(user, e)) return { error: OWN_NOTE };
   if (e.status !== "APPROVED") {
     return { error: "Seule une note approuvée peut être remboursée." };
   }

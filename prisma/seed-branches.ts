@@ -1,8 +1,11 @@
 import "dotenv/config";
 
-import { auth } from "../src/lib/auth";
+import { randomBytes } from "node:crypto";
+
 import { db } from "../src/lib/db";
 import type { Unit } from "../src/lib/enums";
+
+import { createCredentialUser } from "./seed-account";
 
 // Jeu de données de développement pour exercer le PÉRIMÈTRE D'UNITÉ (D-024) :
 // des jeunes dans trois branches, des événements passés pointés et à pointer,
@@ -24,7 +27,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const now = Date.now();
 const daysFromNow = (d: number) => new Date(now + d * DAY_MS);
 
-const MOT_DE_PASSE = "PilotiJeune2024!";
+// Mot de passe des comptes factices. Un ancien mot de passe en clair a été
+// committé sur ce dépôt public (fuité définitivement) : comme `seed.ts`, on
+// passe par `SEED_PASSWORD`, sinon un mot de passe aléatoire affiché en fin
+// d'exécution.
+const MOT_DE_PASSE =
+  process.env.SEED_PASSWORD ?? `${randomBytes(12).toString("base64url")}aA1!`;
 
 interface JeuneInput {
   firstName: string;
@@ -65,8 +73,8 @@ const JEUNES: JeuneInput[] = [
 // de « refusé parce que le même chef ». Avec Marc, les deux chemins sont
 // exerçables : il confirme ce que Julie a proposé, Thomas (Pionniers) non.
 const CHEF_RENFORT = {
-  email: "marc.lambert@sgdf.fr",
-  password: "PilotiChef2024!",
+  email: "marc.lambert@example.invalid",
+  password: MOT_DE_PASSE,
   firstName: "Marc",
   lastName: "Lambert",
   unit: "SCOUTS" as Unit,
@@ -79,7 +87,7 @@ const CHEF_RENFORT = {
 // (US-S10), recevoir les notifications qui lui sont destinées.
 const PARENT = {
   email: "sophie.petit@parent.piloti.fr",
-  password: "PilotiParent2024!",
+  password: MOT_DE_PASSE,
   firstName: "Sophie",
   lastName: "Petit",
   birthDate: new Date("1986-04-03"),
@@ -113,14 +121,11 @@ async function creerJeune(input: JeuneInput) {
   const existant = await db.user.findUnique({ where: { email } });
   if (existant) return existant;
 
-  await auth.api.signUpEmail({
-    body: {
-      email,
-      password: MOT_DE_PASSE,
-      name: `${input.firstName} ${input.lastName}`,
-      firstName: input.firstName,
-      lastName: input.lastName,
-    },
+  await createCredentialUser({
+    email,
+    password: MOT_DE_PASSE,
+    firstName: input.firstName,
+    lastName: input.lastName,
   });
   return db.user.update({
     where: { email },
@@ -206,8 +211,8 @@ async function main() {
 
   // ── Chefs déjà présents : ils signent les pointages et les propositions ────
   const [thomas, julie, admin] = await Promise.all([
-    db.user.findUnique({ where: { email: "thomas.martin@sgdf.fr" } }),
-    db.user.findUnique({ where: { email: "julie.bernard@sgdf.fr" } }),
+    db.user.findUnique({ where: { email: "thomas.martin@example.invalid" } }),
+    db.user.findUnique({ where: { email: "julie.bernard@example.invalid" } }),
     db.user.findUnique({ where: { email: "admin@piloti.fr" } }),
   ]);
   if (!thomas || !julie || !admin) {
@@ -226,14 +231,11 @@ async function main() {
   // ── Second chef SCOUTS (cf. CHEF_RENFORT) ─────────────────────────────────
   let marc = await db.user.findUnique({ where: { email: CHEF_RENFORT.email } });
   if (!marc) {
-    await auth.api.signUpEmail({
-      body: {
-        email: CHEF_RENFORT.email,
-        password: CHEF_RENFORT.password,
-        name: `${CHEF_RENFORT.firstName} ${CHEF_RENFORT.lastName}`,
-        firstName: CHEF_RENFORT.firstName,
-        lastName: CHEF_RENFORT.lastName,
-      },
+    await createCredentialUser({
+      email: CHEF_RENFORT.email,
+      password: CHEF_RENFORT.password,
+      firstName: CHEF_RENFORT.firstName,
+      lastName: CHEF_RENFORT.lastName,
     });
     marc = await db.user.update({
       where: { email: CHEF_RENFORT.email },
@@ -257,14 +259,11 @@ async function main() {
   // ── Parent + lien familial ────────────────────────────────────────────────
   let parent = await db.user.findUnique({ where: { email: PARENT.email } });
   if (!parent) {
-    await auth.api.signUpEmail({
-      body: {
-        email: PARENT.email,
-        password: PARENT.password,
-        name: `${PARENT.firstName} ${PARENT.lastName}`,
-        firstName: PARENT.firstName,
-        lastName: PARENT.lastName,
-      },
+    await createCredentialUser({
+      email: PARENT.email,
+      password: PARENT.password,
+      firstName: PARENT.firstName,
+      lastName: PARENT.lastName,
     });
     parent = await db.user.update({
       where: { email: PARENT.email },
@@ -506,8 +505,11 @@ async function main() {
   }
   console.log(`  ${validations} validations d'étape (dont 3 en attente de confirmation)`);
 
-  console.log("\n✓ Terminé. Comptes jeunes : mot de passe commun");
-  console.log(`  ${MOT_DE_PASSE} — ex. ${emailDe(JEUNES[0])}`);
+  console.log("\n✓ Terminé.");
+  if (!process.env.SEED_PASSWORD) {
+    console.log(`  Mot de passe des comptes jeunes : ${MOT_DE_PASSE} — ex. ${emailDe(JEUNES[0])}`);
+    console.log("  (généré aléatoirement — fixez SEED_PASSWORD pour le choisir)");
+  }
 }
 
 main()

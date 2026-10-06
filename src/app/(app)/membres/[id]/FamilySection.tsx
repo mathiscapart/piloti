@@ -20,6 +20,8 @@ interface FamilyUser {
 interface LinkEntry {
   linkId: string;
   user: FamilyUser;
+  // Périmètre d'unité (#83) : calculé par lien, sur la branche du jeune.
+  canRemove: boolean;
 }
 interface LinkableUser {
   id: string;
@@ -36,7 +38,6 @@ export function FamilySection({
   parentLinks,
   linkableChildren,
   linkableParents,
-  canManage,
 }: {
   memberId: string;
   isParent: boolean;
@@ -45,7 +46,6 @@ export function FamilySection({
   parentLinks: LinkEntry[];
   linkableChildren: LinkableUser[];
   linkableParents: LinkableUser[];
-  canManage: boolean;
 }) {
   if (!isParent && !isJeune) return null;
 
@@ -59,7 +59,6 @@ export function FamilySection({
           emptyLabel="Aucun enfant rattaché."
           entries={childLinks}
           options={linkableChildren}
-          canManage={canManage}
           addLabel="Rattacher un enfant"
           onAdd={(otherId) => linkFamily(memberId, otherId)}
           onRemove={(otherId) => unlinkFamily(memberId, otherId)}
@@ -72,7 +71,6 @@ export function FamilySection({
           emptyLabel="Aucun parent rattaché."
           entries={parentLinks}
           options={linkableParents}
-          canManage={canManage}
           addLabel="Rattacher un parent"
           onAdd={(otherId) => linkFamily(otherId, memberId)}
           onRemove={(otherId) => unlinkFamily(otherId, memberId)}
@@ -87,7 +85,6 @@ function FamilyBlock({
   emptyLabel,
   entries,
   options,
-  canManage,
   addLabel,
   onAdd,
   onRemove,
@@ -96,7 +93,6 @@ function FamilyBlock({
   emptyLabel: string;
   entries: LinkEntry[];
   options: LinkableUser[];
-  canManage: boolean;
   addLabel: string;
   onAdd: (otherId: string) => Promise<{ error: string | null }>;
   onRemove: (otherId: string) => Promise<{ error: string | null }>;
@@ -145,7 +141,7 @@ function FamilyBlock({
                   </span>
                 ) : null}
               </span>
-              {canManage ? (
+              {e.canRemove ? (
                 <button
                   type="button"
                   aria-label="Retirer le rattachement"
@@ -161,7 +157,7 @@ function FamilyBlock({
         </ul>
       )}
 
-      {canManage && options.length > 0 ? (
+      {options.length > 0 ? (
         <div className="flex gap-2">
           <select
             value={selected}

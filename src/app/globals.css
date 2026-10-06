@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Appareil à souris ou trackpad : seul cas où masquer une action révélée au
+   survol est sûr (`group-hover` n'existe que sous `hover: hover`). Exiger aussi
+   `pointer: fine` écarte les tactiles qui se déclarent à tort `hover: hover`. */
+@custom-variant mouse (@media (hover: hover) and (pointer: fine));
+
 @theme inline {
   /* === Palette SGDF — couleurs principales === */
   --color-forest: #2d6a4f;

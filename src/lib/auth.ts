@@ -1,13 +1,17 @@
 import { APIError, betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { Resend } from "resend";
 
+import { enforceAuthRateLimit, recordAuthOutcome } from "@/lib/auth-rate-limit";
 import { db } from "@/lib/db";
 // SEC-08 (Vuln 5) — `user.name` est un texte libre modifiable par le
 // titulaire du compte : ce gabarit-ci vit hors de `notificationEmailHtml()`,
 // il doit donc échapper lui-même.
 import { escapeHtml } from "@/lib/email";
+import { canEnableLogin } from "@/lib/legal/age";
+import { passwordSchema } from "@/lib/password-policy";
 
 // SEC-08 (Vuln 4) — code d'erreur porté par l'APIError du hook
 // `session.create.before` ci-dessous, repris tel quel par
@@ -117,6 +121,11 @@ export const auth = betterAuth({
 
   advanced: {
     cookiePrefix: "piloti",
+    // #147 — derrière cloudflared + Traefik, X-Forwarded-For porte l'IP du
+    // conteneur cloudflared : sans ce réglage, le limiteur intégré compte tout
+    // le groupe comme une seule IP. Cf-Connecting-Ip est posé par l'edge
+    // Cloudflare, seul point d'entrée en prod (aucun port publié).
+    ipAddress: { ipAddressHeaders: ["cf-connecting-ip"] },
   },
 
   // SEC-08 (Vuln 4) — `/api` est exclu du proxy (src/proxy.ts) et
@@ -134,7 +143,7 @@ export const auth = betterAuth({
         before: async (session) => {
           const user = await db.user.findUnique({
             where: { id: session.userId },
-            select: { status: true, canLogin: true, rejectedReason: true },
+            select: { status: true, canLogin: true, rejectedReason: true, birthDate: true },
           });
           if (!user || user.status !== "ACTIVE") {
             const message =
@@ -153,12 +162,89 @@ export const auth = betterAuth({
                 "Ce compte est un compte enfant, géré par un parent. Un parent doit se connecter avec son propre compte pour agir en son nom.",
             });
           }
+          // SAFE-01 — profil incomplet (pas de date de naissance). Les quatre
+          // chemins de création l'imposent (register, setup,
+          // createChildAccount, seed) : un compte ACTIVE sans date est une
+          // anomalie de données, à traiter ici plutôt que de laisser une
+          // session s'ouvrir sur un profil que `canEnableLogin` refuserait
+          // de toute façon (fail-closed, date absente).
+          if (!user.birthDate) {
+            throw new APIError("FORBIDDEN", {
+              code: ACCOUNT_NOT_ACTIVE_CODE,
+              message:
+                "Ce compte est incomplet (date de naissance manquante). Contacte un responsable pour la renseigner.",
+            });
+          }
+          // #122 — défense de dernier recours : un compte de moins de 15 ans
+          // ne doit jamais obtenir de session, même si `canLogin` a été
+          // désynchronisé.
+          if (!canEnableLogin(user.birthDate)) {
+            throw new APIError("FORBIDDEN", {
+              code: ACCOUNT_NOT_ACTIVE_CODE,
+              message:
+                "Ce compte appartient à un jeune de moins de 15 ans : un parent doit se connecter avec son propre compte pour agir en son nom.",
+            });
+          }
         },
       },
     },
   },
 
-  // Rate limit anti-bruteforce + anti-flood
+  // Le changement de mot de passe passe uniquement par la Server Action
+  // `changeOwnPassword` (src/app/(app)/compte/actions.ts), seule à écrire
+  // l'audit. Un appel HTTP à POST /api/auth/change-password porte une
+  // `request` et est refusé ; `auth.api.changePassword` côté serveur n'en porte
+  // pas. `minPasswordLength` ne couvrant que la longueur, la politique complète
+  // est aussi appliquée ici, pour tout appelant serveur.
+  //
+  // #147 — les hooks s'exécutent pour le routeur HTTP ET pour `auth.api.*`
+  // (dispatchAuthEndpoint), contrairement au `rateLimit` ci-dessous qui ne voit
+  // que le HTTP : c'est ici que les Server Actions de connexion, inscription et
+  // mot de passe oublié/réinitialisation sont limitées (src/lib/auth-rate-limit.ts).
+  // #153 — sauf le changement de mot de passe : ce hook tourne avant la
+  // résolution de la session, il ignore donc le compte visé. `changeOwnPassword`
+  // le limite elle-même.
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      await enforceAuthRateLimit(ctx.path, ctx.body, ctx.headers);
+      if (ctx.path !== "/change-password") return;
+      if (ctx.request) {
+        throw new APIError("FORBIDDEN", {
+          message: "Changez votre mot de passe depuis la page « Mon compte ».",
+        });
+      }
+      const parsed = passwordSchema.safeParse(ctx.body?.newPassword);
+      if (!parsed.success) {
+        throw new APIError("BAD_REQUEST", {
+          message: parsed.error.issues[0]?.message,
+        });
+      }
+    }),
+    after: createAuthMiddleware(async (ctx) => {
+      const alertEmail = await recordAuthOutcome(
+        ctx.path,
+        ctx.body,
+        ctx.headers,
+        ctx.context.returned,
+      );
+      // Sans await : une réponse plus lente quand le compte existe trahirait
+      // son existence. Import dynamique : le module est `server-only`, or
+      // prisma/seed.ts importe ce fichier hors de Next.
+      if (alertEmail) {
+        void import("@/modules/notifications/security-alert")
+          .then((m) => m.alertBlockedSignIn(alertEmail))
+          .catch((e) => console.error("[auth] alerte de sécurité non envoyée:", e));
+      }
+    }),
+  },
+
+  // #153 — POST /api/auth/verify-password répond « mot de passe faux » à toute
+  // session, sans autre limite que la limite globale par IP : le même oracle
+  // que le changement de mot de passe. L'application ne s'en sert pas.
+  disabledPaths: ["/verify-password"],
+
+  // Rate limit anti-bruteforce + anti-flood — routes HTTP /api/auth seulement ;
+  // les appels `auth.api.*` des Server Actions sont limités par les hooks.
   rateLimit: {
     enabled: true,
     window: 60 * 15, // 15 min

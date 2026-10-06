@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
+import { rateLimitMessage } from "@/lib/auth-rate-limit";
 import { passwordSchema } from "@/lib/password-policy";
 
 export interface ResetPasswordResult {
@@ -44,6 +45,8 @@ export async function resetPasswordAction(
       headers: await headers(),
     });
   } catch (e) {
+    const limited = rateLimitMessage(e);
+    if (limited) return { error: limited };
     console.error("[resetPassword]", e);
     return {
       error:

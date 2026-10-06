@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { can, scopedUnits } from "@/lib/permissions";
+import { can, canActOnUnit } from "@/lib/permissions";
 import { listBadges } from "@/modules/pedagogy/referential";
 
 import { AwardForm } from "./AwardForm";
@@ -24,9 +24,9 @@ export default async function AwardPage() {
   // Périmètre d'unité : un chef n'attribue de badge qu'aux jeunes de sa branche.
   // Le filtre est ici côté requête (et non dans un garde) : la page propose une
   // sélection, autant ne pas y faire figurer des jeunes que l'action refusera.
-  // Périmètre complet (ADMIN/RG) → aucun filtre, pour ne pas exclure au passage
+  // Périmètre complet (ADMIN) → aucun filtre, pour ne pas exclure au passage
   // les jeunes sans unité renseignée.
-  const visibles = scopedUnits(user, UNITS);
+  const visibles = UNITS.filter((u) => canActOnUnit(user, "pedago.manage", u));
   const unitFilter =
     visibles.length === UNITS.length ? {} : { unit: { in: visibles } };
 

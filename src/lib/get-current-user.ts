@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canEnableLogin } from "@/lib/legal/age";
 
 /**
  * Récupère l'utilisateur actuellement connecté avec ses champs Piloti.
@@ -17,13 +18,9 @@ import { db } from "@/lib/db";
  * même avec un cookie de session valide/rejoué.
  *
  * SAFE-01 (D-023) — même raisonnement pour `birthDate` : le verrou de profil
- * incomplet vit dans le proxy, qui ne voit pas les Server Actions. Sans ce
- * garde, une session obtenue pour un compte sans date de naissance (le hook
- * `session.create.before` ne la bloque pas) reste refusée sur les pages mais
- * exécute les actions. `dm-policy.ts` est fail-safe de son côté, donc rien
- * n'est exploitable aujourd'hui — mais l'invariant « pas de date, pas de
- * session utilisable » doit tenir aux deux endroits, pas seulement à celui
- * qu'on a testé.
+ * incomplet/mineur de moins de 15 ans (#122) vit dans le proxy, qui ne voit
+ * pas les Server Actions ; sans ce garde une session déjà ouverte resterait
+ * refusée sur les pages mais exécuterait les actions.
  */
 export async function getCurrentUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -52,7 +49,7 @@ export async function getCurrentUser() {
     !user ||
     user.status !== "ACTIVE" ||
     user.canLogin === false ||
-    !user.birthDate
+    !canEnableLogin(user.birthDate)
   ) {
     redirect("/login");
   }

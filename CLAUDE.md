@@ -46,7 +46,12 @@ Ports et réseaux à viser (le principe hôte/conteneur est dans le CLAUDE.md gl
 |---|---|---|
 | `pnpm dev` | `localhost:3000` | `host.docker.internal:3000` |
 | `docker-compose.dev.yml` | `localhost:4000` (publie `4000:3000`, le 3000 hôte est exclu par Windows) | `host.docker.internal:4000` |
+| `pnpm dev:worktree` (worktree Orca) | `localhost:<PORT>` — `PORT` dans `.env.local`, entre 3101 et 3199 | `host.docker.internal:<PORT>` |
 | stack prod locale | `https://piloti.mathiscapart.xyz` — aucun port publié | `--network piloti_internal` puis `http://piloti-app-1:3000` |
+
+**Worktrees Orca** : `orca.yaml` lance `scripts/worktree-setup.sh` à la création. Chaque worktree
+a ses dépendances, **sa propre base** `dev.db` seedée (mot de passe `SEED_PASSWORD` dans `.env`)
+et un port réservé. Ne jamais pointer un worktree vers la base d'un autre.
 
 Le nom de service est `app` : depuis un navigateur c'est **inutilisable**, `app`
 est un TLD préchargé HSTS et Chromium force le HTTPS (`ERR_SSL_PROTOCOL_ERROR`).
@@ -88,7 +93,50 @@ interroge `context7`. Ne devine jamais une signature.
 Décisions techniques structurantes → une entrée dans `DECISIONS.md` (Contexte / Choix / Conséquences),
 on amende, on n'efface pas. Commits en **conventional commits, en français**, scope = domaine et
 référence de user story quand elle existe (`feat(finances): US-F06 — …`). Travail sur branche
-`feat/<sujet>`, fusion dans `main`. Pas de push/déploiement sans validation humaine explicite.
+`feat/<sujet>` ou `fix/<sujet>` partie de `develop`, **PR vers `develop`** — jamais vers `main`,
+qui ne reçoit que `develop` au moment de livrer. Pas de push/déploiement sans validation humaine explicite.
+
+### Sources de travail
+
+- **Bugs et fixes** → GitHub Issues. La PR ferme l'issue (`Closes #N`).
+- **Features** → backlog Notion (user stories `US-XX`). La PR cite l'US et le lien de la page Notion.
+
+### Modèle de PR (obligatoire)
+
+Toute PR, ouverte par un humain ou un agent, suit ce modèle. Ce corps sert aussi de récap
+envoyé pour relecture : il doit se lire **sans ouvrir le diff**. Une section sans objet porte
+« Sans objet », jamais une case vide. Aucune preuve inventée : ce qui n'a pas été exécuté est écrit
+comme tel.
+
+```markdown
+## Origine
+Closes #N — ou — US-XX : <lien Notion>
+
+## Ce qui change
+<2 à 5 puces, du point de vue de l'utilisateur de Piloti, pas des fichiers>
+
+## Pourquoi
+<le problème ou le besoin, en une ou deux phrases>
+
+## Preuves
+- `pnpm lint` : ✅ / ❌ <extrait si ❌>
+- `pnpm typecheck` : ✅ / ❌
+- `pnpm test` : ✅ N tests / ❌ — tests ajoutés : <fichiers, ou « Sans objet »>
+- Parcours réel : <rôle utilisé, URL, étapes> + captures — ou « non exécuté : <raison> »
+
+## Invariants
+- [ ] Mutations sous `withAudit()`
+- [ ] Actions/pages sensibles gardées par `can(user, "…")`
+- [ ] Migration Prisma : <nom> / Sans objet
+- [ ] CSP Traefik mise à jour si nouveau domaine externe / Sans objet
+- [ ] Données de mineurs / RGPD touchées : <comment> / Sans objet
+
+## Décisions prises
+<choix non évidents faits en route ; entrée `DECISIONS.md` si structurant — ou « Aucune »>
+
+## Risques et points à vérifier
+<ce que le relecteur doit regarder en priorité, régressions possibles, hors périmètre laissé de côté>
+```
 
 <!-- BEGIN:nextjs-agent-rules -->
 

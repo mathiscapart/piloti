@@ -816,3 +816,19 @@ Deux défauts laissés par #97.
 - Les protections liées à l'âge ne changent pas : aucune connexion sous 15 ans (`canEnableLogin`, `MIN_LOGIN_AGE`), règles de messagerie privée (`dm-policy.ts`), consentement parental, comptes enfants. Un compte de moins de 15 ans peut porter un rôle d'encadrement, mais ne peut pas se connecter.
 - Un chef mineur hérite des droits du rôle CHEF, notamment la messagerie privée avec les jeunes de son unité dans les limites de `dm-policy.ts`. Comme le signale #128, ce point reste à examiner avant de livrer.
 - Corriger une date de naissance n'impose plus de retirer d'abord les rôles d'encadrement.
+
+## D-045 — #128 : le périmètre d'un chef est la table `UnitLead`, pas `User.unit`
+
+**Contexte** : le périmètre d'unité (`inUnitScope`, `canActOnUnit`) comparait `user.unit === targetUnit`. Un compagnon, membre des Compagnons et chef chez les Louveteaux, ne pouvait pas être représenté, ni un chef de deux unités. L'issue proposait une table `UserUnit` (membre / encadrant).
+
+**Choix** (option E, décision du responsable, étape 2 de #128) :
+- `User.unit` reste l'unité d'**appartenance**, unique. Une table `UnitLead (userId, unit)` porte les unités **encadrées**. Pas de table `UserUnit`.
+- Le périmètre d'un CHEF = ses `UnitLead`, chargées dans `ledUnits` par `getCurrentUser()`. Fail-closed : un CHEF sans `UnitLead` n'encadre rien, même avec une `unit`. ADMIN et RG restent non bornés. Les rôles restent globaux, sans paramètre d'âge (D-044).
+- Les autres rôles (secrétaire, trésorier…) gardent dans `inUnitScope` leur périmètre d'avant : leur unité d'appartenance. Il ne sert qu'au bilan des présences (`member.view`), qui relève d'une étape suivante. À trancher alors.
+- La migration `20261007163359_unit_lead` donne à chaque compte non anonymisé qui porte CHEF et une unité `UnitLead(unit)` : les chefs actuels gardent exactement leurs droits.
+- Un seul point d'écriture, `writeLeadUnits` (`src/modules/admin/actions.ts`), verrouillé par `src/lib/unit-lead-writes.test.ts`. L'anonymisation est la seule exception, et elle ne fait que supprimer.
+- Cohérence avec le rôle (`leadUnitsForRoles`) : retirer CHEF supprime les `UnitLead`, et attribuer CHEF à un compte sans `UnitLead` lui fait encadrer son unité. L'approbation repart de zéro : le chef encadre l'unité choisie dans le dialogue. `setUserUnit` ne touche jamais au périmètre. `setUserLeadUnits` définit les unités encadrées d'un CHEF (audit `USER_LEAD_UNITS_CHANGED`).
+
+**Conséquences** :
+- Changer l'unité d'un chef (`setUserUnit`) ne déplace plus son périmètre. Tant qu'aucun écran n'appelle `setUserLeadUnits`, le recours est d'enregistrer ses rôles sans CHEF puis avec : il encadre alors sa nouvelle unité.
+- Restent sur `User.unit`, à migrer dans les étapes suivantes : `dm-policy` (chef de son unité), le routage des notifications de modération (`selectReportRecipients`), les audiences d'annonces et de salons, le tableau de bord, l'iCal et les présences. Pour un chef dont `UnitLead` = `unit` (tous les chefs repris), rien ne change.

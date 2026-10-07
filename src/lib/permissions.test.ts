@@ -281,6 +281,7 @@ describe("inUnitScope — périmètre d'unité", () => {
     role: "CHEF",
     roles: ["CHEF"],
     unit: "LOUVETEAUX",
+    ledUnits: ["LOUVETEAUX"],
     status: "ACTIVE" as const,
   };
 
@@ -330,7 +331,7 @@ describe("scopedUnits", () => {
   it("ne renvoie que sa branche pour un CHEF", () => {
     expect(
       scopedUnits(
-        { role: "CHEF", roles: ["CHEF"], unit: "SCOUTS", status: "ACTIVE" },
+        { role: "CHEF", roles: ["CHEF"], unit: "SCOUTS", ledUnits: ["SCOUTS"], status: "ACTIVE" },
         catalog,
       ),
     ).toEqual(["SCOUTS"]);
@@ -354,6 +355,7 @@ describe("canActOnUnit — périmètre conscient du rôle qui porte le droit", (
     role: "CHEF",
     roles: ["CHEF"],
     unit: "SCOUTS",
+    ledUnits: ["SCOUTS"],
     status: "ACTIVE" as const,
   };
 
@@ -455,7 +457,7 @@ describe("can — member.family.manage", () => {
 
 describe("canActOnUnit — rattachement familial borné à la branche du jeune (#83)", () => {
   const chef = (unit: string | null) =>
-    ({ role: "CHEF", roles: ["CHEF"], unit, status: "ACTIVE" as const });
+    ({ role: "CHEF", roles: ["CHEF"], unit, ledUnits: unit ? [unit] : [], status: "ACTIVE" as const });
   const active = (roles: string[]) =>
     ({ role: roles[0], roles, unit: null, status: "ACTIVE" as const });
 
@@ -488,7 +490,7 @@ describe("canActOnUnit — rattachement familial borné à la branche du jeune (
 
 describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => {
   const user = (roles: string[], unit: string | null = null, status = "ACTIVE" as const) =>
-    ({ role: roles[0], roles, unit, status });
+    ({ role: roles[0], roles, unit, ledUnits: unit ? [unit] : [], status });
 
   it("autorise un chef de la branche du jeune", () => {
     expect(canReadPedagoNotes(user(["CHEF"], "PIONNIERS"), "PIONNIERS")).toBe(true);
@@ -563,6 +565,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     role: "RESPONSABLE_GROUPE",
     roles: ["RESPONSABLE_GROUPE", ...extra],
     unit,
+    ledUnits: unit ? [unit] : [],
     status,
   });
 
@@ -828,5 +831,93 @@ describe("canSetEmailTo", () => {
 
   it("ADMIN : toute adresse", () => {
     expect(canSetEmailTo(u("ADMIN"), "enfant-xyz@piloti.invalid")).toBe(true);
+  });
+});
+
+// #128 — le périmètre d'un chef est la liste de ses unités encadrées
+// (`UnitLead`), chargée dans `ledUnits`. `unit` reste l'unité d'APPARTENANCE :
+// elle n'ouvre plus aucun périmètre à elle seule.
+describe("ledUnits — périmètre d'encadrement (#128)", () => {
+  const user = (roles: string[], unit: string | null, ledUnits?: string[]) => ({
+    role: roles[0],
+    roles,
+    unit,
+    ledUnits,
+    status: "ACTIVE" as const,
+  });
+  const catalog = ["FARFADETS", "LOUVETEAUX", "SCOUTS", "PIONNIERS", "COMPAGNONS"] as const;
+
+  it("chef d'une unité : agit sur elle seule", () => {
+    const chef = user(["CHEF"], "SCOUTS", ["SCOUTS"]);
+    expect(inUnitScope(chef, "SCOUTS")).toBe(true);
+    expect(inUnitScope(chef, "PIONNIERS")).toBe(false);
+    expect(canActOnUnit(chef, "event.manage", "SCOUTS")).toBe(true);
+    expect(canActOnUnit(chef, "event.manage", "PIONNIERS")).toBe(false);
+    expect(scopedUnits(chef, catalog)).toEqual(["SCOUTS"]);
+  });
+
+  it("chef de deux unités : agit sur les deux, pas au-delà", () => {
+    const chef = user(["CHEF"], "ADULTES", ["LOUVETEAUX", "SCOUTS"]);
+    expect(scopedUnits(chef, catalog)).toEqual(["LOUVETEAUX", "SCOUTS"]);
+    expect(canActOnUnit(chef, "pedago.manage", "LOUVETEAUX")).toBe(true);
+    expect(canActOnUnit(chef, "pedago.manage", "SCOUTS")).toBe(true);
+    expect(canActOnUnit(chef, "pedago.manage", "PIONNIERS")).toBe(false);
+    expect(canReadPedagoNotes(chef, "SCOUTS")).toBe(true);
+  });
+
+  it("compagnon CHEF encadrant les Louveteaux : agit sur les Louveteaux, pas sur les Compagnons", () => {
+    const compagnon = user(["CHEF"], "COMPAGNONS", ["LOUVETEAUX"]);
+    expect(inUnitScope(compagnon, "LOUVETEAUX")).toBe(true);
+    expect(inUnitScope(compagnon, "COMPAGNONS")).toBe(false);
+    expect(canActOnUnit(compagnon, "event.manage", "LOUVETEAUX")).toBe(true);
+    expect(canActOnUnit(compagnon, "event.manage", "COMPAGNONS")).toBe(false);
+    expect(canReadPedagoNotes(compagnon, "LOUVETEAUX")).toBe(true);
+    expect(canReadPedagoNotes(compagnon, "COMPAGNONS")).toBe(false);
+    expect(scopedUnits(compagnon, catalog)).toEqual(["LOUVETEAUX"]);
+  });
+
+  it("fail-closed : un CHEF sans UnitLead n'encadre aucune unité, même avec une `unit`", () => {
+    for (const chef of [user(["CHEF"], "SCOUTS", []), user(["CHEF"], "SCOUTS")]) {
+      expect(inUnitScope(chef, "SCOUTS")).toBe(false);
+      expect(canActOnUnit(chef, "event.manage", "SCOUTS")).toBe(false);
+      expect(canReadPedagoNotes(chef, "SCOUTS")).toBe(false);
+      expect(scopedUnits(chef, catalog)).toEqual([]);
+    }
+  });
+
+  it("fail-closed : une ressource sans unité n'est à aucun chef", () => {
+    expect(inUnitScope(user(["CHEF"], "SCOUTS", ["SCOUTS"]), null)).toBe(false);
+    expect(canActOnUnit(user(["CHEF"], "SCOUTS", ["SCOUTS"]), "event.manage", null)).toBe(false);
+  });
+
+  it("RG aussi CHEF : groupe entier pour ses droits de RG, pédagogique borné à ses UnitLead", () => {
+    const rgChef = user(["RESPONSABLE_GROUPE", "CHEF"], "ADULTES", ["LOUVETEAUX"]);
+    expect(scopedUnits(rgChef, catalog)).toEqual([...catalog]);
+    expect(canActOnUnit(rgChef, "event.manage", "PIONNIERS")).toBe(true);
+    expect(canActOnUnit(rgChef, "pedago.manage", "LOUVETEAUX")).toBe(true);
+    expect(canActOnUnit(rgChef, "pedago.manage", "PIONNIERS")).toBe(false);
+    expect(canReadPedagoNotes(rgChef, "PIONNIERS")).toBe(false);
+  });
+
+  it("rôle transverse avec une unité (secrétaire) : périmètre inchangé, son unité d'appartenance", () => {
+    // Bilan des présences (`member.view` + `scopedUnits`) : comportement
+    // d'avant #128, à trancher avec les présences (étape suivante).
+    const secretaire = user(["SECRETAIRE"], "ADULTES");
+    expect(scopedUnits(secretaire, [...catalog, "ADULTES"])).toEqual(["ADULTES"]);
+    expect(scopedUnits(user(["TRESORIER"], null), catalog)).toEqual([]);
+  });
+
+  it("CHEF aussi secrétaire, sans UnitLead : le rôle CHEF borne, aucune unité", () => {
+    const chefSec = user(["CHEF", "SECRETAIRE"], "SCOUTS", []);
+    expect(scopedUnits(chefSec, catalog)).toEqual([]);
+    expect(scopedUnits(user(["CHEF", "SECRETAIRE"], "SCOUTS", ["LOUVETEAUX"]), catalog)).toEqual(["LOUVETEAUX"]);
+  });
+
+  it("ADMIN : non borné, sans aucun UnitLead", () => {
+    const admin = user(["ADMIN"], null, []);
+    expect(scopedUnits(admin, catalog)).toEqual([...catalog]);
+    expect(inUnitScope(admin, null)).toBe(true);
+    expect(canActOnUnit(admin, "pedago.manage", "COMPAGNONS")).toBe(true);
+    expect(canReadPedagoNotes(admin, "COMPAGNONS")).toBe(true);
   });
 });

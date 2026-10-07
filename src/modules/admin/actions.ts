@@ -27,6 +27,8 @@ import {
 import { notify } from "@/modules/notifications/notify";
 import { ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
+import { leadUnitsForRoles } from "./unit-lead";
+
 import type { ActionResult } from "@/lib/types";
 
 const approveSchema = z.object({
@@ -57,6 +59,13 @@ const unitSchema = z.object({
   unit: z
     .union([z.enum(UNITS), z.literal("")])
     .transform((v) => (v === "" ? null : v)),
+});
+
+// #128 — unités ENCADRÉES d'un compte (périmètre d'un CHEF). Liste vide =
+// n'encadre plus rien.
+const leadUnitsSchema = z.object({
+  userId: z.string().min(1),
+  units: z.array(z.enum(UNITS)).default([]),
 });
 
 // SAFE-01 — correction d'une date de naissance. C'est le SEUL chemin de
@@ -182,6 +191,24 @@ async function assertCanManageTarget(
   return null;
 }
 
+// #128 — SEUL point d'écriture de la table UnitLead, anonymisation mise à part
+// (verrouillé par src/lib/unit-lead-writes.test.ts). Aligne les unités
+// encadrées du compte sur `units`.
+async function writeLeadUnits(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  units: readonly string[],
+): Promise<void> {
+  await tx.unitLead.deleteMany({ where: { userId } });
+  if (units.length > 0) {
+    await tx.unitLead.createMany({ data: units.map((unit) => ({ userId, unit })) });
+  }
+}
+
+// #128 — sentinelle : annule la transaction de setUserLeadUnits sans audit
+// quand le compte n'est plus CHEF au moment d'écrire.
+class NotChefError extends Error {}
+
 // ----------------------------------------------------------------------------
 // /admin/inscriptions
 // ----------------------------------------------------------------------------
@@ -220,8 +247,8 @@ export async function approveUser(
   if (escalation) return escalation;
 
   await withAudit(
-    (tx) =>
-      tx.user.update({
+    async (tx) => {
+      await tx.user.update({
         where: { id: parsed.data.userId },
         data: {
           status: "ACTIVE",
@@ -231,15 +258,22 @@ export async function approveUser(
           emailVerified: true,
           rejectedReason: null,
         },
-      }),
-    {
+      });
+      // #128 — l'approbation définit le compte : un CHEF encadre l'unité
+      // choisie ici, quelle que soit celle qu'il portait en attente.
+      const leadUnits = leadUnitsForRoles(roles, parsed.data.unit, []);
+      await writeLeadUnits(tx, parsed.data.userId, leadUnits);
+      return leadUnits;
+    },
+    (leadUnits) => ({
       action: "USER_APPROVED",
       userId: actor.id,
       metadata: {
         targetUserId: parsed.data.userId,
         assignedRoles: roles,
+        leadUnits,
       },
-    },
+    }),
   );
 
   // L'écran de fin d'inscription promet un message à la validation.
@@ -383,22 +417,34 @@ export async function setUserRoles(
   }
 
   await withAudit(
-    (tx) =>
-      tx.user.update({
+    async (tx) => {
+      const updated = await tx.user.update({
         where: { id: parsed.data.userId },
         data: {
           roles: JSON.stringify(roles),
           role: roles[0] ?? "SCOUT", // miroir d'affichage (déprécié)
         },
-      }),
-    {
+        select: { unit: true, unitLeads: { select: { unit: true } } },
+      });
+      // #128 — CHEF attribué : il encadre son unité s'il n'encadrait rien ;
+      // CHEF retiré : il n'encadre plus rien.
+      const leadUnits = leadUnitsForRoles(
+        roles,
+        updated.unit,
+        updated.unitLeads.map((l) => l.unit),
+      );
+      await writeLeadUnits(tx, parsed.data.userId, leadUnits);
+      return leadUnits;
+    },
+    (leadUnits) => ({
       action: "USER_ROLE_CHANGED",
       userId: actor.id,
       metadata: {
         targetUserId: parsed.data.userId,
         roles,
+        leadUnits,
       },
-    },
+    }),
   );
 
   revalidatePath("/admin/utilisateurs");
@@ -407,6 +453,8 @@ export async function setUserRoles(
 
 // US-32 — change la branche/unité d'un membre. ADMIN + SECRÉTAIRE ; la
 // SECRÉTAIRE ne peut pas toucher un compte ADMIN/RG. Tracé en audit.
+// #128 — ne change que l'APPARTENANCE, jamais les unités encadrées
+// (cf. setUserLeadUnits).
 export async function setUserUnit(
   _prev: ActionResult,
   formData: FormData,
@@ -436,6 +484,60 @@ export async function setUserUnit(
       metadata: { targetUserId: parsed.data.userId, unit: parsed.data.unit },
     },
   );
+
+  revalidatePath("/admin/utilisateurs");
+  return { error: null };
+}
+
+// #128 — définit les unités ENCADRÉES d'un compte, son périmètre de chef,
+// indépendamment de son unité d'appartenance (un compagnon peut encadrer les
+// Louveteaux). Mêmes gardes que les rôles. Réservé aux comptes CHEF : pour un
+// autre rôle, une unité encadrée n'ouvrirait rien et romprait la cohérence
+// CHEF ↔ UnitLead que maintiennent approveUser et setUserRoles.
+export async function setUserLeadUnits(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
+
+  const parsed = leadUnitsSchema.safeParse({
+    userId: formData.get("userId"),
+    units: formData.getAll("units"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+
+  const units = [...new Set(parsed.data.units)];
+  try {
+    await withAudit(
+      async (tx) => {
+        // Rôle relu DANS la transaction : un setUserRoles concurrent qui
+        // retire CHEF ne doit pas laisser d'unité encadrée à un non-chef.
+        const target = await tx.user.findUnique({
+          where: { id: parsed.data.userId },
+          select: { roles: true, status: true },
+        });
+        const isChef =
+          target?.status !== "DELETED" && parseRoles(target?.roles).includes("CHEF");
+        if (units.length > 0 && !isChef) throw new NotChefError();
+        await writeLeadUnits(tx, parsed.data.userId, units);
+      },
+      {
+        action: "USER_LEAD_UNITS_CHANGED",
+        userId: actor.id,
+        metadata: { targetUserId: parsed.data.userId, units },
+      },
+    );
+  } catch (err) {
+    if (err instanceof NotChefError) {
+      return { error: "Seul un compte Chef peut encadrer une unité." };
+    }
+    throw err;
+  }
 
   revalidatePath("/admin/utilisateurs");
   return { error: null };

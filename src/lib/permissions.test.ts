@@ -13,6 +13,8 @@ import {
   canAccessAdminZone,
   canActOnUnit,
   canAssignRole,
+  canChangeAccountEmail,
+  canSetEmailTo,
   canManagePlace,
   canReadPedagoNotes,
   canReviewExpense,
@@ -569,6 +571,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     "pedago.manage",
     "pedago.referential",
     "user.password.set",
+    "user.email.set",
     "user.delete",
     "message.edit_any",
   ];
@@ -727,8 +730,14 @@ describe("can — channel.moderate", () => {
 
 // #173 — définir le mot de passe d'un compte et supprimer un compte : ADMIN seul
 // (décision du 2026-09-24). La SECRÉTAIRE et le RG gardent le reste de user.manage.
-describe("can — user.password.set / user.delete (ADMIN seul)", () => {
-  it.each([["user.password.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
+// Changer l'email d'un compte revient à pouvoir s'y connecter (« mot de passe
+// oublié » vers la nouvelle adresse) : même règle que user.password.set.
+describe("can — user.password.set / user.email.set / user.delete (ADMIN seul)", () => {
+  it("user.email.set est une action déclarée de la matrice", () => {
+    expect(ACTIONS).toContain("user.email.set");
+  });
+
+  it.each([["user.password.set"], ["user.email.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
     expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, action)).toBe(true);
     for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE", "CHEF", "TRESORIER"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, action)).toBe(false);
@@ -753,5 +762,71 @@ describe("can — message.edit_any (ADMIN seul)", () => {
     for (const role of ["CHEF", "SECRETAIRE", "PARENT", "SCOUT"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "message.edit_any")).toBe(false);
     }
+  });
+});
+
+// Changer l'email d'un compte qui se connecte, c'est pouvoir s'y connecter à sa
+// place (« mot de passe oublié ») : ADMIN seul. Un compte sans connexion
+// (compte enfant) peut recevoir sa première adresse de qui gère les comptes.
+describe("canChangeAccountEmail", () => {
+  const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
+  const connectable = { canLogin: true, email: "adulte@example.fr", status: "ACTIVE" };
+  const childAccount = { canLogin: false, email: "enfant-abc@piloti.invalid", status: "ACTIVE" };
+
+  it("ADMIN : tout compte", () => {
+    expect(canChangeAccountEmail(u("ADMIN"), connectable)).toBe(true);
+    expect(canChangeAccountEmail(u("ADMIN"), childAccount)).toBe(true);
+  });
+
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : compte sans connexion seulement", (role) => {
+    expect(canChangeAccountEmail(u(role), childAccount)).toBe(true);
+    expect(canChangeAccountEmail(u(role), connectable)).toBe(false);
+  });
+
+  it.each(["CHEF", "TRESORIER", "PARENT"])("%s : jamais", (role) => {
+    expect(canChangeAccountEmail(u(role), childAccount)).toBe(false);
+    expect(canChangeAccountEmail(u(role), connectable)).toBe(false);
+  });
+
+  // Revue : retirer les rôles d'un adulte puis lui donner une date de moins de
+  // 15 ans le passe en canLogin=false sans toucher à son adresse réelle. Seule
+  // l'adresse provisoire d'un compte enfant peut être remplacée.
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])(
+    "%s : refusé sur un compte sans connexion qui a déjà une adresse réelle",
+    (role) => {
+      expect(
+        canChangeAccountEmail(u(role), { canLogin: false, email: "adulte@example.fr", status: "ACTIVE" }),
+      ).toBe(false);
+    },
+  );
+
+  // Revue : un compte anonymisé garde canLogin=false et une adresse provisoire.
+  // Lui en donner une réelle réintroduirait de la PII dans une fiche effacée.
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : refusé sur un compte supprimé", (role) => {
+    const deleted = { canLogin: false, email: "deleted+abc@piloti.invalid", status: "DELETED" };
+    expect(canChangeAccountEmail(u(role), deleted)).toBe(false);
+    expect(canChangeAccountEmail(u("ADMIN"), deleted)).toBe(true);
+  });
+
+  it("un compte suspendu ne change rien", () => {
+    const suspended = { id: "sec-1", role: "SECRETAIRE", roles: ["SECRETAIRE"], status: "SUSPENDED" };
+    expect(canChangeAccountEmail(suspended, childAccount)).toBe(false);
+  });
+});
+
+// Revue : poser à la main une adresse provisoire (ex. `deleted+<id>@piloti.invalid`
+// d'un autre compte) bloquerait l'anonymisation de ce compte (unicité). Aucun
+// usage légitime hors ADMIN.
+describe("canSetEmailTo", () => {
+  const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
+
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : adresse réelle oui, provisoire non", (role) => {
+    expect(canSetEmailTo(u(role), "jeune@example.fr")).toBe(true);
+    expect(canSetEmailTo(u(role), "deleted+abc@piloti.invalid")).toBe(false);
+    expect(canSetEmailTo(u(role), "enfant-xyz@piloti.invalid")).toBe(false);
+  });
+
+  it("ADMIN : toute adresse", () => {
+    expect(canSetEmailTo(u("ADMIN"), "enfant-xyz@piloti.invalid")).toBe(true);
   });
 });

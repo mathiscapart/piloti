@@ -53,6 +53,7 @@ export const ACTIONS = [
   "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "user.password.set", // définir le mot de passe d'un compte (ADMIN seul, #173)
+  "user.email.set", // modifier une adresse email déjà attribuée (ADMIN seul)
   "user.delete", // supprimer (anonymiser) un compte (ADMIN seul, #173)
   "member.view",
   "member.family.manage", // rattachement parent ↔ jeune (CHEF, RG, SEC)
@@ -167,6 +168,11 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // #173 — se connecter à la place de quelqu'un ou effacer un compte sont
   // réservés à l'ADMIN, secrétaire et RG compris (décision du 2026-09-24).
   "user.password.set": [],
+  // Changer l'email d'un compte qui se connecte donne l'accès au compte :
+  // « mot de passe oublié » envoie le lien à la nouvelle adresse. Même règle
+  // que user.password.set, sinon celle-ci se contourne. Les comptes sans
+  // connexion suivent canChangeAccountEmail.
+  "user.email.set": [],
   "user.delete": [],
   "member.view": [CHEF, RG, SEC, TRES],
   // Rattachement familial parent ↔ jeune. Permission DÉDIÉE, volontairement
@@ -368,6 +374,43 @@ export function canActOnUnit(
  */
 export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
   return canActOnUnit(user, "pedago.manage", jeuneUnit);
+}
+
+// Adresse provisoire d'un compte enfant, qui n'a pas d'email réel
+// (createChildAccount). Domaine réservé (RFC 2606) : jamais délivrable.
+export const PLACEHOLDER_EMAIL_SUFFIX = "@piloti.invalid";
+
+/**
+ * Modifier l'email d'un compte. Sur un compte qui a une adresse réelle, c'est
+ * pouvoir s'y connecter à sa place (« mot de passe oublié ») : ADMIN seul
+ * (`user.email.set`). Un compte enfant sans connexion peut recevoir sa
+ * PREMIÈRE adresse de qui gère les comptes (`user.manage`) ; l'appelant
+ * prévient alors les parents rattachés. Exiger l'adresse provisoire, et pas
+ * seulement canLogin=false : retirer ses rôles à un adulte puis lui donner une
+ * date de moins de 15 ans le passe en canLogin=false sans changer son adresse.
+ * Un compte supprimé (anonymisé) est exclu : il a lui aussi une adresse
+ * provisoire, et y remettre une adresse réelle réintroduirait de la PII.
+ */
+export function canChangeAccountEmail(
+  user: AuthCtx,
+  target: { canLogin: boolean; email: string; status: string },
+): boolean {
+  if (can(user, "user.email.set")) return true;
+  return (
+    target.canLogin === false &&
+    target.status !== "DELETED" &&
+    target.email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
+    can(user, "user.manage")
+  );
+}
+
+/**
+ * Hors ADMIN, une nouvelle adresse ne peut pas être provisoire : poser à la
+ * main `deleted+<id>@piloti.invalid` d'un autre compte bloquerait son
+ * anonymisation (contrainte d'unicité). Seul le code génère ces adresses.
+ */
+export function canSetEmailTo(user: AuthCtx, newEmail: string): boolean {
+  return can(user, "user.email.set") || !newEmail.endsWith(PLACEHOLDER_EMAIL_SUFFIX);
 }
 
 /**

@@ -805,3 +805,14 @@ Deux défauts laissés par #97.
 - Monter une image = changer une ligne dans le `.env` de l'environnement, puis redéployer. Mettre aussi à jour `.env.example` pour que le dépôt reflète la version de référence.
 - Le `ARG` du `Dockerfile` garde un défaut, utile seulement pour un `docker build` lancé à la main.
 - `scripts/backup.ps1` utilise encore `alpine:3.21` en dur (image outil, hors compose).
+
+## D-044 — #128 : l'âge ne restreint plus les rôles attribuables (abandonne la règle de #122)
+
+**Contexte** : #122 (PR #126) réservait le seul rôle Jeune aux mineurs (`assignableRolesForBirthDate`, seuil de 18 ans). Un compagnon de 17 ans ne pouvait donc pas être chef, alors qu'en groupe SGDF un compagnon encadre souvent une autre unité (#128). L'issue proposait d'abaisser le seuil à 15 ans.
+
+**Choix** (décision du responsable, étape 1 de #128) : aucun paramètre d'âge sur les rôles. Un ADMIN ou un RG attribue n'importe quel rôle à n'importe quel compte, mineur compris : un chef reste un chef, même mineur. `assignableRolesForBirthDate` est supprimée, avec les contrôles de `approveUser`, `setUserRoles` et `setUserBirthDate` et les filtres de l'interface (`RolesEditor`, `ApproveDialog`). Seuls les verrous indépendants de l'âge restent : `canAssignRole` (ADMIN et RG réservés à l'ADMIN) et `user.manage`.
+
+**Conséquences** :
+- Les protections liées à l'âge ne changent pas : aucune connexion sous 15 ans (`canEnableLogin`, `MIN_LOGIN_AGE`), règles de messagerie privée (`dm-policy.ts`), consentement parental, comptes enfants. Un compte de moins de 15 ans peut porter un rôle d'encadrement, mais ne peut pas se connecter.
+- Un chef mineur hérite des droits du rôle CHEF, notamment la messagerie privée avec les jeunes de son unité dans les limites de `dm-policy.ts`. Comme le signale #128, ce point reste à examiner avant de livrer.
+- Corriger une date de naissance n'impose plus de retirer d'abord les rôles d'encadrement.

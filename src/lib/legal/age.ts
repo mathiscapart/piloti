@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 
-import { ROLES, YOUTH_UNITS, type Role, type Unit } from "../enums";
+import { YOUTH_UNITS, type Unit } from "../enums";
 
 // SAFE-01 — bornes de plausibilité. L'âge est déclaratif, donc invérifiable en
 // soi, mais rien n'obligeait la date à être crédible : une saisie à quelques
@@ -152,15 +152,4 @@ export function canCreateChildAccount(
   if (!unit || !(YOUTH_UNITS as readonly string[]).includes(unit)) return false;
   const age = computeAge(birthDate);
   return age !== null && age < MIN_LOGIN_AGE;
-}
-
-/**
- * #122 — rôles proposables à la création/modification d'un compte. Un mineur
- * (isAdult === false, y compris date inconnue — fail-safe) ne peut recevoir
- * que le rôle Jeune, jamais un rôle d'encadrement.
- */
-export function assignableRolesForBirthDate(
-  birthDate: Date | string | null | undefined,
-): Role[] {
-  return isAdult(birthDate) ? [...ROLES] : ["SCOUT"];
 }

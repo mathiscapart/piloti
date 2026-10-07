@@ -12,7 +12,7 @@ import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { assignableRolesForBirthDate, birthDateSchema, canCreateChildAccount, canEnableLogin } from "@/lib/legal/age";
+import { birthDateSchema, canCreateChildAccount, canEnableLogin } from "@/lib/legal/age";
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
@@ -25,7 +25,7 @@ import {
   type Action,
 } from "@/lib/permissions";
 import { notify } from "@/modules/notifications/notify";
-import { ROLE_LABEL, ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
+import { ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -209,7 +209,7 @@ export async function approveUser(
   if (guard) return guard;
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { status: true, birthDate: true },
+    select: { status: true },
   });
   if (target?.status !== "PENDING") {
     return { error: "Cette inscription n'est plus en attente de validation." };
@@ -218,17 +218,6 @@ export async function approveUser(
   const roles = [...new Set(parsed.data.roles)];
   const escalation = assertAssignable(actor, roles);
   if (escalation) return escalation;
-
-  // #122 — un mineur ne peut recevoir que le rôle Jeune, jamais un rôle
-  // d'encadrement, quand bien même l'acteur aurait le droit de l'attribuer.
-  const assignable = assignableRolesForBirthDate(target.birthDate);
-  if (roles.some((r) => !assignable.includes(r))) {
-    return {
-      error: target.birthDate
-        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
-        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
-    };
-  }
 
   await withAudit(
     (tx) =>
@@ -375,7 +364,7 @@ export async function setUserRoles(
   // ADMIN/RG). On vérifie l'état actuel de la cible.
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { roles: true, birthDate: true },
+    select: { roles: true },
   });
   if (!can(actor, "admin.access")) {
     let current: string[] = [];
@@ -391,16 +380,6 @@ export async function setUserRoles(
           "Tu ne peux pas modifier les rôles d'un compte ADMIN ou Responsable de groupe.",
       };
     }
-  }
-
-  // #122 — un mineur ne peut recevoir que le rôle Jeune.
-  const assignable = assignableRolesForBirthDate(target?.birthDate);
-  if (roles.some((r) => !assignable.includes(r))) {
-    return {
-      error: target?.birthDate
-        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
-        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
-    };
   }
 
   await withAudit(
@@ -490,23 +469,9 @@ export async function setUserBirthDate(
 
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { birthDate: true, canLogin: true, roles: true },
+    select: { birthDate: true, canLogin: true },
   });
   if (!target) return { error: "Compte introuvable." };
-
-  // #122 — une date qui rend la personne mineure ne doit jamais être posée
-  // tant qu'elle porte encore un rôle d'encadrement : sinon un mineur se
-  // retrouve avec un rôle que plus aucun formulaire ne peut lui retirer
-  // (assignableRolesForBirthDate le masquerait avant même de l'afficher).
-  const currentRoles = parseRoles(target.roles);
-  const newAssignable: string[] = assignableRolesForBirthDate(parsed.data.birthDate);
-  const toRemove = currentRoles.filter((r) => !newAssignable.includes(r));
-  if (toRemove.length > 0) {
-    const labels = toRemove.map((r) => ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r);
-    return {
-      error: `Cette date rend la personne mineure : retire d'abord ses rôles autres que Jeune (${labels.join(", ")}).`,
-    };
-  }
 
   const loginDisabled = target.canLogin !== false && !canEnableLogin(parsed.data.birthDate);
 

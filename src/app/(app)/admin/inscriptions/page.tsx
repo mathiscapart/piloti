@@ -88,7 +88,6 @@ export default async function AdminInscriptionsPage() {
                     fullName={`${u.firstName} ${u.lastName}`}
                     allowPrivileged={canAssignPrivileged}
                     requestedRole={u.requestedRole}
-                    minor={minor}
                   />
                 </div>
               </li>

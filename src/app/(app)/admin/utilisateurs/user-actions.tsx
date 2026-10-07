@@ -41,15 +41,10 @@ export function RolesEditor({
   userId,
   currentRoles,
   allowPrivileged = true,
-  allowedRoles,
 }: {
   userId: string;
   currentRoles: string[];
   allowPrivileged?: boolean;
-  // #122 — restreint le catalogue attribuable (ex. ["SCOUT"] pour un mineur).
-  // Les rôles déjà portés restent affichés, mais verrouillés (même pattern que
-  // PRIVILEGED_ROLES ci-dessous).
-  allowedRoles?: readonly string[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -61,9 +56,7 @@ export function RolesEditor({
   // Catalogue attribuable : sans ADMIN/RG si l'acteur n'est pas ADMIN, sauf si
   // le compte cible les porte déjà (on les affiche alors en lecture, cochés).
   const visibleRoles = ROLES.filter(
-    (r) =>
-      (allowPrivileged || !PRIVILEGED_ROLES.has(r) || currentRoles.includes(r)) &&
-      (!allowedRoles || allowedRoles.includes(r) || currentRoles.includes(r)),
+    (r) => allowPrivileged || !PRIVILEGED_ROLES.has(r) || currentRoles.includes(r),
   );
 
   function toggle(role: string) {
@@ -111,16 +104,7 @@ export function RolesEditor({
           {visibleRoles.map((role) => {
             // Rôle sensible affiché à un acteur non-admin : verrouillé, ni
             // cochable ni décochable.
-            const privilegedLocked =
-              !allowPrivileged && PRIVILEGED_ROLES.has(role);
-            // Rôle hors catalogue autorisé (ex. rôle d'encadrement porté par
-            // un mineur) : décochable pour le retirer, mais non recochable
-            // une fois décoché — sans quoi le serveur refuse tout et un rôle
-            // devenu interdit ne peut plus jamais être retiré (#122).
-            const outOfCatalogLocked =
-              !!allowedRoles && !allowedRoles.includes(role);
-            const locked =
-              privilegedLocked || (outOfCatalogLocked && !selected.has(role));
+            const locked = !allowPrivileged && PRIVILEGED_ROLES.has(role);
             return (
               <label
                 key={role}

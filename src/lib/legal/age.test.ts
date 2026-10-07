@@ -4,14 +4,12 @@
 // ou invalide : c'est la garantie anti-contournement du module.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ROLES } from "../enums";
 import {
   DIRECT_MESSAGE_MIN_AGE,
   MAJORITY_AGE,
   MAX_PLAUSIBLE_AGE,
   MIN_PLAUSIBLE_AGE,
   PARENTAL_CONSENT_AGE,
-  assignableRolesForBirthDate,
   birthDateSchema,
   canCreateChildAccount,
   canEnableLogin,
@@ -337,37 +335,5 @@ describe("canCreateChildAccount (#114)", () => {
 
   it("refuse sur date de naissance inconnue", () => {
     expect(canCreateChildAccount(null, "SCOUTS")).toBe(false);
-  });
-});
-
-// #122 — les rôles proposables à la création/modification d'un compte suivent
-// la majorité légale : un mineur ne peut se voir attribuer que SCOUT, jamais
-// un rôle d'encadrement (CHEF, TRESORIER…) ni ADMIN.
-describe("assignableRolesForBirthDate (#122)", () => {
-  beforeEach(() => vi.useFakeTimers());
-
-  it("ne propose que SCOUT en dessous de 18 ans", () => {
-    setToday(2024, 6, 15);
-    const roles16 = assignableRolesForBirthDate(d(2008, 6, 15)); // 16 ans
-    expect(roles16).toEqual(["SCOUT"]);
-    expect(roles16).not.toContain("CHEF");
-    expect(roles16).not.toContain("TRESORIER");
-
-    const rolesVeille18 = assignableRolesForBirthDate(d(2006, 6, 16)); // 17 ans, veille des 18 ans
-    expect(rolesVeille18).toEqual(["SCOUT"]);
-  });
-
-  it("propose tous les rôles à partir de 18 ans pile", () => {
-    setToday(2024, 6, 15);
-    const roles = assignableRolesForBirthDate(d(2006, 6, 15)); // 18 ans jour J
-    expect(roles).toContain("CHEF");
-    expect(roles).toContain("TRESORIER");
-    expect(roles).toContain("SECRETAIRE");
-    expect(roles).toContain("ADMIN");
-    expect(roles).toEqual(ROLES);
-  });
-
-  it("fail-closed sur date inconnue — seul SCOUT reste proposable", () => {
-    expect(assignableRolesForBirthDate(null)).toEqual(["SCOUT"]);
   });
 });

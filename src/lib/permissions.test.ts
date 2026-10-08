@@ -913,6 +913,26 @@ describe("ledUnits — périmètre d'encadrement (#128)", () => {
     expect(scopedUnits(user(["CHEF", "SECRETAIRE"], "SCOUTS", ["LOUVETEAUX"]), catalog)).toEqual(["LOUVETEAUX"]);
   });
 
+  // #128 étape 3 — les sites qui passent déjà par `canActOnUnit` (pédagogie,
+  // référentiel, famille, annonces, événements et budget via `canActOnEvent`)
+  // suivent `ledUnits` sans modification : on le verrouille ici, action par action.
+  it.each([
+    ["pedago.manage", "progression-actions"],
+    ["pedago.referential", "referential-actions"],
+    ["member.family.manage", "family/actions"],
+    ["announcement.publish", "canPublishAnnouncementTo"],
+    ["event.manage", "event-scope"],
+    ["budget.manage", "event-scope (budget)"],
+  ] as const)("propagation : %s (%s) suit les unités encadrées", (action, site) => {
+    const lucas = user(["CHEF"], "COMPAGNONS", ["LOUVETEAUX"]);
+    expect(canActOnUnit(lucas, action, "LOUVETEAUX"), site).toBe(true);
+    expect(canActOnUnit(lucas, action, "COMPAGNONS"), site).toBe(false);
+    // Chef repris par la migration (UnitLead = unit) : mêmes droits qu'avant.
+    const chefRepris = user(["CHEF"], "PIONNIERS", ["PIONNIERS"]);
+    expect(canActOnUnit(chefRepris, action, "PIONNIERS"), site).toBe(true);
+    expect(canActOnUnit(chefRepris, action, "SCOUTS"), site).toBe(false);
+  });
+
   it("ADMIN : non borné, sans aucun UnitLead", () => {
     const admin = user(["ADMIN"], null, []);
     expect(scopedUnits(admin, catalog)).toEqual([...catalog]);

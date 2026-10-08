@@ -42,8 +42,9 @@ export interface ReportQueueEntry {
 
 // SAFE-02 — file de modération : signalements + aperçu du contenu visé
 // (polymorphe, résolu en 2 requêtes groupées plutôt qu'une par signalement).
-// Routage (raffinement SAFE-02) : un CHEF ne voit que les signalements de SON
-// unité (`Report.concernedUnit`, l'unité de l'auteur du message visé) ; un
+// Routage (raffinement SAFE-02) : un CHEF ne voit que les signalements des
+// unités qu'il encadre (`ledUnits`, #128 ; `Report.concernedUnit` est l'unité
+// de l'auteur du message visé) ; un
 // signalement dont `concernedUnit` est null (auteur sans unité) lui reste
 // invisible — fail-closed. L'ADMIN et le RESPONSABLE_GROUPE voient tout le
 // groupe.
@@ -57,12 +58,14 @@ export async function listReports(
   user: CurrentUser,
 ): Promise<ReportQueueEntry[]> {
   const scopedToUnit = !isGroupWideModerator(user);
-  if (scopedToUnit && !user.unit) return [];
+  // Fail-closed : un CHEF qui n'encadre rien ne voit rien.
+  const { ledUnits } = user;
+  if (scopedToUnit && ledUnits.length === 0) return [];
 
   const reports = await db.report.findMany({
     where: {
       ...(status === "all" ? {} : { status }),
-      ...(scopedToUnit ? { concernedUnit: user.unit } : {}),
+      ...(scopedToUnit ? { concernedUnit: { in: ledUnits } } : {}),
     },
     orderBy: { createdAt: "desc" },
     include: {

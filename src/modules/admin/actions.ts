@@ -424,15 +424,15 @@ export async function setUserRoles(
           roles: JSON.stringify(roles),
           role: roles[0] ?? "SCOUT", // miroir d'affichage (déprécié)
         },
-        select: { unit: true, unitLeads: { select: { unit: true } } },
+        select: { unit: true, status: true, unitLeads: { select: { unit: true } } },
       });
       // #128 — CHEF attribué : il encadre son unité s'il n'encadrait rien ;
-      // CHEF retiré : il n'encadre plus rien.
-      const leadUnits = leadUnitsForRoles(
-        roles,
-        updated.unit,
-        updated.unitLeads.map((l) => l.unit),
-      );
+      // CHEF retiré : il n'encadre plus rien. Un compte anonymisé (DELETED)
+      // n'encadre jamais rien, comme après `deleteUser`.
+      const leadUnits =
+        updated.status === "DELETED"
+          ? []
+          : leadUnitsForRoles(roles, updated.unit, updated.unitLeads.map((l) => l.unit));
       await writeLeadUnits(tx, parsed.data.userId, leadUnits);
       return leadUnits;
     },

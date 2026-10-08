@@ -482,6 +482,8 @@ export async function getMemberDetail(id: string) {
       skillsConsent: true,
       // US-F — tranche de quotient familial (tarification solidaire).
       socialBracketId: true,
+      // #128 — unités encadrées, affichées sur la fiche membre.
+      unitLeads: { select: { unit: true } },
     },
   });
   if (!user) return null;

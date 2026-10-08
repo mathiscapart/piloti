@@ -1,5 +1,5 @@
 import { UNITS } from "@/lib/enums";
-import { canActOnUnit, effectiveRoles } from "@/lib/permissions";
+import { canActOnUnit, effectiveRoles, ledUnitsOf } from "@/lib/permissions";
 
 // US-C01/C03 — audience d'une annonce : source unique des destinataires
 // (notifications, relance), de la visibilité et du taux de lecture (#111).
@@ -9,6 +9,8 @@ export interface AudienceUser {
   role: string;
   roles: string[] | string | null;
   unit: string | null;
+  // #128 — unités encadrées (`UnitLead`) : un CHEF reçoit aussi leurs annonces.
+  ledUnits?: readonly string[];
   // US-CM-01 — compte géré par un parent, sans connexion : il ne peut pas lire
   // l'annonce, c'est son parent qui la reçoit (absent = compte normal).
   canLogin?: boolean;
@@ -22,7 +24,8 @@ export interface FamilyEdge {
 
 // Ids de l'audience parmi une liste d'utilisateurs ACTIFS, en excluant
 // éventuellement l'auteur. Pour une branche : ses membres (jeunes +
-// encadrement) et les parents rattachés à ses jeunes. Un compte sans connexion
+// encadrement), les chefs qui l'encadrent (#128) et les parents rattachés à
+// ses jeunes. Un compte sans connexion
 // n'est jamais destinataire, mais son parent l'est.
 export function audienceUserIds(
   users: AudienceUser[],
@@ -40,9 +43,12 @@ export function audienceUserIds(
   } else {
     const youthIds = new Set<string>();
     for (const u of users) {
-      if (u.unit !== audience) continue;
-      if (u.canLogin !== false) ids.add(u.id);
-      if (effectiveRoles(u).includes("SCOUT")) youthIds.add(u.id);
+      if (u.unit === audience) {
+        if (u.canLogin !== false) ids.add(u.id);
+        if (effectiveRoles(u).includes("SCOUT")) youthIds.add(u.id);
+      } else if (u.canLogin !== false && ledUnitsOf(u).includes(audience)) {
+        ids.add(u.id);
+      }
     }
     const activeIds = new Set(users.map((u) => u.id));
     for (const l of links) {

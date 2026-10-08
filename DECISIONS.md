@@ -839,3 +839,12 @@ Deux défauts laissés par #97.
 - Pédagogie : la demande de 2e validation va aux CHEF qui encadrent l'unité du jeune, plus aux chefs qui en sont seulement membres.
 - `setUserRoles` ne recrée plus d'unité encadrée sur un compte anonymisé.
 - Restent sur `User.unit` comme **appartenance**, à trancher à l'étape 4 : accès aux salons d'unité, audiences d'annonces, notifications et rappels d'événements, iCal, tableau de bord, unité par défaut du bilan des présences.
+
+**Amendement (étape 4 de #128)** : les unités encadrées donnent aussi la **visibilité** (décision du responsable).
+- Unités d'un compte = appartenance (`User.unit`) + unités encadrées. Ces dernières ne comptent que pour un CHEF (`ledUnitsOf`), comme le périmètre.
+- Salons (`canAccessChannel`) : accès si une de ses unités est dans `accessUnits`. Exclusion (`excludeUnits`) seulement si **toutes** ses unités sont exclues ; un compte sans unité n'est jamais exclu ; l'ADMIN passe toujours.
+- Annonces : un chef est dans l'audience des unités qu'il encadre (notification, visibilité, taux de lecture), sans y amener ses parents.
+- Événements : la notification de création, modification ou annulation va aussi aux chefs qui encadrent l'unité (`leaderIds` de `resolveUnitAudience`, hors `allIds`). Le flux iCal inclut les événements des unités encadrées. Les relances d'inscription (`reminders.ts`) et les campagnes de cotisation restent sur l'appartenance.
+- Tableau de bord : inchangé. Tout CHEF a `event.manage`, pour qui le prochain événement n'est pas filtré par unité.
+- Bilan des présences : l'unité présélectionnée est la première unité encadrée visible, sinon l'unité d'appartenance.
+- Écran : `/admin/utilisateurs/[id]/modifier` propose « Unités encadrées » (`setUserLeadUnits`). L'audit `USER_LEAD_UNITS_CHANGED` porte l'avant (`previousUnits`) et l'après (`units`). Pour un compte non Chef, l'éditeur explique qu'il faut d'abord le rôle Chef.

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { canEnableLogin } from "@/lib/legal/age";
+import { ledUnitsOf } from "@/lib/permissions";
 
 // US-P02 — flux iCal d'abonnement au calendrier. URL protégée par un jeton
 // (pas de cookie : les apps calendrier récupèrent l'URL sans session).
@@ -78,7 +79,15 @@ export async function GET(
 
   const user = await db.user.findUnique({
     where: { calendarToken: clean },
-    select: { id: true, status: true, unit: true, canLogin: true, birthDate: true },
+    select: {
+      id: true,
+      status: true,
+      unit: true,
+      roles: true,
+      canLogin: true,
+      birthDate: true,
+      unitLeads: { select: { unit: true } },
+    },
   });
   if (
     !user ||
@@ -102,12 +111,19 @@ export async function GET(
   });
   const registeredEventIds = [...new Set(regs.map((r) => r.eventId))];
 
-  // Périmètre : événements de groupe + de sa branche + ceux où il est inscrit.
+  // Périmètre : événements de groupe + de sa branche + des unités qu'il
+  // encadre (CHEF, #128) + ceux où il est inscrit.
+  const units = [
+    ...new Set([
+      ...(user.unit ? [user.unit] : []),
+      ...ledUnitsOf({ ...user, ledUnits: user.unitLeads.map((l) => l.unit) }),
+    ]),
+  ];
   const events = await db.event.findMany({
     where: {
       OR: [
         { unit: null },
-        ...(user.unit ? [{ unit: user.unit }] : []),
+        ...(units.length ? [{ unit: { in: units } }] : []),
         ...(registeredEventIds.length
           ? [{ id: { in: registeredEventIds } }]
           : []),

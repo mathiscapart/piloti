@@ -58,6 +58,15 @@ describe("buildManageableUserWhere — listes blanches", () => {
     expect(buildManageableUserWhere({ unit: "SCOUTS" }).unit).toBe("SCOUTS");
     expect(buildManageableUserWhere({ unit: "%" }).unit).toBeUndefined();
   });
+
+  it("filtre sur une unité encadrée connue et ignore les autres (#128)", () => {
+    expect(buildManageableUserWhere({ ledUnit: "LOUVETEAUX" }).unitLeads).toEqual({
+      some: { unit: "LOUVETEAUX" },
+    });
+    for (const forge of ["%", "", "louveteaux"]) {
+      expect(buildManageableUserWhere({ ledUnit: forge }).unitLeads).toBeUndefined();
+    }
+  });
 });
 
 describe("buildManageableUserWhere — recherche", () => {

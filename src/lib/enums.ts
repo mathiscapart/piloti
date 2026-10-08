@@ -355,6 +355,8 @@ export const AUDIT_ACTIONS = [
   "USER_SUSPENDED",
   "USER_ROLE_CHANGED",
   "USER_UNIT_CHANGED",
+  // #128 — unités encadrées (UnitLead) d'un compte, cf. setUserLeadUnits.
+  "USER_LEAD_UNITS_CHANGED",
   // SAFE-01 — correction admin d'une date de naissance (from/to en métadonnées).
   "USER_BIRTHDATE_CHANGED",
   "USER_PROFILE_UPDATED",

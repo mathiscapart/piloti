@@ -115,8 +115,12 @@ interface AuthCtx {
   role: Role | string;
   // Rôles additionnels : tableau, ou chaîne JSON (telle que stockée en base).
   roles?: string[] | string | null;
-  // Branche/unité — nécessaire pour les permissions conditionnées (ex. JEUNE).
+  // Branche/unité d'APPARTENANCE — nécessaire pour les permissions
+  // conditionnées (ex. JEUNE). N'ouvre aucun périmètre d'encadrement (#128).
   unit?: string | null;
+  // #128 — unités ENCADRÉES (table `UnitLead`) : seul périmètre d'un CHEF.
+  // Absent = aucune unité (fail-closed), comme une liste vide.
+  ledUnits?: readonly string[];
   // Optionnel : `effectiveRoles`/`hasRole` n'en ont pas besoin ; `can()` exige
   // ACTIVE (un status absent → non autorisé).
   status?: AccountStatus | string;
@@ -307,7 +311,9 @@ export function hasRole(user: AuthCtx, role: Role): boolean {
  * désormais un cas d'usage.
  *
  * - ADMIN (superutilisateur) et RESPONSABLE_GROUPE (vue groupe) ne sont pas bornés.
- * - Fail-closed : un CHEF sans `unit` renseignée n'encadre aucune branche, et
+ * - Un CHEF est borné à ses unités encadrées (`ledUnits`, #128) ; les autres
+ *   rôles, à leur unité d'appartenance.
+ * - Fail-closed : un CHEF sans `UnitLead` (#128) n'encadre aucune branche, et
  *   une ressource sans unité (`targetUnit === null`) n'appartient à personne.
  *   Le cas inverse — une ressource « de groupe » ouverte à tout l'encadrement,
  *   ex. un événement sans unité — se traite AU SITE D'APPEL (`unit === null ||
@@ -319,14 +325,27 @@ export function hasRole(user: AuthCtx, role: Role): boolean {
 export function inUnitScope(user: AuthCtx, targetUnit: string | null): boolean {
   const roles = effectiveRoles(user);
   if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
+  if (roles.includes(CHEF)) return leadsUnit(user, targetUnit);
+  // Rôles transverses (secrétaire, trésorier… : bilan des présences via
+  // `member.view`) : périmètre d'avant #128, leur unité d'appartenance.
+  // TODO(ROLES-06) : asymétrie assumée (CHEF par `ledUnits`, autres rôles par
+  // `User.unit`). La matrice de rôles la supprimera avec une seule fonction de
+  // périmètre portée par l'attribution du rôle, en remplacement de `UnitLead`
+  // et de la borne par `User.unit`.
   return targetUnit !== null && user.unit === targetUnit;
+}
+
+// #128 — le compte encadre-t-il cette unité ? `unit` (appartenance) n'entre
+// pas en jeu : un compagnon chef chez les Louveteaux n'encadre pas les Compagnons.
+function leadsUnit(user: AuthCtx, targetUnit: string | null): boolean {
+  return targetUnit !== null && (user.ledUnits ?? []).includes(targetUnit);
 }
 
 // Rôles rattachés à une branche. Tous les autres — trésorier, secrétaire,
 // responsable matériel, responsable de groupe, admin — exercent une fonction
 // TRANSVERSE au groupe : les borner à une unité n'aurait pas de sens (le
 // trésorier encaisse pour tout le monde), et les casserait puisqu'ils n'ont
-// généralement pas de `unit` renseignée.
+// généralement pas d'unité encadrée.
 const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
 
 /**
@@ -340,9 +359,9 @@ const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
  * trésorier gère tout, sans quoi il ne pourrait plus rien encaisser. On ne
  * borne donc que si le droit ne vient QUE de rôles bornés.
  *
- * Dans ce cas, la borne est la branche du compte, sans l'exemption de groupe
+ * Dans ce cas, la borne est ses unités encadrées (#128), sans l'exemption de groupe
  * d'`inUnitScope` : un RG aussi CHEF n'a le pédagogique, réservé aux chefs
- * (#173), que sur sa propre branche. Ses droits de RG restent sans borne.
+ * (#173), que sur les branches qu'il encadre. Ses droits de RG restent sans borne.
  */
 export function canActOnUnit(
   user: AuthCtx,
@@ -359,7 +378,7 @@ export function canActOnUnit(
     (r) => !UNIT_BOUND_ROLES.has(r) && (allowed as string[]).includes(r),
   );
   if (viaRoleTransverse) return true;
-  return targetUnit !== null && user.unit === targetUnit;
+  return leadsUnit(user, targetUnit);
 }
 
 /**

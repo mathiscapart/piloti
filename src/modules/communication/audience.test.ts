@@ -116,7 +116,7 @@ describe("audienceUserIds", () => {
 });
 
 const account = (roles: string[], unit: string | null = null) =>
-  ({ role: roles[0], roles, unit, status: "ACTIVE" }) as const;
+  ({ role: roles[0], roles, unit, ledUnits: unit ? [unit] : [], status: "ACTIVE" }) as const;
 
 describe("canPublishAnnouncementTo", () => {
   const chefPio = account(["CHEF"], "PIONNIERS");

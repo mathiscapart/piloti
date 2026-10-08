@@ -6,6 +6,7 @@ import { db } from "../src/lib/db";
 import type { AccountStatus, Role, Unit } from "../src/lib/enums";
 import { PRIVACY_VERSION, TERMS_VERSION } from "../src/lib/legal/versions";
 import { canonicalPair } from "../src/modules/communication/dm";
+import { leadUnitsForRoles } from "../src/modules/admin/unit-lead";
 import { resolveConcernedUnit } from "../src/modules/communication/moderation-policy";
 import { computeTiers } from "../src/modules/finance/tiers";
 
@@ -149,6 +150,9 @@ interface SeedUserInput {
   // US-32 — « casquettes » supplémentaires cumulées au rôle principal (ex. un
   // chef également trésorier). `role` reste le rôle principal affiché.
   extraRoles?: Role[];
+  // #128 — unités encadrées, si elles diffèrent de la règle par défaut
+  // (`leadUnitsForRoles` : un CHEF encadre son unité d'appartenance).
+  leadUnits?: Unit[];
 }
 
 /**
@@ -156,13 +160,14 @@ interface SeedUserInput {
  * puis met à jour role / status / emailVerified (champs `input: false`).
  */
 async function seedUser(input: SeedUserInput) {
-  const user = await createCredentialUser(input);
-  return db.user.update({
-    where: { id: user.id },
+  const created = await createCredentialUser(input);
+  const roles = [input.role, ...(input.extraRoles ?? [])];
+  const user = await db.user.update({
+    where: { id: created.id },
     data: {
       // US-32 — rôles unifiés : `roles` est la source ; `role` reste un miroir.
       role: input.role,
-      roles: JSON.stringify([input.role, ...(input.extraRoles ?? [])]),
+      roles: JSON.stringify(roles),
       status: input.status,
       emailVerified: input.status === "ACTIVE",
       // SEC-08 (Vuln 2) — `unit` est `input: false` côté better-auth.
@@ -172,6 +177,14 @@ async function seedUser(input: SeedUserInput) {
       birthDate: input.birthDate,
     },
   });
+  // #128 — même règle que l'approbation et la migration : un CHEF encadre son
+  // unité, sauf unités encadrées explicites. Sans cela, aucun chef seedé
+  // n'aurait de périmètre.
+  const leadUnits = input.leadUnits ?? leadUnitsForRoles(roles, input.unit ?? null, []);
+  if (leadUnits.length > 0) {
+    await db.unitLead.createMany({ data: leadUnits.map((unit) => ({ userId: user.id, unit })) });
+  }
+  return user;
 }
 
 async function main() {
@@ -255,6 +268,7 @@ async function main() {
     db.event.deleteMany(),
     // Comptes et traces
     db.familyLink.deleteMany(),
+    db.unitLead.deleteMany(),
     db.consent.deleteMany(),
     db.auditLog.deleteMany(),
     db.session.deleteMany(),
@@ -310,6 +324,20 @@ async function main() {
     status: "PENDING",
     unit: "COMPAGNONS",
     phone: "06 11 22 33 44",
+  });
+
+  // #128 — un compagnon membre des Compagnons qui encadre les Louveteaux :
+  // il agit sur les Louveteaux, pas sur les Compagnons. Mineur, il reste chef.
+  await seedUser({
+    email: "lucas.moreau@example.invalid",
+    password: SEED_PASSWORD,
+    firstName: "Lucas",
+    lastName: "Moreau",
+    birthDate: yearsAgo(17),
+    role: "CHEF",
+    status: "ACTIVE",
+    unit: "COMPAGNONS",
+    leadUnits: ["LOUVETEAUX"],
   });
 
   // RGPD-05 (D-033) — deux inscriptions refusées pour recetter la rétention :

@@ -86,17 +86,17 @@ describe("canModerateReport", () => {
   });
 
   it("autorise un CHEF sur un signalement de SA propre unité", () => {
-    const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS" };
+    const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS", ledUnits: ["SCOUTS"] };
     expect(canModerateReport(chef, { concernedUnit: "SCOUTS", targetAuthorId: "u-autre" })).toBe(true);
   });
 
   it("refuse un CHEF sur un signalement d'une AUTRE unité", () => {
-    const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS" };
+    const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS", ledUnits: ["SCOUTS"] };
     expect(canModerateReport(chef, { concernedUnit: "LOUVETEAUX", targetAuthorId: "u-autre" })).toBe(false);
   });
 
   it("refuse un CHEF sur un signalement sans unité concernée (fail-closed)", () => {
-    const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS" };
+    const chef = { role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS", ledUnits: ["SCOUTS"] };
     expect(canModerateReport(chef, { concernedUnit: null, targetAuthorId: "u-autre" })).toBe(false);
   });
 
@@ -147,8 +147,8 @@ describe("selectReportRecipients", () => {
 // traiter le signalement qui le vise ; le RG est toujours notifié (recours
 // indépendant de l'unité, y compris quand l'auteur est le seul chef).
 describe("exclusion de l'auteur du contenu signalé (#91)", () => {
-  const author = { id: "u-thomas", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "PIONNIERS" };
-  const peer = { id: "u-chef-pio", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "PIONNIERS" };
+  const author = { id: "u-thomas", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "PIONNIERS", ledUnits: ["PIONNIERS"] };
+  const peer = { id: "u-chef-pio", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "PIONNIERS", ledUnits: ["PIONNIERS"] };
   const rg = { id: "u-rg", role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE", unit: null };
   const admin = { id: "u-admin", role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE", unit: null };
   const report = { concernedUnit: "PIONNIERS", targetAuthorId: "u-thomas" };
@@ -216,9 +216,9 @@ describe("copie du contenu signalé (#92)", () => {
 // est indéterminable, ce pourrait être le chef qui ouvre la file. Fail-closed :
 // seuls l'ADMIN et le RG, qui ne sont pas bornés à une unité, le traitent.
 describe("auteur indéterminable et RG également chef (#150)", () => {
-  const chef = { id: "u-chef", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "PIONNIERS" };
+  const chef = { id: "u-chef", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "PIONNIERS", ledUnits: ["PIONNIERS"] };
   const rg = { id: "u-rg", role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE"], status: "ACTIVE", unit: null };
-  const rgChef = { id: "u-rg-chef", role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE", "CHEF"], status: "ACTIVE", unit: "SCOUTS" };
+  const rgChef = { id: "u-rg-chef", role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE", "CHEF"], status: "ACTIVE", unit: "SCOUTS", ledUnits: ["SCOUTS"] };
   const admin = { id: "u-admin", role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE", unit: null };
   const orphan = { concernedUnit: "PIONNIERS", targetAuthorId: null };
 

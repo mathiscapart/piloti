@@ -323,6 +323,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
               const suspended = u.status === "SUSPENDED";
               const rejected = u.status === "REJECTED";
               const roles = parseRoles(u.roles);
+              const ledLabel = ledUnitsLabel(u.unitLeads);
               // La SECRÉTAIRE ne peut pas gérer un compte ADMIN/RG (l'ADMIN, si).
               const canManage =
                 isAdmin || !roles.some((r) => PRIVILEGED_ROLES.has(r));
@@ -352,9 +353,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                         <p className="text-xs text-trail">{u.email}</p>
                       )}
                       {u.unit ? <p className="text-xs text-trail">{u.unit}</p> : null}
-                      {ledUnitsLabel(u.unitLeads) ? (
-                        <p className="text-xs text-trail">{ledUnitsLabel(u.unitLeads)}</p>
-                      ) : null}
+                      {ledLabel ? <p className="text-xs text-trail">{ledLabel}</p> : null}
                     </div>
                     <span
                       className={cn(
@@ -429,6 +428,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                   const suspended = u.status === "SUSPENDED";
                   const rejected = u.status === "REJECTED";
                   const roles = parseRoles(u.roles);
+                  const ledLabel = ledUnitsLabel(u.unitLeads);
                   const canManage =
                     isAdmin || !roles.some((r) => PRIVILEGED_ROLES.has(r));
                   return (
@@ -464,11 +464,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-trail">{u.unit ?? "—"}</span>
-                        {ledUnitsLabel(u.unitLeads) ? (
-                          <p className="text-xs text-trail">
-                            {ledUnitsLabel(u.unitLeads)}
-                          </p>
-                        ) : null}
+                        {ledLabel ? <p className="text-xs text-trail">{ledLabel}</p> : null}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-trail">{roleLabels(roles)}</span>

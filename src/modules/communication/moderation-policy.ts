@@ -11,7 +11,8 @@
 //   l'affichage des actions côté UI.
 // - Routage par unité (raffinement SAFE-02) : un signalement est rattaché à
 //   l'unité de l'auteur du message visé (`Report.concernedUnit`, figée à la
-//   création). Un CHEF ne peut traiter que les signalements de SA unité ;
+//   création). Un CHEF ne peut traiter que les signalements des unités qu'il
+//   encadre (`ledUnits`, #128) ;
 //   l'ADMIN peut tout traiter. `canModerateReport` combine ça à `canModerate`
 //   (la permission `moderation.review`, indépendante de l'unité).
 
@@ -95,11 +96,13 @@ interface ModeratorCandidate {
   id: string;
   role?: string;
   roles?: string[] | string | null;
-  unit?: string | null;
+  // #128 — unités encadrées (`UnitLead`). Absent = aucune (fail-closed).
+  ledUnits?: readonly string[];
 }
 
 // Destinataires de la notification à la CRÉATION d'un signalement : tous les
-// ADMIN et RESPONSABLE_GROUPE (toutes unités) + les CHEF de l'unité concernée,
+// ADMIN et RESPONSABLE_GROUPE (toutes unités) + les CHEF qui encadrent l'unité
+// concernée (`ledUnits`, #128),
 // sauf l'auteur du contenu signalé (#91). Symétrique de
 // `canModerateReport` (mêmes règles de routage), mais appliquée à une liste de
 // comptes candidats (déjà filtrés ACTIVE côté requête) plutôt qu'à un seul.
@@ -112,7 +115,11 @@ export function selectReportRecipients(
     .filter((u) => {
       if (isExcludedAsAuthor(u, targetAuthorId)) return false;
       if (isGroupWideModerator(u)) return true;
-      return concernedUnit !== null && effectiveRoles(u).includes("CHEF") && u.unit === concernedUnit;
+      return (
+        concernedUnit !== null &&
+        effectiveRoles(u).includes("CHEF") &&
+        (u.ledUnits ?? []).includes(concernedUnit)
+      );
     })
     .map((u) => u.id);
 }

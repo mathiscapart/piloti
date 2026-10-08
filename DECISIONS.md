@@ -832,3 +832,10 @@ Deux défauts laissés par #97.
 **Conséquences** :
 - Changer l'unité d'un chef (`setUserUnit`) ne déplace plus son périmètre. Tant qu'aucun écran n'appelle `setUserLeadUnits`, le recours est d'enregistrer ses rôles sans CHEF puis avec : il encadre alors sa nouvelle unité.
 - Restent sur `User.unit`, à migrer dans les étapes suivantes : `dm-policy` (chef de son unité), le routage des notifications de modération (`selectReportRecipients`), les audiences d'annonces et de salons, le tableau de bord, l'iCal et les présences. Pour un chef dont `UnitLead` = `unit` (tous les chefs repris), rien ne change.
+
+**Amendement (étape 3 de #128)** : « chef de cette unité » passe par `ledUnits` partout où une décision d'accès comparait encore `User.unit` pour un CHEF.
+- Messagerie privée (SAFE-01, `dm-policy`) : un jeune de 15 à 17 ans peut échanger en privé avec un CHEF qui **encadre** son unité d'appartenance, qu'il en soit membre ou non. La règle « pas de DM entre jeunes de 15 à 17 ans » passe avant : un compagnon mineur chef des Louveteaux n'écrit pas en privé à un Louveteau mineur.
+- Modération : un CHEF est notifié des signalements des unités qu'il encadre et sa file les liste (`concernedUnit` parmi `ledUnits`, liste vide = rien).
+- Pédagogie : la demande de 2e validation va aux CHEF qui encadrent l'unité du jeune, plus aux chefs qui en sont seulement membres.
+- `setUserRoles` ne recrée plus d'unité encadrée sur un compte anonymisé.
+- Restent sur `User.unit` comme **appartenance**, à trancher à l'étape 4 : accès aux salons d'unité, audiences d'annonces, notifications et rappels d'événements, iCal, tableau de bord, unité par défaut du bilan des présences.

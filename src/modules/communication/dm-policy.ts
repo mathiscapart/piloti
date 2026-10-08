@@ -2,8 +2,8 @@ import { MAJORITY_AGE, DIRECT_MESSAGE_MIN_AGE, computeAge } from "@/lib/legal/ag
 import { effectiveRoles } from "@/lib/permissions";
 
 // SAFE-01 — protection des mineurs dans la messagerie privée. Module pur (pas
-// d'accès base) : dm-queries.ts charge les participants (rôles, unité, date de
-// naissance) et le lien familial, puis délègue la décision ici. Les trois
+// d'accès base) : dm-queries.ts charge les participants (rôles, unité, unités
+// encadrées, date de naissance) et le lien familial, puis délègue la décision ici. Les trois
 // points d'entrée de la messagerie (envoi, annuaire, fil de discussion)
 // s'appuient tous sur `evaluateDmPolicy` — aucune règle d'âge dupliquée.
 //
@@ -22,6 +22,9 @@ export interface DmParticipant {
   // `effectiveRoles`. Le champ `role` (miroir d'affichage) n'entre pas ici.
   roles?: string[] | string | null;
   unit?: string | null;
+  // #128 — unités encadrées (`UnitLead`) : seules elles font d'un CHEF le
+  // « chef de l'unité » du jeune. Absent = aucune (fail-safe).
+  ledUnits?: readonly string[];
   birthDate?: Date | string | null;
 }
 
@@ -44,12 +47,13 @@ function categorize(birthDate: DmParticipant["birthDate"]): AgeCategory {
   return "ADULT";
 }
 
-// SAFE-01 — « chef de son unité » : rôle CHEF ET même unité que le jeune.
-// `unit` est nullable en base (et parfois incohérent avec `role`) : fail-safe,
-// une unité manquante d'un côté ou de l'autre bloque l'accès (cf. rapport).
+// SAFE-01 — « chef de son unité » : rôle CHEF ET encadrement (`ledUnits`, #128)
+// de l'unité d'appartenance du jeune. L'unité d'appartenance du chef n'entre
+// pas en jeu. Fail-safe : un jeune sans unité, ou un chef qui n'encadre rien,
+// bloque l'accès.
 function isUnitChiefOf(adult: DmParticipant, teen: DmParticipant): boolean {
-  if (!adult.unit || !teen.unit) return false;
-  return effectiveRoles(adult).includes("CHEF") && adult.unit === teen.unit;
+  if (!teen.unit) return false;
+  return effectiveRoles(adult).includes("CHEF") && (adult.ledUnits ?? []).includes(teen.unit);
 }
 
 // SAFE-01 — superutilisateur de l'instance : passe-droit de messagerie.

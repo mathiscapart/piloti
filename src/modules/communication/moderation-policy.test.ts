@@ -114,8 +114,8 @@ describe("canModerateReport", () => {
 
 describe("selectReportRecipients", () => {
   const admin = { id: "u-admin", role: "ADMIN", roles: ["ADMIN"], unit: null };
-  const chefScouts = { id: "u-chef-scouts", role: "CHEF", roles: ["CHEF"], unit: "SCOUTS" };
-  const chefLouveteaux = { id: "u-chef-louvet", role: "CHEF", roles: ["CHEF"], unit: "LOUVETEAUX" };
+  const chefScouts = { id: "u-chef-scouts", role: "CHEF", roles: ["CHEF"], unit: "SCOUTS", ledUnits: ["SCOUTS"] };
+  const chefLouveteaux = { id: "u-chef-louvet", role: "CHEF", roles: ["CHEF"], unit: "LOUVETEAUX", ledUnits: ["LOUVETEAUX"] };
   const parent = { id: "u-parent", role: "PARENT", roles: ["PARENT"], unit: "SCOUTS" };
 
   it("sélectionne tous les ADMIN + les CHEF de l'unité concernée uniquement", () => {
@@ -140,6 +140,45 @@ describe("selectReportRecipients", () => {
   it("ne sélectionne jamais un rôle sans droit de modération (parent, jeune…)", () => {
     const recipients = selectReportRecipients([parent], "SCOUTS", "u-autre");
     expect(recipients).toEqual([]);
+  });
+});
+
+// #128 — un CHEF est notifié des signalements des unités qu'il ENCADRE
+// (`ledUnits`), plus de son unité d'appartenance.
+describe("routage par unités encadrées (#128)", () => {
+  // Lucas, du seed : membre des Compagnons, chef chez les Louveteaux.
+  const lucas = { id: "u-lucas", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "COMPAGNONS", ledUnits: ["LOUVETEAUX"] };
+  const chefDeuxUnites = { id: "u-chef-2", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "ADULTES", ledUnits: ["SCOUTS", "PIONNIERS"] };
+  const chefSansEncadrement = { id: "u-chef-0", role: "CHEF", roles: ["CHEF"], status: "ACTIVE", unit: "SCOUTS", ledUnits: [] };
+  const secretaire = { id: "u-sec", role: "SECRETAIRE", roles: ["SECRETAIRE"], status: "ACTIVE", unit: "SCOUTS", ledUnits: ["SCOUTS"] };
+
+  it("compagnon CHEF des Louveteaux : notifié pour les Louveteaux, pas pour les Compagnons", () => {
+    expect(selectReportRecipients([lucas], "LOUVETEAUX", "u-autre")).toEqual(["u-lucas"]);
+    expect(selectReportRecipients([lucas], "COMPAGNONS", "u-autre")).toEqual([]);
+  });
+
+  it("le traitement suit la même règle que la notification", () => {
+    expect(canModerateReport(lucas, { concernedUnit: "LOUVETEAUX", targetAuthorId: "u-autre" })).toBe(true);
+    expect(canModerateReport(lucas, { concernedUnit: "COMPAGNONS", targetAuthorId: "u-autre" })).toBe(false);
+  });
+
+  it("chef de deux unités : notifié pour chacune, pas au-delà", () => {
+    expect(selectReportRecipients([chefDeuxUnites], "SCOUTS", "u-autre")).toEqual(["u-chef-2"]);
+    expect(selectReportRecipients([chefDeuxUnites], "PIONNIERS", "u-autre")).toEqual(["u-chef-2"]);
+    expect(selectReportRecipients([chefDeuxUnites], "ADULTES", "u-autre")).toEqual([]);
+  });
+
+  it("CHEF sans unité encadrée : jamais notifié, même pour son unité d'appartenance", () => {
+    expect(selectReportRecipients([chefSansEncadrement], "SCOUTS", "u-autre")).toEqual([]);
+    expect(selectReportRecipients([{ ...chefSansEncadrement, ledUnits: undefined }], "SCOUTS", "u-autre")).toEqual([]);
+  });
+
+  it("encadrement sans le rôle CHEF : jamais notifié", () => {
+    expect(selectReportRecipients([secretaire], "SCOUTS", "u-autre")).toEqual([]);
+  });
+
+  it("l'auteur du contenu reste exclu, même s'il encadre l'unité (#91)", () => {
+    expect(selectReportRecipients([lucas], "LOUVETEAUX", "u-lucas")).toEqual([]);
   });
 });
 

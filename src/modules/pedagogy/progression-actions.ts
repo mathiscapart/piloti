@@ -112,10 +112,17 @@ export async function proposeStep(
     { action: "STEP_VALIDATION_PROPOSED", userId: user.id, metadata: { jeuneId, stepId } },
   );
 
-  // Notifie les autres chefs de la branche pour la 2e validation.
+  // Notifie les autres chefs de la branche pour la 2e validation : ceux qui
+  // ENCADRENT l'unité du jeune (#128), pas ceux qui en sont seulement membres —
+  // la notification porte son prénom.
   after(async () => {
+    if (!jeune.unit) return;
     const chefs = await db.user.findMany({
-      where: { status: "ACTIVE", roles: { contains: "CHEF" }, unit: jeune.unit },
+      where: {
+        status: "ACTIVE",
+        roles: { contains: "CHEF" },
+        unitLeads: { some: { unit: jeune.unit } },
+      },
       select: { id: true },
     });
     const others = chefs.map((c) => c.id).filter((id) => id !== user.id);

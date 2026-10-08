@@ -26,8 +26,9 @@ function teen(overrides: Partial<DmParticipant> = {}): DmParticipant {
   return { roles: ["SCOUT"], unit: "PIONNIERS", birthDate: d(2008, 6, 15), ...overrides }; // 16 ans
 }
 
+// Chef repris par la migration #128 : il encadre son unité d'appartenance.
 function chief(unit: string, overrides: Partial<DmParticipant> = {}): DmParticipant {
-  return { roles: ["CHEF"], unit, birthDate: d(1990, 6, 15), ...overrides }; // 34 ans
+  return { roles: ["CHEF"], unit, ledUnits: [unit], birthDate: d(1990, 6, 15), ...overrides }; // 34 ans
 }
 
 function adult(overrides: Partial<DmParticipant> = {}): DmParticipant {
@@ -97,6 +98,62 @@ describe("15-17 ans — uniquement les chefs de son unité", () => {
     const t2 = teen({ unit: "COMPAGNONS" });
     expect(evaluateDmPolicy(t1, t2, false).allowed).toBe(false);
     expect(evaluateDmPolicy(t2, t1, false).allowed).toBe(false);
+  });
+});
+
+// #128 — « chef de son unité » = CHEF qui ENCADRE (`ledUnits`) l'unité
+// d'appartenance du jeune ; l'unité d'appartenance du chef n'entre plus en jeu.
+describe("chef d'unité par UnitLead (#128)", () => {
+  // Lucas, du seed : 17 ans, membre des Compagnons, chef chez les Louveteaux.
+  const compagnonChef = (): DmParticipant => ({
+    roles: ["CHEF"],
+    unit: "COMPAGNONS",
+    ledUnits: ["LOUVETEAUX"],
+    birthDate: d(2007, 6, 15), // 17 ans
+  });
+
+  it("compagnon mineur CHEF des Louveteaux et jeune Louveteau de 16 ans : toujours interdit entre mineurs", () => {
+    const t = teen({ unit: "LOUVETEAUX" });
+    const c = compagnonChef();
+    for (const verdict of [evaluateDmPolicy(c, t, false), evaluateDmPolicy(t, c, false)]) {
+      expect(verdict.allowed).toBe(false);
+      expect(verdict.reason).toMatch(/entre jeunes de 15 à 17 ans/i);
+    }
+  });
+
+  it("adulte chef des Louveteaux et jeune Louveteau de 16 ans : autorisé, inchangé", () => {
+    const t = teen({ unit: "LOUVETEAUX" });
+    const c = chief("LOUVETEAUX");
+    expect(evaluateDmPolicy(c, t, false).allowed).toBe(true);
+    expect(evaluateDmPolicy(t, c, false).allowed).toBe(true);
+  });
+
+  it("chef adulte qui encadre l'unité du jeune sans y appartenir : autorisé", () => {
+    const t = teen({ unit: "PIONNIERS" });
+    const c = chief("ADULTES", { ledUnits: ["PIONNIERS"] });
+    expect(evaluateDmPolicy(c, t, false).allowed).toBe(true);
+    expect(evaluateDmPolicy(t, c, false).allowed).toBe(true);
+  });
+
+  it("chef adulte membre de l'unité du jeune mais qui ne l'encadre pas : refusé", () => {
+    const t = teen({ unit: "PIONNIERS" });
+    const c = chief("PIONNIERS", { ledUnits: ["SCOUTS"] });
+    expect(evaluateDmPolicy(c, t, false).allowed).toBe(false);
+    expect(evaluateDmPolicy(t, c, false).allowed).toBe(false);
+  });
+
+  it("CHEF sans unité encadrée, même membre de l'unité du jeune : refusé (fail-safe)", () => {
+    const t = teen({ unit: "PIONNIERS" });
+    for (const c of [chief("PIONNIERS", { ledUnits: [] }), chief("PIONNIERS", { ledUnits: undefined })]) {
+      expect(evaluateDmPolicy(c, t, false).allowed).toBe(false);
+      expect(evaluateDmPolicy(t, c, false).allowed).toBe(false);
+    }
+  });
+
+  it("encadrement sans le rôle CHEF : refusé", () => {
+    const t = teen({ unit: "PIONNIERS" });
+    const a = adult({ ledUnits: ["PIONNIERS"] });
+    expect(evaluateDmPolicy(a, t, false).allowed).toBe(false);
   });
 });
 

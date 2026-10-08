@@ -327,8 +327,11 @@ export function inUnitScope(user: AuthCtx, targetUnit: string | null): boolean {
   if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
   if (roles.includes(CHEF)) return leadsUnit(user, targetUnit);
   // Rôles transverses (secrétaire, trésorier… : bilan des présences via
-  // `member.view`) : périmètre d'avant #128, leur unité d'appartenance. À
-  // trancher avec les présences, étape suivante de #128.
+  // `member.view`) : périmètre d'avant #128, leur unité d'appartenance.
+  // TODO(ROLES-06) : asymétrie assumée (CHEF par `ledUnits`, autres rôles par
+  // `User.unit`). La matrice de rôles la supprimera avec une seule fonction de
+  // périmètre portée par l'attribution du rôle, en remplacement de `UnitLead`
+  // et de la borne par `User.unit`.
   return targetUnit !== null && user.unit === targetUnit;
 }
 

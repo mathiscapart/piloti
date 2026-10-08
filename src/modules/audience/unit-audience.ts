@@ -26,6 +26,9 @@ export interface UnitAudience {
   parentIds: string[];
   // Tous les destinataires pertinents, dédupliqués (membres + parents).
   allIds: string[];
+  // #128 — chefs actifs qui ENCADRENT l'unité (`UnitLead`), membres ou non.
+  // Hors de `allIds` : chaque appelant décide s'ils sont concernés.
+  leaderIds: string[];
   // Salon de l'unité (convention accessUnits == [unit]) ; #general pour le groupe.
   channelId: string | null;
 }
@@ -55,6 +58,16 @@ export async function resolveUnitAudience(
     : [];
   const parentIds = [...new Set(links.map((l) => l.parentId))];
 
+  const leads = isGroup
+    ? []
+    : await db.unitLead.findMany({
+        where: { unit, user: { status: "ACTIVE" } },
+        select: { user: { select: { id: true, roles: true } } },
+      });
+  const leaderIds = leads
+    .filter((l) => hasRole(l.user.roles, "CHEF"))
+    .map((l) => l.user.id);
+
   // Salon : convention accessUnits == [unit] ; #general pour le groupe.
   let channelId: string | null = null;
   const channel = isGroup
@@ -75,6 +88,7 @@ export async function resolveUnitAudience(
     youthIds,
     parentIds,
     allIds,
+    leaderIds,
     channelId,
   };
 }

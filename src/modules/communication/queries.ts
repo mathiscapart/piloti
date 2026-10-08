@@ -7,6 +7,8 @@ interface AccessUser {
   role: string;
   roles?: string[] | string | null;
   unit?: string | null;
+  // #128 — unités encadrées : un CHEF voit aussi leurs salons.
+  ledUnits?: readonly string[];
   // SEC-08 — `canAccessChannel` est fail-closed sur le statut : un appelant qui
   // omettrait `status` verrait TOUS les salons disparaître silencieusement. On
   // l'exige donc ici plutôt que de le laisser arriver par structural typing.

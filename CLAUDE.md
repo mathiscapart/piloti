@@ -70,6 +70,11 @@ interroge `context7`. Ne devine jamais une signature.
   l'`AuditLog` sont dans la **même transaction Prisma**. Jamais de mutation sans trace.
 - **Toute Server Action / page sensible commence par `can(user, "…")`** (`src/lib/permissions.ts`,
   source unique de la matrice de rôles). Pas de contrôle d'accès ad hoc.
+- **Unité d'appartenance ≠ unités encadrées** (D-045) : `User.unit` est l'unité dont la personne fait
+  partie (une seule) ; `UnitLead` (`ledUnits`) porte les unités qu'un CHEF encadre, son seul périmètre
+  d'action (`inUnitScope`, `canActOnUnit`), qui ne lit jamais `User.unit` pour lui. La visibilité
+  (salons, annonces, agenda, notifications d'événement) prend les deux. `UnitLead` ne s'écrit que
+  par `writeLeadUnits` (`src/modules/admin/actions.ts`, verrouillé par `unit-lead-writes.test.ts`).
 - **better-auth**, jamais NextAuth. **SQLite** en dev ET en prod.
 - Code et identifiants en **anglais**, UI/messages utilisateur/commits/doc en **français**.
 - **Aucun port exposé en prod** : tout entre par cloudflared → Traefik. Ne jamais ajouter de `ports:`

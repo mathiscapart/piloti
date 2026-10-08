@@ -9,6 +9,7 @@ import {
   BirthDateEditor,
   ChangePasswordDialog,
   DeleteUserButton,
+  LeadUnitsEditor,
   ReactivateButton,
   RolesEditor,
   SuspendButton,
@@ -59,6 +60,8 @@ export default async function EditUserAccountPage({ params }: PageProps) {
       status: true,
       // SAFE-01 — alimente BirthDateEditor (seul chemin de correction).
       birthDate: true,
+      // #128 — unités encadrées (LeadUnitsEditor).
+      unitLeads: { select: { unit: true } },
     },
   });
   if (!target) notFound();
@@ -115,11 +118,17 @@ export default async function EditUserAccountPage({ params }: PageProps) {
         <div>
           <h2 className="text-lg font-black text-earth">Gestion du compte</h2>
           <p className="text-sm text-trail">
-            Unité, rôles, statut et accès de {fullName}.
+            Unité d&apos;appartenance, unités encadrées, rôles, statut et accès de{" "}
+            {fullName}.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <UnitEditor userId={target.id} currentUnit={target.unit} />
+          <LeadUnitsEditor
+            userId={target.id}
+            currentUnits={target.unitLeads.map((l) => l.unit)}
+            isChef={roles.includes("CHEF")}
+          />
           <BirthDateEditor
             userId={target.id}
             currentBirthDate={toDateInput(target.birthDate)}

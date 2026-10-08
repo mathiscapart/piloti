@@ -86,6 +86,12 @@ function SortLink({
   );
 }
 
+// #128 — unités encadrées, dans l'ordre du catalogue.
+function ledUnitsLabel(unitLeads: { unit: string }[]): string | null {
+  const units = UNITS.filter((u) => unitLeads.some((l) => l.unit === u));
+  return units.length > 0 ? `Encadre : ${units.join(", ")}` : null;
+}
+
 function roleLabels(roles: string[]): string {
   if (roles.length === 0) return "Aucun rôle";
   return roles.map((r) => ROLE_LABEL[r as Role] ?? r).join(", ");
@@ -96,6 +102,7 @@ interface PageProps {
     q?: string;
     role?: string;
     unit?: string;
+    ledUnit?: string;
     status?: string;
     sort?: string;
   }>;
@@ -111,10 +118,13 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
     search: q,
     role: params.role || undefined,
     unit: params.unit || undefined,
+    ledUnit: params.ledUnit || undefined,
     status: params.status || undefined,
     sort,
   });
-  const isFiltered = Boolean(q || params.role || params.unit || params.status);
+  const isFiltered = Boolean(
+    q || params.role || params.unit || params.ledUnit || params.status,
+  );
 
   // Lien conservant les filtres et ne changeant que le tri (en-têtes cliquables).
   const sortHref = (next: string) => {
@@ -122,6 +132,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
     if (q) sp.set("q", q);
     if (params.role) sp.set("role", params.role);
     if (params.unit) sp.set("unit", params.unit);
+    if (params.ledUnit) sp.set("ledUnit", params.ledUnit);
     if (params.status) sp.set("status", params.status);
     if (next !== "status") sp.set("sort", next);
     const qs = sp.toString();
@@ -132,7 +143,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
   // réutilise les mêmes noeuds et ne les resynchronise pas sur `defaultValue`.
   // Cette clé les remonte quand l'URL change — sans quoi « Reset » viderait
   // l'URL en laissant les filtres affichés à l'écran.
-  const filtersKey = `${q}|${params.role ?? ""}|${params.unit ?? ""}|${params.status ?? ""}|${sort}`;
+  const filtersKey = `${q}|${params.role ?? ""}|${params.unit ?? ""}|${params.ledUnit ?? ""}|${params.status ?? ""}|${sort}`;
 
   // Colonne triable : un clic trie en ascendant, un second bascule en descendant.
   const sortColumn = (key: "name" | "unit" | "status") => {
@@ -177,7 +188,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
           rechargeable) et la page reste un Server Component. */}
       <UserFiltersForm
         key={filtersKey}
-        className="grid gap-3 rounded-2xl bg-snow p-4 shadow-card md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_auto]"
+        className="grid gap-3 rounded-2xl bg-snow p-4 shadow-card md:grid-cols-[minmax(0,2fr)_1fr_1fr_1fr_1fr_auto]"
       >
         <label className="space-y-1.5">
           <span className="text-xs font-bold uppercase tracking-wider text-trail">
@@ -218,6 +229,23 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
           <select
             name="unit"
             defaultValue={params.unit ?? ""}
+            className="h-10 w-full rounded-md border border-input bg-snow px-3 text-sm"
+          >
+            <option value="">Toutes</option>
+            {UNITS.map((u) => (
+              <option key={u} value={u}>
+                {UNIT_LABEL[u]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="space-y-1.5">
+          <span className="text-xs font-bold uppercase tracking-wider text-trail">
+            Encadre
+          </span>
+          <select
+            name="ledUnit"
+            defaultValue={params.ledUnit ?? ""}
             className="h-10 w-full rounded-md border border-input bg-snow px-3 text-sm"
           >
             <option value="">Toutes</option>
@@ -295,6 +323,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
               const suspended = u.status === "SUSPENDED";
               const rejected = u.status === "REJECTED";
               const roles = parseRoles(u.roles);
+              const ledLabel = ledUnitsLabel(u.unitLeads);
               // La SECRÉTAIRE ne peut pas gérer un compte ADMIN/RG (l'ADMIN, si).
               const canManage =
                 isAdmin || !roles.some((r) => PRIVILEGED_ROLES.has(r));
@@ -324,6 +353,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                         <p className="text-xs text-trail">{u.email}</p>
                       )}
                       {u.unit ? <p className="text-xs text-trail">{u.unit}</p> : null}
+                      {ledLabel ? <p className="text-xs text-trail">{ledLabel}</p> : null}
                     </div>
                     <span
                       className={cn(
@@ -398,6 +428,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                   const suspended = u.status === "SUSPENDED";
                   const rejected = u.status === "REJECTED";
                   const roles = parseRoles(u.roles);
+                  const ledLabel = ledUnitsLabel(u.unitLeads);
                   const canManage =
                     isAdmin || !roles.some((r) => PRIVILEGED_ROLES.has(r));
                   return (
@@ -433,6 +464,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-trail">{u.unit ?? "—"}</span>
+                        {ledLabel ? <p className="text-xs text-trail">{ledLabel}</p> : null}
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-trail">{roleLabels(roles)}</span>

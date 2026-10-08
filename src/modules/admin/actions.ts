@@ -519,18 +519,21 @@ export async function setUserLeadUnits(
         // retire CHEF ne doit pas laisser d'unité encadrée à un non-chef.
         const target = await tx.user.findUnique({
           where: { id: parsed.data.userId },
-          select: { roles: true, status: true },
+          select: { roles: true, status: true, unitLeads: { select: { unit: true } } },
         });
         const isChef =
           target?.status !== "DELETED" && parseRoles(target?.roles).includes("CHEF");
         if (units.length > 0 && !isChef) throw new NotChefError();
         await writeLeadUnits(tx, parsed.data.userId, units);
+        // Avant ET après dans l'audit : sans l'ancienne liste, la trace ne
+        // dirait pas quelle unité a été retirée.
+        return (target?.unitLeads ?? []).map((l) => l.unit);
       },
-      {
+      (previousUnits) => ({
         action: "USER_LEAD_UNITS_CHANGED",
         userId: actor.id,
-        metadata: { targetUserId: parsed.data.userId, units },
-      },
+        metadata: { targetUserId: parsed.data.userId, previousUnits, units },
+      }),
     );
   } catch (err) {
     if (err instanceof NotChefError) {

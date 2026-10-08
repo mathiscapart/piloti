@@ -21,6 +21,7 @@ import {
   effectiveRoles,
   hasRole,
   inUnitScope,
+  ledUnitsOf,
   scopedUnits,
 } from "./permissions";
 
@@ -939,5 +940,25 @@ describe("ledUnits — périmètre d'encadrement (#128)", () => {
     expect(inUnitScope(admin, null)).toBe(true);
     expect(canActOnUnit(admin, "pedago.manage", "COMPAGNONS")).toBe(true);
     expect(canReadPedagoNotes(admin, "COMPAGNONS")).toBe(true);
+  });
+});
+
+describe("ledUnitsOf — unités encadrées qui comptent (#128)", () => {
+  // Visibilité (salons, annonces) : seules les unités encadrées d'un CHEF
+  // comptent, comme dans inUnitScope et dm-policy.
+  it("CHEF : ses unités encadrées", () => {
+    expect(ledUnitsOf({ role: "CHEF", roles: ["CHEF"], ledUnits: ["LOUVETEAUX"] })).toEqual([
+      "LOUVETEAUX",
+    ]);
+  });
+
+  it("sans rôle Chef : aucune, même avec des UnitLead", () => {
+    expect(
+      ledUnitsOf({ role: "SECRETAIRE", roles: ["SECRETAIRE"], ledUnits: ["LOUVETEAUX"] }),
+    ).toEqual([]);
+  });
+
+  it("CHEF sans ledUnits : aucune (fail-closed)", () => {
+    expect(ledUnitsOf({ role: "CHEF", roles: ["CHEF"], unit: "SCOUTS" })).toEqual([]);
   });
 });

@@ -341,6 +341,12 @@ function leadsUnit(user: AuthCtx, targetUnit: string | null): boolean {
   return targetUnit !== null && (user.ledUnits ?? []).includes(targetUnit);
 }
 
+// #128 — unités encadrées qui comptent pour la VISIBILITÉ (salons, annonces) :
+// celles d'un CHEF, comme pour le périmètre. Un `UnitLead` sans CHEF n'ouvre rien.
+export function ledUnitsOf(user: Partial<AuthCtx>): readonly string[] {
+  return effectiveRoles(user).includes(CHEF) ? (user.ledUnits ?? []) : [];
+}
+
 // Rôles rattachés à une branche. Tous les autres — trésorier, secrétaire,
 // responsable matériel, responsable de groupe, admin — exercent une fonction
 // TRANSVERSE au groupe : les borner à une unité n'aurait pas de sens (le

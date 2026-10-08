@@ -3,13 +3,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { db } from "@/lib/db";
-import { assignableRolesForBirthDate } from "@/lib/legal/age";
-import { can, canAssignRole } from "@/lib/permissions";
+import { can, canAssignRole, canChangeAccountEmail } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import {
   BirthDateEditor,
   ChangePasswordDialog,
   DeleteUserButton,
+  LeadUnitsEditor,
   ReactivateButton,
   RolesEditor,
   SuspendButton,
@@ -60,6 +60,8 @@ export default async function EditUserAccountPage({ params }: PageProps) {
       status: true,
       // SAFE-01 — alimente BirthDateEditor (seul chemin de correction).
       birthDate: true,
+      // #128 — unités encadrées (LeadUnitsEditor).
+      unitLeads: { select: { unit: true } },
     },
   });
   if (!target) notFound();
@@ -109,17 +111,24 @@ export default async function EditUserAccountPage({ params }: PageProps) {
           canLogin: target.canLogin,
           birthDate: toDateInput(target.birthDate),
         }}
+        canEditEmail={canChangeAccountEmail(currentUser, target)}
       />
 
       <section className="space-y-4 rounded-2xl bg-snow p-5 shadow-card">
         <div>
           <h2 className="text-lg font-black text-earth">Gestion du compte</h2>
           <p className="text-sm text-trail">
-            Unité, rôles, statut et accès de {fullName}.
+            Unité d&apos;appartenance, unités encadrées, rôles, statut et accès de{" "}
+            {fullName}.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <UnitEditor userId={target.id} currentUnit={target.unit} />
+          <LeadUnitsEditor
+            userId={target.id}
+            currentUnits={target.unitLeads.map((l) => l.unit)}
+            isChef={roles.includes("CHEF")}
+          />
           <BirthDateEditor
             userId={target.id}
             currentBirthDate={toDateInput(target.birthDate)}
@@ -128,7 +137,6 @@ export default async function EditUserAccountPage({ params }: PageProps) {
             userId={target.id}
             currentRoles={roles}
             allowPrivileged={isAdmin}
-            allowedRoles={assignableRolesForBirthDate(target.birthDate)}
           />
           {!isSelf && suspended && (
             <ReactivateButton userId={target.id} fullName={fullName} />

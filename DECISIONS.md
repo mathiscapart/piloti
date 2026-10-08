@@ -805,3 +805,46 @@ Deux défauts laissés par #97.
 - Monter une image = changer une ligne dans le `.env` de l'environnement, puis redéployer. Mettre aussi à jour `.env.example` pour que le dépôt reflète la version de référence.
 - Le `ARG` du `Dockerfile` garde un défaut, utile seulement pour un `docker build` lancé à la main.
 - `scripts/backup.ps1` utilise encore `alpine:3.21` en dur (image outil, hors compose).
+
+## D-044 — #128 : l'âge ne restreint plus les rôles attribuables (abandonne la règle de #122)
+
+**Contexte** : #122 (PR #126) réservait le seul rôle Jeune aux mineurs (`assignableRolesForBirthDate`, seuil de 18 ans). Un compagnon de 17 ans ne pouvait donc pas être chef, alors qu'en groupe SGDF un compagnon encadre souvent une autre unité (#128). L'issue proposait d'abaisser le seuil à 15 ans.
+
+**Choix** (décision du responsable, étape 1 de #128) : aucun paramètre d'âge sur les rôles. Un ADMIN ou un RG attribue n'importe quel rôle à n'importe quel compte, mineur compris : un chef reste un chef, même mineur. `assignableRolesForBirthDate` est supprimée, avec les contrôles de `approveUser`, `setUserRoles` et `setUserBirthDate` et les filtres de l'interface (`RolesEditor`, `ApproveDialog`). Seuls les verrous indépendants de l'âge restent : `canAssignRole` (ADMIN et RG réservés à l'ADMIN) et `user.manage`.
+
+**Conséquences** :
+- Les protections liées à l'âge ne changent pas : aucune connexion sous 15 ans (`canEnableLogin`, `MIN_LOGIN_AGE`), règles de messagerie privée (`dm-policy.ts`), consentement parental, comptes enfants. Un compte de moins de 15 ans peut porter un rôle d'encadrement, mais ne peut pas se connecter.
+- Un chef mineur hérite des droits du rôle CHEF, notamment la messagerie privée avec les jeunes de son unité dans les limites de `dm-policy.ts`. Comme le signale #128, ce point reste à examiner avant de livrer.
+- Corriger une date de naissance n'impose plus de retirer d'abord les rôles d'encadrement.
+
+## D-045 — #128 : le périmètre d'un chef est la table `UnitLead`, pas `User.unit`
+
+**Contexte** : le périmètre d'unité (`inUnitScope`, `canActOnUnit`) comparait `user.unit === targetUnit`. Un compagnon, membre des Compagnons et chef chez les Louveteaux, ne pouvait pas être représenté, ni un chef de deux unités. L'issue proposait une table `UserUnit` (membre / encadrant).
+
+**Choix** (option E, décision du responsable, étape 2 de #128) :
+- `User.unit` reste l'unité d'**appartenance**, unique. Une table `UnitLead (userId, unit)` porte les unités **encadrées**. Pas de table `UserUnit`.
+- Le périmètre d'un CHEF = ses `UnitLead`, chargées dans `ledUnits` par `getCurrentUser()`. Fail-closed : un CHEF sans `UnitLead` n'encadre rien, même avec une `unit`. ADMIN et RG restent non bornés. Les rôles restent globaux, sans paramètre d'âge (D-044).
+- Les autres rôles (secrétaire, trésorier…) gardent dans `inUnitScope` leur périmètre d'avant : leur unité d'appartenance. Il ne sert qu'au bilan des présences (`member.view`), qui relève d'une étape suivante. Décision validée par Mathis : dette connue, voir ROLES-06 (`TODO(ROLES-06)` dans `inUnitScope`).
+- La migration `20261007163359_unit_lead` donne à chaque compte non anonymisé qui porte CHEF et une unité `UnitLead(unit)` : les chefs actuels gardent exactement leurs droits.
+- Un seul point d'écriture, `writeLeadUnits` (`src/modules/admin/actions.ts`), verrouillé par `src/lib/unit-lead-writes.test.ts`. L'anonymisation est la seule exception, et elle ne fait que supprimer.
+- Cohérence avec le rôle (`leadUnitsForRoles`) : retirer CHEF supprime les `UnitLead`, et attribuer CHEF à un compte sans `UnitLead` lui fait encadrer son unité. L'approbation repart de zéro : le chef encadre l'unité choisie dans le dialogue. `setUserUnit` ne touche jamais au périmètre. `setUserLeadUnits` définit les unités encadrées d'un CHEF (audit `USER_LEAD_UNITS_CHANGED`).
+
+**Conséquences** :
+- Changer l'unité d'un chef (`setUserUnit`) ne déplace plus son périmètre. Tant qu'aucun écran n'appelle `setUserLeadUnits`, le recours est d'enregistrer ses rôles sans CHEF puis avec : il encadre alors sa nouvelle unité.
+- Restent sur `User.unit`, à migrer dans les étapes suivantes : `dm-policy` (chef de son unité), le routage des notifications de modération (`selectReportRecipients`), les audiences d'annonces et de salons, le tableau de bord, l'iCal et les présences. Pour un chef dont `UnitLead` = `unit` (tous les chefs repris), rien ne change.
+
+**Amendement (étape 3 de #128)** : « chef de cette unité » passe par `ledUnits` partout où une décision d'accès comparait encore `User.unit` pour un CHEF.
+- Messagerie privée (SAFE-01, `dm-policy`) : un jeune de 15 à 17 ans peut échanger en privé avec un CHEF qui **encadre** son unité d'appartenance, qu'il en soit membre ou non. La règle « pas de DM entre jeunes de 15 à 17 ans » passe avant : un compagnon mineur chef des Louveteaux n'écrit pas en privé à un Louveteau mineur.
+- Modération : un CHEF est notifié des signalements des unités qu'il encadre et sa file les liste (`concernedUnit` parmi `ledUnits`, liste vide = rien).
+- Pédagogie : la demande de 2e validation va aux CHEF qui encadrent l'unité du jeune, plus aux chefs qui en sont seulement membres.
+- `setUserRoles` ne recrée plus d'unité encadrée sur un compte anonymisé.
+- Restent sur `User.unit` comme **appartenance**, à trancher à l'étape 4 : accès aux salons d'unité, audiences d'annonces, notifications et rappels d'événements, iCal, tableau de bord, unité par défaut du bilan des présences.
+
+**Amendement (étape 4 de #128)** : les unités encadrées donnent aussi la **visibilité** (décision du responsable).
+- Unités d'un compte = appartenance (`User.unit`) + unités encadrées. Ces dernières ne comptent que pour un CHEF (`ledUnitsOf`), comme le périmètre.
+- Salons (`canAccessChannel`) : accès si une de ses unités est dans `accessUnits`. Exclusion (`excludeUnits`) seulement si **toutes** ses unités sont exclues ; un compte sans unité n'est jamais exclu ; l'ADMIN passe toujours.
+- Annonces : un chef est dans l'audience des unités qu'il encadre (notification, visibilité, taux de lecture), sans y amener ses parents.
+- Événements : la notification de création, modification ou annulation va aussi aux chefs qui encadrent l'unité (`leaderIds` de `resolveUnitAudience`, hors `allIds`). Le flux iCal inclut les événements des unités encadrées. Les relances d'inscription (`reminders.ts`) et les campagnes de cotisation restent sur l'appartenance.
+- Tableau de bord : inchangé. Tout CHEF a `event.manage`, pour qui le prochain événement n'est pas filtré par unité.
+- Bilan des présences : l'unité présélectionnée est la première unité encadrée visible, sinon l'unité d'appartenance.
+- Écran : `/admin/utilisateurs/[id]/modifier` propose « Unités encadrées » (`setUserLeadUnits`). L'audit `USER_LEAD_UNITS_CHANGED` porte l'avant (`previousUnits`) et l'après (`units`). Pour un compte non Chef, l'éditeur explique qu'il faut d'abord le rôle Chef.

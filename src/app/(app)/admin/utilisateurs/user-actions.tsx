@@ -23,6 +23,7 @@ import {
   deleteUser,
   reactivateUser,
   setUserBirthDate,
+  setUserLeadUnits,
   setUserRoles,
   setUserUnit,
   suspendUser,
@@ -41,15 +42,10 @@ export function RolesEditor({
   userId,
   currentRoles,
   allowPrivileged = true,
-  allowedRoles,
 }: {
   userId: string;
   currentRoles: string[];
   allowPrivileged?: boolean;
-  // #122 — restreint le catalogue attribuable (ex. ["SCOUT"] pour un mineur).
-  // Les rôles déjà portés restent affichés, mais verrouillés (même pattern que
-  // PRIVILEGED_ROLES ci-dessous).
-  allowedRoles?: readonly string[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -61,9 +57,7 @@ export function RolesEditor({
   // Catalogue attribuable : sans ADMIN/RG si l'acteur n'est pas ADMIN, sauf si
   // le compte cible les porte déjà (on les affiche alors en lecture, cochés).
   const visibleRoles = ROLES.filter(
-    (r) =>
-      (allowPrivileged || !PRIVILEGED_ROLES.has(r) || currentRoles.includes(r)) &&
-      (!allowedRoles || allowedRoles.includes(r) || currentRoles.includes(r)),
+    (r) => allowPrivileged || !PRIVILEGED_ROLES.has(r) || currentRoles.includes(r),
   );
 
   function toggle(role: string) {
@@ -111,16 +105,7 @@ export function RolesEditor({
           {visibleRoles.map((role) => {
             // Rôle sensible affiché à un acteur non-admin : verrouillé, ni
             // cochable ni décochable.
-            const privilegedLocked =
-              !allowPrivileged && PRIVILEGED_ROLES.has(role);
-            // Rôle hors catalogue autorisé (ex. rôle d'encadrement porté par
-            // un mineur) : décochable pour le retirer, mais non recochable
-            // une fois décoché — sans quoi le serveur refuse tout et un rôle
-            // devenu interdit ne peut plus jamais être retiré (#122).
-            const outOfCatalogLocked =
-              !!allowedRoles && !allowedRoles.includes(role);
-            const locked =
-              privilegedLocked || (outOfCatalogLocked && !selected.has(role));
+            const locked = !allowPrivileged && PRIVILEGED_ROLES.has(role);
             return (
               <label
                 key={role}
@@ -207,9 +192,10 @@ export function UnitEditor({
       </DialogTrigger>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Unité / branche</DialogTitle>
+          <DialogTitle>Unité d&apos;appartenance</DialogTitle>
           <DialogDescription>
-            Choisis la branche de la personne (ou « Aucune »).
+            Choisis la branche dont la personne fait partie (ou « Aucune »).
+            Les unités qu&apos;un chef encadre se règlent à part.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
@@ -243,6 +229,112 @@ export function UnitEditor({
           <Button onClick={save} disabled={pending}>
             {pending ? "Enregistrement…" : "Enregistrer"}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// #128 — unités ENCADRÉES d'un chef (table `UnitLead`), distinctes de son
+// unité d'appartenance : un compagnon peut encadrer les Louveteaux. Réservé aux
+// comptes Chef : pour les autres, l'éditeur l'explique au lieu de proposer un
+// choix que `setUserLeadUnits` refuserait.
+export function LeadUnitsEditor({
+  userId,
+  currentUnits,
+  isChef,
+}: {
+  userId: string;
+  currentUnits: string[];
+  isChef: boolean;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set(currentUnits));
+  const [pending, start] = useTransition();
+
+  function toggle(unit: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(unit)) next.delete(unit);
+      else next.add(unit);
+      return next;
+    });
+  }
+
+  function save() {
+    const fd = new FormData();
+    fd.set("userId", userId);
+    for (const u of selected) fd.append("units", u);
+    start(async () => {
+      const res = await setUserLeadUnits(emptyState, fd);
+      if (res.error) toast.error(res.error);
+      else {
+        toast.success("Unités encadrées mises à jour.");
+        setOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  const label =
+    currentUnits.length > 0
+      ? `Encadre : ${UNITS.filter((u) => currentUnits.includes(u))
+          .map((u) => UNIT_SHORT[u])
+          .join(", ")}`
+      : "Unités encadrées —";
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (v) setSelected(new Set(currentUnits));
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          {label}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Unités encadrées</DialogTitle>
+          <DialogDescription>
+            Les branches dont la personne est chef. Elles peuvent différer de son
+            unité d&apos;appartenance (ex. un compagnon chef chez les Louveteaux).
+          </DialogDescription>
+        </DialogHeader>
+        {isChef ? (
+          <div className="space-y-2">
+            {UNITS.map((u) => (
+              <label
+                key={u}
+                className="flex cursor-pointer items-center gap-2 rounded-lg p-2 hover:bg-sand"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(u)}
+                  onChange={() => toggle(u)}
+                  className="size-4 accent-forest"
+                />
+                <span className="text-sm text-earth">{UNIT_LABEL[u]}</span>
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p role="alert" className="rounded-lg bg-sand p-3 text-sm text-earth">
+            Seul un compte Chef peut encadrer une unité. Ajoute d&apos;abord le
+            rôle « Chef » dans « Rôles » : il encadrera alors son unité
+            d&apos;appartenance (s&apos;il en a une), modifiable ensuite ici.
+          </p>
+        )}
+        <DialogFooter>
+          {isChef ? (
+            <Button onClick={save} disabled={pending}>
+              {pending ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

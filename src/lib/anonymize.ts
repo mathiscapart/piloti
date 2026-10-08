@@ -99,6 +99,11 @@ export async function anonymizeUserInTx(tx: Tx, userId: string): Promise<void> {
   // donc rien n'est perdu pour les autres en la supprimant.
   await tx.notification.deleteMany({ where: { userId } });
 
+  // #128 — unités encadrées : comme pour les abonnements push, le cascade de
+  // la relation ne joue pas puisque la ligne `User` reste. Un compte effacé
+  // n'encadre plus rien.
+  await tx.unitLead.deleteMany({ where: { userId } });
+
   // Jetons de vérification / réinitialisation, indexés par email. Ils expirent
   // seuls, mais `identifier` EST l'adresse email — donc de la PII en clair.
   if (before?.email) {

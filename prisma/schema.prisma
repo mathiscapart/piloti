@@ -113,10 +113,28 @@ model User {
   socialBracketId   String?
   socialBracket     SocialBracket?     @relation("UserSocialBracket", fields: [socialBracketId], references: [id], onDelete: SetNull)
   auditLogs         AuditLog[]
+  // #128 — unités encadrées (périmètre d'un CHEF), distinctes de `unit`.
+  unitLeads         UnitLead[]
 
   @@index([status])
   @@index([role])
   @@index([socialBracketId])
+}
+
+// #128 — unités ENCADRÉES par un compte : seul périmètre d'un CHEF
+// (`ledUnits`, cf. src/lib/permissions.ts). `User.unit` reste l'unité
+// d'appartenance. Un compagnon (membre des Compagnons) peut ainsi encadrer les
+// Louveteaux. Écrit uniquement par src/modules/admin/actions.ts (cf.
+// unit-lead-writes.test.ts), effacé par l'anonymisation.
+model UnitLead {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  unit      String // Unit (src/lib/enums.ts)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, unit])
+  @@index([unit])
 }
 
 // US-F — tranche de quotient familial (tarification solidaire SGDF).

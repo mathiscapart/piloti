@@ -43,6 +43,9 @@ export async function getCurrentUser() {
       // messagerie privée) : cf. src/modules/communication/dm-policy.ts.
       birthDate: true,
       canLogin: true,
+      // #128 — unités encadrées : périmètre d'un CHEF (`ledUnits`, cf.
+      // inUnitScope / canActOnUnit dans src/lib/permissions.ts).
+      unitLeads: { select: { unit: true } },
     },
   });
   if (
@@ -54,7 +57,8 @@ export async function getCurrentUser() {
     redirect("/login");
   }
 
-  return user;
+  const { unitLeads, ...fields } = user;
+  return { ...fields, ledUnits: unitLeads.map((l) => l.unit) };
 }
 
 export type CurrentUser = Awaited<ReturnType<typeof getCurrentUser>>;

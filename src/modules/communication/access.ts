@@ -1,9 +1,11 @@
-import { effectiveRoles } from "@/lib/permissions";
+import { effectiveRoles, ledUnitsOf } from "@/lib/permissions";
 
 // US-C09 — contrôle d'accès aux salons par rôle (US-29) et/ou unité.
-// Règles : ADMIN voit tout. Si l'unité est dans excludeUnits → refusé.
+// Unités du compte = son unité d'appartenance + celles qu'il encadre (CHEF, #128).
+// Règles : ADMIN voit tout. Si TOUTES ses unités sont dans excludeUnits → refusé
+// (un compte sans unité n'est jamais exclu).
 // Salon « ouvert » (accessRoles ET accessUnits vides) → tous les ACTIVE.
-// Sinon autorisé si rôle ∈ accessRoles OU unité ∈ accessUnits.
+// Sinon autorisé si rôle ∈ accessRoles OU une de ses unités ∈ accessUnits.
 
 interface ChannelAccess {
   accessRoles: string;
@@ -16,6 +18,8 @@ interface AccessUser {
   role: string;
   roles?: string[] | string | null;
   unit?: string | null;
+  // #128 — unités encadrées (`UnitLead`), comptées seulement pour un CHEF.
+  ledUnits?: readonly string[];
   status?: string;
 }
 
@@ -43,7 +47,9 @@ export function canAccessChannel(
   const roles = effectiveRoles(user);
   if (roles.includes("ADMIN")) return true;
 
-  if (user.unit && parseList(channel.excludeUnits).includes(user.unit)) {
+  const units = [...new Set([...(user.unit ? [user.unit] : []), ...ledUnitsOf(user)])];
+  const excluded = parseList(channel.excludeUnits);
+  if (units.length > 0 && units.every((u) => excluded.includes(u))) {
     return false;
   }
 
@@ -51,7 +57,7 @@ export function canAccessChannel(
   const accessUnits = parseList(channel.accessUnits);
   if (accessRoles.length === 0 && accessUnits.length === 0) return true; // ouvert
   if (roles.some((r) => accessRoles.includes(r))) return true;
-  if (user.unit && accessUnits.includes(user.unit)) return true;
+  if (units.some((u) => accessUnits.includes(u))) return true;
   return false;
 }
 

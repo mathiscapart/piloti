@@ -9,6 +9,8 @@ const DM_PARTICIPANT_SELECT = {
   roles: true,
   unit: true,
   birthDate: true,
+  // #128 — unités encadrées : « chef de l'unité » du jeune.
+  unitLeads: { select: { unit: true } },
 } as const;
 
 type DmParticipantRow = {
@@ -16,10 +18,16 @@ type DmParticipantRow = {
   roles: string;
   unit: string | null;
   birthDate: Date | null;
+  unitLeads: { unit: string }[];
 };
 
 export function toDmParticipant(u: DmParticipantRow): DmParticipant {
-  return { roles: u.roles, unit: u.unit, birthDate: u.birthDate };
+  return {
+    roles: u.roles,
+    unit: u.unit,
+    ledUnits: u.unitLeads.map((l) => l.unit),
+    birthDate: u.birthDate,
+  };
 }
 
 // SAFE-01 — lien familial entre deux comptes, quel que soit le sens

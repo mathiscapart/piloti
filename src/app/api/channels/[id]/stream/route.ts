@@ -30,6 +30,8 @@ export async function GET(
         status: true,
         canLogin: true,
         birthDate: true,
+        // #128 — un chef suit aussi les salons des unités qu'il encadre.
+        unitLeads: { select: { unit: true } },
       },
     }),
     db.channel.findUnique({ where: { id } }),
@@ -43,7 +45,7 @@ export async function GET(
   ) {
     return new Response("Forbidden", { status: 403 });
   }
-  if (!canAccessChannel(user, channel)) {
+  if (!canAccessChannel({ ...user, ledUnits: user.unitLeads.map((l) => l.unit) }, channel)) {
     return new Response("Forbidden", { status: 403 });
   }
 

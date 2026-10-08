@@ -27,9 +27,11 @@ export default async function AttendanceDashboardPage({ searchParams }: PageProp
 
   const { unit } = await searchParams;
   const fromQuery = unit && visibles.includes(unit as Unit) ? (unit as Unit) : null;
+  // Par défaut : la première unité encadrée (#128), sinon l'unité d'appartenance.
+  const fromLed = visibles.find((u) => user.ledUnits.includes(u)) ?? null;
   const fromUser =
     user.unit && visibles.includes(user.unit as Unit) ? (user.unit as Unit) : null;
-  const selectedUnit: Unit = fromQuery ?? fromUser ?? visibles[0];
+  const selectedUnit: Unit = fromQuery ?? fromLed ?? fromUser ?? visibles[0];
 
   const dashboard = await getUnitAttendanceDashboard(selectedUnit);
 

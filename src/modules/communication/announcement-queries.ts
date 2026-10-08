@@ -8,6 +8,8 @@ interface ViewerUser {
   role: string;
   roles?: string[] | string | null;
   unit?: string | null;
+  // #128 — unités encadrées : un CHEF est aussi de leur audience.
+  ledUnits?: readonly string[];
   status?: string;
 }
 
@@ -31,13 +33,24 @@ export async function loadAudienceContext(): Promise<{
   users: AudienceUser[];
   links: FamilyEdge[];
 }> {
-  const [users, links] = await Promise.all([
+  const [rows, links] = await Promise.all([
     db.user.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, role: true, roles: true, unit: true, canLogin: true },
+      select: {
+        id: true,
+        role: true,
+        roles: true,
+        unit: true,
+        canLogin: true,
+        unitLeads: { select: { unit: true } },
+      },
     }),
     db.familyLink.findMany({ select: { parentId: true, childId: true } }),
   ]);
+  const users = rows.map(({ unitLeads, ...u }) => ({
+    ...u,
+    ledUnits: unitLeads.map((l) => l.unit),
+  }));
   return { users, links };
 }
 
@@ -55,7 +68,13 @@ export async function viewerAudienceFilter(
     },
   });
   const users: AudienceUser[] = [
-    { id: user.id, role: user.role, roles: user.roles ?? null, unit: user.unit ?? null },
+    {
+      id: user.id,
+      role: user.role,
+      roles: user.roles ?? null,
+      unit: user.unit ?? null,
+      ledUnits: user.ledUnits,
+    },
     ...links.map((l) => l.child),
   ];
   return (audience) => audienceUserIds(users, links, audience).includes(user.id);

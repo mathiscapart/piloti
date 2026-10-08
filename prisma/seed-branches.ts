@@ -246,6 +246,8 @@ async function main() {
         emailVerified: true,
         unit: CHEF_RENFORT.unit,
         birthDate: CHEF_RENFORT.birthDate,
+        // #128 — un CHEF n'a de périmètre que par ses unités encadrées.
+        unitLeads: { create: { unit: CHEF_RENFORT.unit } },
       },
     });
     console.log(`  chef de renfort créé : ${CHEF_RENFORT.email}`);

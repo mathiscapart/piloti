@@ -25,6 +25,8 @@ export interface ManageableUserFilters {
   // Rôle recherché parmi User.roles (rôle principal comme casquette).
   role?: string;
   unit?: string;
+  // #128 — unité ENCADRÉE (table `UnitLead`), distincte de l'appartenance.
+  ledUnit?: string;
   // "ACTIVE" | "SUSPENDED" | "REJECTED" ; absent = ACTIVE + SUSPENDED.
   status?: string;
   sort?: string;
@@ -107,6 +109,7 @@ export function buildManageableUserWhere(
     where.roles = { contains: `"${filters.role}"` };
   }
   if (isUnit(filters.unit)) where.unit = filters.unit;
+  if (isUnit(filters.ledUnit)) where.unitLeads = { some: { unit: filters.ledUnit } };
   return where;
 }
 

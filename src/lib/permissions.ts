@@ -53,6 +53,7 @@ export const ACTIONS = [
   "user.approve", // valider/refuser les inscriptions (+ attribuer les rôles)
   "user.manage", // gérer les comptes existants : rôles (page /admin/utilisateurs)
   "user.password.set", // définir le mot de passe d'un compte (ADMIN seul, #173)
+  "user.email.set", // modifier une adresse email déjà attribuée (ADMIN seul)
   "user.delete", // supprimer (anonymiser) un compte (ADMIN seul, #173)
   "member.view",
   "member.family.manage", // rattachement parent ↔ jeune (CHEF, RG, SEC)
@@ -114,8 +115,12 @@ interface AuthCtx {
   role: Role | string;
   // Rôles additionnels : tableau, ou chaîne JSON (telle que stockée en base).
   roles?: string[] | string | null;
-  // Branche/unité — nécessaire pour les permissions conditionnées (ex. JEUNE).
+  // Branche/unité d'APPARTENANCE — nécessaire pour les permissions
+  // conditionnées (ex. JEUNE). N'ouvre aucun périmètre d'encadrement (#128).
   unit?: string | null;
+  // #128 — unités ENCADRÉES (table `UnitLead`) : seul périmètre d'un CHEF.
+  // Absent = aucune unité (fail-closed), comme une liste vide.
+  ledUnits?: readonly string[];
   // Optionnel : `effectiveRoles`/`hasRole` n'en ont pas besoin ; `can()` exige
   // ACTIVE (un status absent → non autorisé).
   status?: AccountStatus | string;
@@ -167,6 +172,11 @@ const PERMISSIONS: Record<Action, Role[]> = {
   // #173 — se connecter à la place de quelqu'un ou effacer un compte sont
   // réservés à l'ADMIN, secrétaire et RG compris (décision du 2026-09-24).
   "user.password.set": [],
+  // Changer l'email d'un compte qui se connecte donne l'accès au compte :
+  // « mot de passe oublié » envoie le lien à la nouvelle adresse. Même règle
+  // que user.password.set, sinon celle-ci se contourne. Les comptes sans
+  // connexion suivent canChangeAccountEmail.
+  "user.email.set": [],
   "user.delete": [],
   "member.view": [CHEF, RG, SEC, TRES],
   // Rattachement familial parent ↔ jeune. Permission DÉDIÉE, volontairement
@@ -301,7 +311,9 @@ export function hasRole(user: AuthCtx, role: Role): boolean {
  * désormais un cas d'usage.
  *
  * - ADMIN (superutilisateur) et RESPONSABLE_GROUPE (vue groupe) ne sont pas bornés.
- * - Fail-closed : un CHEF sans `unit` renseignée n'encadre aucune branche, et
+ * - Un CHEF est borné à ses unités encadrées (`ledUnits`, #128) ; les autres
+ *   rôles, à leur unité d'appartenance.
+ * - Fail-closed : un CHEF sans `UnitLead` (#128) n'encadre aucune branche, et
  *   une ressource sans unité (`targetUnit === null`) n'appartient à personne.
  *   Le cas inverse — une ressource « de groupe » ouverte à tout l'encadrement,
  *   ex. un événement sans unité — se traite AU SITE D'APPEL (`unit === null ||
@@ -313,14 +325,33 @@ export function hasRole(user: AuthCtx, role: Role): boolean {
 export function inUnitScope(user: AuthCtx, targetUnit: string | null): boolean {
   const roles = effectiveRoles(user);
   if (roles.includes("ADMIN") || roles.includes("RESPONSABLE_GROUPE")) return true;
+  if (roles.includes(CHEF)) return leadsUnit(user, targetUnit);
+  // Rôles transverses (secrétaire, trésorier… : bilan des présences via
+  // `member.view`) : périmètre d'avant #128, leur unité d'appartenance.
+  // TODO(ROLES-06) : asymétrie assumée (CHEF par `ledUnits`, autres rôles par
+  // `User.unit`). La matrice de rôles la supprimera avec une seule fonction de
+  // périmètre portée par l'attribution du rôle, en remplacement de `UnitLead`
+  // et de la borne par `User.unit`.
   return targetUnit !== null && user.unit === targetUnit;
+}
+
+// #128 — le compte encadre-t-il cette unité ? `unit` (appartenance) n'entre
+// pas en jeu : un compagnon chef chez les Louveteaux n'encadre pas les Compagnons.
+function leadsUnit(user: AuthCtx, targetUnit: string | null): boolean {
+  return targetUnit !== null && (user.ledUnits ?? []).includes(targetUnit);
+}
+
+// #128 — unités encadrées qui comptent pour la VISIBILITÉ (salons, annonces) :
+// celles d'un CHEF, comme pour le périmètre. Un `UnitLead` sans CHEF n'ouvre rien.
+export function ledUnitsOf(user: Partial<AuthCtx>): readonly string[] {
+  return effectiveRoles(user).includes(CHEF) ? (user.ledUnits ?? []) : [];
 }
 
 // Rôles rattachés à une branche. Tous les autres — trésorier, secrétaire,
 // responsable matériel, responsable de groupe, admin — exercent une fonction
 // TRANSVERSE au groupe : les borner à une unité n'aurait pas de sens (le
 // trésorier encaisse pour tout le monde), et les casserait puisqu'ils n'ont
-// généralement pas de `unit` renseignée.
+// généralement pas d'unité encadrée.
 const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
 
 /**
@@ -334,9 +365,9 @@ const UNIT_BOUND_ROLES = new Set<string>([CHEF]);
  * trésorier gère tout, sans quoi il ne pourrait plus rien encaisser. On ne
  * borne donc que si le droit ne vient QUE de rôles bornés.
  *
- * Dans ce cas, la borne est la branche du compte, sans l'exemption de groupe
+ * Dans ce cas, la borne est ses unités encadrées (#128), sans l'exemption de groupe
  * d'`inUnitScope` : un RG aussi CHEF n'a le pédagogique, réservé aux chefs
- * (#173), que sur sa propre branche. Ses droits de RG restent sans borne.
+ * (#173), que sur les branches qu'il encadre. Ses droits de RG restent sans borne.
  */
 export function canActOnUnit(
   user: AuthCtx,
@@ -353,7 +384,7 @@ export function canActOnUnit(
     (r) => !UNIT_BOUND_ROLES.has(r) && (allowed as string[]).includes(r),
   );
   if (viaRoleTransverse) return true;
-  return targetUnit !== null && user.unit === targetUnit;
+  return leadsUnit(user, targetUnit);
 }
 
 /**
@@ -368,6 +399,43 @@ export function canActOnUnit(
  */
 export function canReadPedagoNotes(user: AuthCtx, jeuneUnit: string | null): boolean {
   return canActOnUnit(user, "pedago.manage", jeuneUnit);
+}
+
+// Adresse provisoire d'un compte enfant, qui n'a pas d'email réel
+// (createChildAccount). Domaine réservé (RFC 2606) : jamais délivrable.
+export const PLACEHOLDER_EMAIL_SUFFIX = "@piloti.invalid";
+
+/**
+ * Modifier l'email d'un compte. Sur un compte qui a une adresse réelle, c'est
+ * pouvoir s'y connecter à sa place (« mot de passe oublié ») : ADMIN seul
+ * (`user.email.set`). Un compte enfant sans connexion peut recevoir sa
+ * PREMIÈRE adresse de qui gère les comptes (`user.manage`) ; l'appelant
+ * prévient alors les parents rattachés. Exiger l'adresse provisoire, et pas
+ * seulement canLogin=false : retirer ses rôles à un adulte puis lui donner une
+ * date de moins de 15 ans le passe en canLogin=false sans changer son adresse.
+ * Un compte supprimé (anonymisé) est exclu : il a lui aussi une adresse
+ * provisoire, et y remettre une adresse réelle réintroduirait de la PII.
+ */
+export function canChangeAccountEmail(
+  user: AuthCtx,
+  target: { canLogin: boolean; email: string; status: string },
+): boolean {
+  if (can(user, "user.email.set")) return true;
+  return (
+    target.canLogin === false &&
+    target.status !== "DELETED" &&
+    target.email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
+    can(user, "user.manage")
+  );
+}
+
+/**
+ * Hors ADMIN, une nouvelle adresse ne peut pas être provisoire : poser à la
+ * main `deleted+<id>@piloti.invalid` d'un autre compte bloquerait son
+ * anonymisation (contrainte d'unicité). Seul le code génère ces adresses.
+ */
+export function canSetEmailTo(user: AuthCtx, newEmail: string): boolean {
+  return can(user, "user.email.set") || !newEmail.endsWith(PLACEHOLDER_EMAIL_SUFFIX);
 }
 
 /**

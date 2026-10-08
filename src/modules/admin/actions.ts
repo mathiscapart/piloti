@@ -12,13 +12,22 @@ import { auth } from "@/lib/auth";
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
-import { assignableRolesForBirthDate, birthDateSchema, canCreateChildAccount, canEnableLogin } from "@/lib/legal/age";
+import { birthDateSchema, canCreateChildAccount, canEnableLogin } from "@/lib/legal/age";
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
-import { can, canAssignRole, type Action } from "@/lib/permissions";
+import {
+  can,
+  canAssignRole,
+  canChangeAccountEmail,
+  canSetEmailTo,
+  PLACEHOLDER_EMAIL_SUFFIX,
+  type Action,
+} from "@/lib/permissions";
 import { notify } from "@/modules/notifications/notify";
-import { ROLE_LABEL, ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
+import { ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
+
+import { leadUnitsForRoles } from "./unit-lead";
 
 import type { ActionResult } from "@/lib/types";
 
@@ -50,6 +59,13 @@ const unitSchema = z.object({
   unit: z
     .union([z.enum(UNITS), z.literal("")])
     .transform((v) => (v === "" ? null : v)),
+});
+
+// #128 — unités ENCADRÉES d'un compte (périmètre d'un CHEF). Liste vide =
+// n'encadre plus rien.
+const leadUnitsSchema = z.object({
+  userId: z.string().min(1),
+  units: z.array(z.enum(UNITS)).default([]),
 });
 
 // SAFE-01 — correction d'une date de naissance. C'est le SEUL chemin de
@@ -175,6 +191,24 @@ async function assertCanManageTarget(
   return null;
 }
 
+// #128 — SEUL point d'écriture de la table UnitLead, anonymisation mise à part
+// (verrouillé par src/lib/unit-lead-writes.test.ts). Aligne les unités
+// encadrées du compte sur `units`.
+async function writeLeadUnits(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  units: readonly string[],
+): Promise<void> {
+  await tx.unitLead.deleteMany({ where: { userId } });
+  if (units.length > 0) {
+    await tx.unitLead.createMany({ data: units.map((unit) => ({ userId, unit })) });
+  }
+}
+
+// #128 — sentinelle : annule la transaction de setUserLeadUnits sans audit
+// quand le compte n'est plus CHEF au moment d'écrire.
+class NotChefError extends Error {}
+
 // ----------------------------------------------------------------------------
 // /admin/inscriptions
 // ----------------------------------------------------------------------------
@@ -202,7 +236,7 @@ export async function approveUser(
   if (guard) return guard;
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { status: true, birthDate: true },
+    select: { status: true },
   });
   if (target?.status !== "PENDING") {
     return { error: "Cette inscription n'est plus en attente de validation." };
@@ -212,20 +246,9 @@ export async function approveUser(
   const escalation = assertAssignable(actor, roles);
   if (escalation) return escalation;
 
-  // #122 — un mineur ne peut recevoir que le rôle Jeune, jamais un rôle
-  // d'encadrement, quand bien même l'acteur aurait le droit de l'attribuer.
-  const assignable = assignableRolesForBirthDate(target.birthDate);
-  if (roles.some((r) => !assignable.includes(r))) {
-    return {
-      error: target.birthDate
-        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
-        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
-    };
-  }
-
   await withAudit(
-    (tx) =>
-      tx.user.update({
+    async (tx) => {
+      await tx.user.update({
         where: { id: parsed.data.userId },
         data: {
           status: "ACTIVE",
@@ -235,15 +258,22 @@ export async function approveUser(
           emailVerified: true,
           rejectedReason: null,
         },
-      }),
-    {
+      });
+      // #128 — l'approbation définit le compte : un CHEF encadre l'unité
+      // choisie ici, quelle que soit celle qu'il portait en attente.
+      const leadUnits = leadUnitsForRoles(roles, parsed.data.unit, []);
+      await writeLeadUnits(tx, parsed.data.userId, leadUnits);
+      return leadUnits;
+    },
+    (leadUnits) => ({
       action: "USER_APPROVED",
       userId: actor.id,
       metadata: {
         targetUserId: parsed.data.userId,
         assignedRoles: roles,
+        leadUnits,
       },
-    },
+    }),
   );
 
   // L'écran de fin d'inscription promet un message à la validation.
@@ -368,7 +398,7 @@ export async function setUserRoles(
   // ADMIN/RG). On vérifie l'état actuel de la cible.
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { roles: true, birthDate: true },
+    select: { roles: true },
   });
   if (!can(actor, "admin.access")) {
     let current: string[] = [];
@@ -386,33 +416,35 @@ export async function setUserRoles(
     }
   }
 
-  // #122 — un mineur ne peut recevoir que le rôle Jeune.
-  const assignable = assignableRolesForBirthDate(target?.birthDate);
-  if (roles.some((r) => !assignable.includes(r))) {
-    return {
-      error: target?.birthDate
-        ? "Cette personne est mineure : seul le rôle Jeune peut lui être attribué."
-        : "Date de naissance manquante : renseigne-la avant d'attribuer un rôle autre que Jeune.",
-    };
-  }
-
   await withAudit(
-    (tx) =>
-      tx.user.update({
+    async (tx) => {
+      const updated = await tx.user.update({
         where: { id: parsed.data.userId },
         data: {
           roles: JSON.stringify(roles),
           role: roles[0] ?? "SCOUT", // miroir d'affichage (déprécié)
         },
-      }),
-    {
+        select: { unit: true, status: true, unitLeads: { select: { unit: true } } },
+      });
+      // #128 — CHEF attribué : il encadre son unité s'il n'encadrait rien ;
+      // CHEF retiré : il n'encadre plus rien. Un compte anonymisé (DELETED)
+      // n'encadre jamais rien, comme après `deleteUser`.
+      const leadUnits =
+        updated.status === "DELETED"
+          ? []
+          : leadUnitsForRoles(roles, updated.unit, updated.unitLeads.map((l) => l.unit));
+      await writeLeadUnits(tx, parsed.data.userId, leadUnits);
+      return leadUnits;
+    },
+    (leadUnits) => ({
       action: "USER_ROLE_CHANGED",
       userId: actor.id,
       metadata: {
         targetUserId: parsed.data.userId,
         roles,
+        leadUnits,
       },
-    },
+    }),
   );
 
   revalidatePath("/admin/utilisateurs");
@@ -421,6 +453,8 @@ export async function setUserRoles(
 
 // US-32 — change la branche/unité d'un membre. ADMIN + SECRÉTAIRE ; la
 // SECRÉTAIRE ne peut pas toucher un compte ADMIN/RG. Tracé en audit.
+// #128 — ne change que l'APPARTENANCE, jamais les unités encadrées
+// (cf. setUserLeadUnits).
 export async function setUserUnit(
   _prev: ActionResult,
   formData: FormData,
@@ -455,6 +489,63 @@ export async function setUserUnit(
   return { error: null };
 }
 
+// #128 — définit les unités ENCADRÉES d'un compte, son périmètre de chef,
+// indépendamment de son unité d'appartenance (un compagnon peut encadrer les
+// Louveteaux). Mêmes gardes que les rôles. Réservé aux comptes CHEF : pour un
+// autre rôle, une unité encadrée n'ouvrirait rien et romprait la cohérence
+// CHEF ↔ UnitLead que maintiennent approveUser et setUserRoles.
+export async function setUserLeadUnits(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const actor = await ensureCan("user.manage");
+  if ("error" in actor) return actor;
+
+  const parsed = leadUnitsSchema.safeParse({
+    userId: formData.get("userId"),
+    units: formData.getAll("units"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
+  }
+  const guard = await assertCanManageTarget(actor, parsed.data.userId);
+  if (guard) return guard;
+
+  const units = [...new Set(parsed.data.units)];
+  try {
+    await withAudit(
+      async (tx) => {
+        // Rôle relu DANS la transaction : un setUserRoles concurrent qui
+        // retire CHEF ne doit pas laisser d'unité encadrée à un non-chef.
+        const target = await tx.user.findUnique({
+          where: { id: parsed.data.userId },
+          select: { roles: true, status: true, unitLeads: { select: { unit: true } } },
+        });
+        const isChef =
+          target?.status !== "DELETED" && parseRoles(target?.roles).includes("CHEF");
+        if (units.length > 0 && !isChef) throw new NotChefError();
+        await writeLeadUnits(tx, parsed.data.userId, units);
+        // Avant ET après dans l'audit : sans l'ancienne liste, la trace ne
+        // dirait pas quelle unité a été retirée.
+        return (target?.unitLeads ?? []).map((l) => l.unit);
+      },
+      (previousUnits) => ({
+        action: "USER_LEAD_UNITS_CHANGED",
+        userId: actor.id,
+        metadata: { targetUserId: parsed.data.userId, previousUnits, units },
+      }),
+    );
+  } catch (err) {
+    if (err instanceof NotChefError) {
+      return { error: "Seul un compte Chef peut encadrer une unité." };
+    }
+    throw err;
+  }
+
+  revalidatePath("/admin/utilisateurs");
+  return { error: null };
+}
+
 // SAFE-01 — corrige la date de naissance d'un compte. La date pilote la
 // protection des mineurs (`dm-policy.ts`) : elle n'est plus modifiable par son
 // titulaire, donc une faute de frappe à l'inscription exige une intervention
@@ -483,23 +574,9 @@ export async function setUserBirthDate(
 
   const target = await db.user.findUnique({
     where: { id: parsed.data.userId },
-    select: { birthDate: true, canLogin: true, roles: true },
+    select: { birthDate: true, canLogin: true },
   });
   if (!target) return { error: "Compte introuvable." };
-
-  // #122 — une date qui rend la personne mineure ne doit jamais être posée
-  // tant qu'elle porte encore un rôle d'encadrement : sinon un mineur se
-  // retrouve avec un rôle que plus aucun formulaire ne peut lui retirer
-  // (assignableRolesForBirthDate le masquerait avant même de l'afficher).
-  const currentRoles = parseRoles(target.roles);
-  const newAssignable: string[] = assignableRolesForBirthDate(parsed.data.birthDate);
-  const toRemove = currentRoles.filter((r) => !newAssignable.includes(r));
-  if (toRemove.length > 0) {
-    const labels = toRemove.map((r) => ROLE_LABEL[r as keyof typeof ROLE_LABEL] ?? r);
-    return {
-      error: `Cette date rend la personne mineure : retire d'abord ses rôles autres que Jeune (${labels.join(", ")}).`,
-    };
-  }
 
   const loginDisabled = target.canLogin !== false && !canEnableLogin(parsed.data.birthDate);
 
@@ -811,8 +888,6 @@ export async function changeUserPassword(
   return { error: null };
 }
 
-const PLACEHOLDER_EMAIL_SUFFIX = "@piloti.invalid";
-
 // US-CM-01 (évolution) / #122 — édition complète d'un compte par
 // l'admin/secrétaire. Cas d'usage clé : un compte enfant (canLogin: false)
 // grandit → on lui renseigne une vraie adresse email ici, ce qui bascule
@@ -865,8 +940,31 @@ export async function updateUserAccount(
   // relu ici avant le verrou, donc sujet à TOCTOU sur canLogin/birthDate.
   const targetBeforeUpdate = await db.user.findUnique({
     where: { id: userId },
-    select: { canLogin: true, birthDate: true, email: true },
+    select: { canLogin: true, birthDate: true, email: true, status: true },
   });
+  // Changer l'email d'un compte qui se connecte, c'est pouvoir s'y connecter
+  // via « mot de passe oublié » : ADMIN seul (canChangeAccountEmail). Ce refus
+  // ne sert qu'au message ; la garantie est dans la transaction, qui n'écrit
+  // l'email que si la règle l'autorise.
+  if (
+    targetBeforeUpdate &&
+    targetBeforeUpdate.email.toLowerCase() !== email &&
+    !canChangeAccountEmail(actor, targetBeforeUpdate)
+  ) {
+    return {
+      // Deux causes possibles : email modifié dans le formulaire, ou page
+      // ouverte avant un changement d'email fait entre-temps par l'ADMIN.
+      error:
+        "Seul l'administrateur peut modifier une adresse email déjà attribuée. Si elle vient de changer, rechargez la page.",
+    };
+  }
+  if (
+    targetBeforeUpdate &&
+    targetBeforeUpdate.email.toLowerCase() !== email &&
+    !canSetEmailTo(actor, email)
+  ) {
+    return { error: "Cette adresse email est réservée à l'usage interne de Piloti." };
+  }
   if (
     targetBeforeUpdate?.canLogin === false &&
     // #149 — sans tenir compte de la casse : un email stocké avant la mise en
@@ -882,15 +980,24 @@ export async function updateUserAccount(
   }
 
   try {
-    await withAudit(
+    const result = await withAudit(
       async (tx) => {
         const target = await tx.user.findUnique({
           where: { id: userId },
-          select: { canLogin: true, email: true, birthDate: true },
+          select: { canLogin: true, email: true, birthDate: true, status: true },
         });
         if (!target) throw new Error("Utilisateur introuvable.");
 
-        const emailChanged = target.email !== email;
+        // Sans le droit, on garde l'email relu ici plutôt que celui du
+        // formulaire : un enregistrement concurrent n'écrase pas un changement
+        // fait entre-temps par l'ADMIN.
+        const nextEmail =
+          canChangeAccountEmail(actor, target) && canSetEmailTo(actor, email)
+            ? email
+            : target.email;
+        // #149 — sans tenir compte de la casse : un email stocké avant la mise en
+        // minuscules ne doit pas déclencher audit et alerte sans vrai changement.
+        const emailChanged = target.email.toLowerCase() !== nextEmail.toLowerCase();
         // US-CM-01 — un compte enfant devient connectable dès qu'on lui
         // renseigne une vraie adresse (qui ne correspond plus au pattern
         // placeholder), sans case à cocher séparée — mais seulement si l'âge
@@ -900,7 +1007,7 @@ export async function updateUserAccount(
         // connexion d'un compte rajeuni entre-temps (TOCTOU).
         const canLoginEnabled =
           target.canLogin === false &&
-          !email.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
+          !nextEmail.endsWith(PLACEHOLDER_EMAIL_SUFFIX) &&
           canEnableLogin(target.birthDate);
 
         return {
@@ -910,25 +1017,62 @@ export async function updateUserAccount(
               firstName,
               lastName,
               name: `${firstName} ${lastName}`,
-              email,
+              email: nextEmail,
               phone,
               ...(emailChanged ? { emailVerified: false } : {}),
               ...(canLoginEnabled ? { canLogin: true } : {}),
             },
           }),
           canLoginEnabled,
+          emailChanged,
+          previousEmail: target.email,
+          nextEmail,
+          wasChildAccount: target.canLogin === false,
         };
       },
-      ({ canLoginEnabled }) => ({
+      ({ canLoginEnabled, emailChanged, previousEmail, nextEmail }) => ({
         action: "USER_ACCOUNT_UPDATED",
         userId: actor.id,
         metadata: {
           targetUserId: userId,
           fields: ["firstName", "lastName", "email", "phone"],
           canLoginEnabled,
+          // Trace qui a mis quelle adresse : seule preuve d'un détournement.
+          // Effacées à l'anonymisation (audit-redaction.ts, liste blanche).
+          ...(emailChanged ? { previousEmail, newEmail: nextEmail } : {}),
         },
       }),
     );
+    // Compte enfant qui reçoit une adresse réelle : les parents rattachés sont
+    // prévenus, seule parade si quelqu'un y met la sienne pour s'y connecter.
+    if (
+      result.emailChanged &&
+      result.wasChildAccount &&
+      !result.nextEmail.endsWith(PLACEHOLDER_EMAIL_SUFFIX)
+    ) {
+      const parents = await db.familyLink.findMany({
+        where: { childId: userId },
+        select: { parentId: true },
+      });
+      const newEmail = result.nextEmail;
+      after(() =>
+        Promise.all(
+          parents.map(({ parentId }) =>
+            notify({
+              userId: parentId,
+              type: "SECURITY_ALERT",
+              title: `Adresse de connexion ajoutée au compte de ${firstName}`,
+              body:
+                `L'adresse ${newEmail} a été attribuée au compte de ${firstName} ${lastName} ` +
+                "dans Piloti. Ce compte peut désormais se connecter avec cette adresse. " +
+                "Si ce n'était pas prévu, prévenez un administrateur du groupe.",
+              link: "/compte",
+              force: true,
+            }),
+          ),
+        ),
+      );
+    }
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { error: "Cette adresse email est déjà utilisée." };

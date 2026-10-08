@@ -13,8 +13,8 @@ import {
 
 // Fixations logiques — événement ↔ communication.
 // À la création / modification / annulation d'un événement, on :
-//   1) notifie l'audience de l'unité (jeunes + parents + membres) — UNE notif
-//      claire, selon les préférences ;
+//   1) notifie l'audience de l'unité (jeunes + parents + membres) et les chefs
+//      qui l'encadrent (#128) — UNE notif claire, selon les préférences ;
 //   2) poste un message d'info dans le salon de l'unité, SANS re-notifier le
 //      salon (évite le double-ping).
 
@@ -49,7 +49,9 @@ export async function notifyEventAudience(
   const detail = `${range}${event.location ? ` · ${event.location}` : ""}`;
 
   // 1) Notification dédiée (cloche + email + push selon préférences).
-  const recipients = audience.allIds.filter((id) => id !== actorId);
+  const recipients = [...new Set([...audience.allIds, ...audience.leaderIds])].filter(
+    (id) => id !== actorId,
+  );
   if (recipients.length > 0) {
     await notifyMany(recipients, (userId) => ({
       userId,

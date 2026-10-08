@@ -13,12 +13,15 @@ import {
   canAccessAdminZone,
   canActOnUnit,
   canAssignRole,
+  canChangeAccountEmail,
+  canSetEmailTo,
   canManagePlace,
   canReadPedagoNotes,
   canReviewExpense,
   effectiveRoles,
   hasRole,
   inUnitScope,
+  ledUnitsOf,
   scopedUnits,
 } from "./permissions";
 
@@ -279,6 +282,7 @@ describe("inUnitScope — périmètre d'unité", () => {
     role: "CHEF",
     roles: ["CHEF"],
     unit: "LOUVETEAUX",
+    ledUnits: ["LOUVETEAUX"],
     status: "ACTIVE" as const,
   };
 
@@ -328,7 +332,7 @@ describe("scopedUnits", () => {
   it("ne renvoie que sa branche pour un CHEF", () => {
     expect(
       scopedUnits(
-        { role: "CHEF", roles: ["CHEF"], unit: "SCOUTS", status: "ACTIVE" },
+        { role: "CHEF", roles: ["CHEF"], unit: "SCOUTS", ledUnits: ["SCOUTS"], status: "ACTIVE" },
         catalog,
       ),
     ).toEqual(["SCOUTS"]);
@@ -352,6 +356,7 @@ describe("canActOnUnit — périmètre conscient du rôle qui porte le droit", (
     role: "CHEF",
     roles: ["CHEF"],
     unit: "SCOUTS",
+    ledUnits: ["SCOUTS"],
     status: "ACTIVE" as const,
   };
 
@@ -453,7 +458,7 @@ describe("can — member.family.manage", () => {
 
 describe("canActOnUnit — rattachement familial borné à la branche du jeune (#83)", () => {
   const chef = (unit: string | null) =>
-    ({ role: "CHEF", roles: ["CHEF"], unit, status: "ACTIVE" as const });
+    ({ role: "CHEF", roles: ["CHEF"], unit, ledUnits: unit ? [unit] : [], status: "ACTIVE" as const });
   const active = (roles: string[]) =>
     ({ role: roles[0], roles, unit: null, status: "ACTIVE" as const });
 
@@ -486,7 +491,7 @@ describe("canActOnUnit — rattachement familial borné à la branche du jeune (
 
 describe("canReadPedagoNotes — notes de suivi sensibles (US-S07, #98)", () => {
   const user = (roles: string[], unit: string | null = null, status = "ACTIVE" as const) =>
-    ({ role: roles[0], roles, unit, status });
+    ({ role: roles[0], roles, unit, ledUnits: unit ? [unit] : [], status });
 
   it("autorise un chef de la branche du jeune", () => {
     expect(canReadPedagoNotes(user(["CHEF"], "PIONNIERS"), "PIONNIERS")).toBe(true);
@@ -561,6 +566,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     role: "RESPONSABLE_GROUPE",
     roles: ["RESPONSABLE_GROUPE", ...extra],
     unit,
+    ledUnits: unit ? [unit] : [],
     status,
   });
 
@@ -569,6 +575,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     "pedago.manage",
     "pedago.referential",
     "user.password.set",
+    "user.email.set",
     "user.delete",
     "message.edit_any",
   ];
@@ -727,8 +734,14 @@ describe("can — channel.moderate", () => {
 
 // #173 — définir le mot de passe d'un compte et supprimer un compte : ADMIN seul
 // (décision du 2026-09-24). La SECRÉTAIRE et le RG gardent le reste de user.manage.
-describe("can — user.password.set / user.delete (ADMIN seul)", () => {
-  it.each([["user.password.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
+// Changer l'email d'un compte revient à pouvoir s'y connecter (« mot de passe
+// oublié » vers la nouvelle adresse) : même règle que user.password.set.
+describe("can — user.password.set / user.email.set / user.delete (ADMIN seul)", () => {
+  it("user.email.set est une action déclarée de la matrice", () => {
+    expect(ACTIONS).toContain("user.email.set");
+  });
+
+  it.each([["user.password.set"], ["user.email.set"], ["user.delete"]] as const)("%s : ADMIN seul", (action) => {
     expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, action)).toBe(true);
     for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE", "CHEF", "TRESORIER"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, action)).toBe(false);
@@ -753,5 +766,199 @@ describe("can — message.edit_any (ADMIN seul)", () => {
     for (const role of ["CHEF", "SECRETAIRE", "PARENT", "SCOUT"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "message.edit_any")).toBe(false);
     }
+  });
+});
+
+// Changer l'email d'un compte qui se connecte, c'est pouvoir s'y connecter à sa
+// place (« mot de passe oublié ») : ADMIN seul. Un compte sans connexion
+// (compte enfant) peut recevoir sa première adresse de qui gère les comptes.
+describe("canChangeAccountEmail", () => {
+  const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
+  const connectable = { canLogin: true, email: "adulte@example.fr", status: "ACTIVE" };
+  const childAccount = { canLogin: false, email: "enfant-abc@piloti.invalid", status: "ACTIVE" };
+
+  it("ADMIN : tout compte", () => {
+    expect(canChangeAccountEmail(u("ADMIN"), connectable)).toBe(true);
+    expect(canChangeAccountEmail(u("ADMIN"), childAccount)).toBe(true);
+  });
+
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : compte sans connexion seulement", (role) => {
+    expect(canChangeAccountEmail(u(role), childAccount)).toBe(true);
+    expect(canChangeAccountEmail(u(role), connectable)).toBe(false);
+  });
+
+  it.each(["CHEF", "TRESORIER", "PARENT"])("%s : jamais", (role) => {
+    expect(canChangeAccountEmail(u(role), childAccount)).toBe(false);
+    expect(canChangeAccountEmail(u(role), connectable)).toBe(false);
+  });
+
+  // Revue : retirer les rôles d'un adulte puis lui donner une date de moins de
+  // 15 ans le passe en canLogin=false sans toucher à son adresse réelle. Seule
+  // l'adresse provisoire d'un compte enfant peut être remplacée.
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])(
+    "%s : refusé sur un compte sans connexion qui a déjà une adresse réelle",
+    (role) => {
+      expect(
+        canChangeAccountEmail(u(role), { canLogin: false, email: "adulte@example.fr", status: "ACTIVE" }),
+      ).toBe(false);
+    },
+  );
+
+  // Revue : un compte anonymisé garde canLogin=false et une adresse provisoire.
+  // Lui en donner une réelle réintroduirait de la PII dans une fiche effacée.
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : refusé sur un compte supprimé", (role) => {
+    const deleted = { canLogin: false, email: "deleted+abc@piloti.invalid", status: "DELETED" };
+    expect(canChangeAccountEmail(u(role), deleted)).toBe(false);
+    expect(canChangeAccountEmail(u("ADMIN"), deleted)).toBe(true);
+  });
+
+  it("un compte suspendu ne change rien", () => {
+    const suspended = { id: "sec-1", role: "SECRETAIRE", roles: ["SECRETAIRE"], status: "SUSPENDED" };
+    expect(canChangeAccountEmail(suspended, childAccount)).toBe(false);
+  });
+});
+
+// Revue : poser à la main une adresse provisoire (ex. `deleted+<id>@piloti.invalid`
+// d'un autre compte) bloquerait l'anonymisation de ce compte (unicité). Aucun
+// usage légitime hors ADMIN.
+describe("canSetEmailTo", () => {
+  const u = (role: string) => ({ id: `${role}-1`, role, roles: [role], status: "ACTIVE" });
+
+  it.each(["RESPONSABLE_GROUPE", "SECRETAIRE"])("%s : adresse réelle oui, provisoire non", (role) => {
+    expect(canSetEmailTo(u(role), "jeune@example.fr")).toBe(true);
+    expect(canSetEmailTo(u(role), "deleted+abc@piloti.invalid")).toBe(false);
+    expect(canSetEmailTo(u(role), "enfant-xyz@piloti.invalid")).toBe(false);
+  });
+
+  it("ADMIN : toute adresse", () => {
+    expect(canSetEmailTo(u("ADMIN"), "enfant-xyz@piloti.invalid")).toBe(true);
+  });
+});
+
+// #128 — le périmètre d'un chef est la liste de ses unités encadrées
+// (`UnitLead`), chargée dans `ledUnits`. `unit` reste l'unité d'APPARTENANCE :
+// elle n'ouvre plus aucun périmètre à elle seule.
+describe("ledUnits — périmètre d'encadrement (#128)", () => {
+  const user = (roles: string[], unit: string | null, ledUnits?: string[]) => ({
+    role: roles[0],
+    roles,
+    unit,
+    ledUnits,
+    status: "ACTIVE" as const,
+  });
+  const catalog = ["FARFADETS", "LOUVETEAUX", "SCOUTS", "PIONNIERS", "COMPAGNONS"] as const;
+
+  it("chef d'une unité : agit sur elle seule", () => {
+    const chef = user(["CHEF"], "SCOUTS", ["SCOUTS"]);
+    expect(inUnitScope(chef, "SCOUTS")).toBe(true);
+    expect(inUnitScope(chef, "PIONNIERS")).toBe(false);
+    expect(canActOnUnit(chef, "event.manage", "SCOUTS")).toBe(true);
+    expect(canActOnUnit(chef, "event.manage", "PIONNIERS")).toBe(false);
+    expect(scopedUnits(chef, catalog)).toEqual(["SCOUTS"]);
+  });
+
+  it("chef de deux unités : agit sur les deux, pas au-delà", () => {
+    const chef = user(["CHEF"], "ADULTES", ["LOUVETEAUX", "SCOUTS"]);
+    expect(scopedUnits(chef, catalog)).toEqual(["LOUVETEAUX", "SCOUTS"]);
+    expect(canActOnUnit(chef, "pedago.manage", "LOUVETEAUX")).toBe(true);
+    expect(canActOnUnit(chef, "pedago.manage", "SCOUTS")).toBe(true);
+    expect(canActOnUnit(chef, "pedago.manage", "PIONNIERS")).toBe(false);
+    expect(canReadPedagoNotes(chef, "SCOUTS")).toBe(true);
+  });
+
+  it("compagnon CHEF encadrant les Louveteaux : agit sur les Louveteaux, pas sur les Compagnons", () => {
+    const compagnon = user(["CHEF"], "COMPAGNONS", ["LOUVETEAUX"]);
+    expect(inUnitScope(compagnon, "LOUVETEAUX")).toBe(true);
+    expect(inUnitScope(compagnon, "COMPAGNONS")).toBe(false);
+    expect(canActOnUnit(compagnon, "event.manage", "LOUVETEAUX")).toBe(true);
+    expect(canActOnUnit(compagnon, "event.manage", "COMPAGNONS")).toBe(false);
+    expect(canReadPedagoNotes(compagnon, "LOUVETEAUX")).toBe(true);
+    expect(canReadPedagoNotes(compagnon, "COMPAGNONS")).toBe(false);
+    expect(scopedUnits(compagnon, catalog)).toEqual(["LOUVETEAUX"]);
+  });
+
+  it("fail-closed : un CHEF sans UnitLead n'encadre aucune unité, même avec une `unit`", () => {
+    for (const chef of [user(["CHEF"], "SCOUTS", []), user(["CHEF"], "SCOUTS")]) {
+      expect(inUnitScope(chef, "SCOUTS")).toBe(false);
+      expect(canActOnUnit(chef, "event.manage", "SCOUTS")).toBe(false);
+      expect(canReadPedagoNotes(chef, "SCOUTS")).toBe(false);
+      expect(scopedUnits(chef, catalog)).toEqual([]);
+    }
+  });
+
+  it("fail-closed : une ressource sans unité n'est à aucun chef", () => {
+    expect(inUnitScope(user(["CHEF"], "SCOUTS", ["SCOUTS"]), null)).toBe(false);
+    expect(canActOnUnit(user(["CHEF"], "SCOUTS", ["SCOUTS"]), "event.manage", null)).toBe(false);
+  });
+
+  it("RG aussi CHEF : groupe entier pour ses droits de RG, pédagogique borné à ses UnitLead", () => {
+    const rgChef = user(["RESPONSABLE_GROUPE", "CHEF"], "ADULTES", ["LOUVETEAUX"]);
+    expect(scopedUnits(rgChef, catalog)).toEqual([...catalog]);
+    expect(canActOnUnit(rgChef, "event.manage", "PIONNIERS")).toBe(true);
+    expect(canActOnUnit(rgChef, "pedago.manage", "LOUVETEAUX")).toBe(true);
+    expect(canActOnUnit(rgChef, "pedago.manage", "PIONNIERS")).toBe(false);
+    expect(canReadPedagoNotes(rgChef, "PIONNIERS")).toBe(false);
+  });
+
+  it("rôle transverse avec une unité (secrétaire) : périmètre inchangé, son unité d'appartenance", () => {
+    // Bilan des présences (`member.view` + `scopedUnits`) : comportement
+    // d'avant #128, à trancher avec les présences (étape suivante).
+    const secretaire = user(["SECRETAIRE"], "ADULTES");
+    expect(scopedUnits(secretaire, [...catalog, "ADULTES"])).toEqual(["ADULTES"]);
+    expect(scopedUnits(user(["TRESORIER"], null), catalog)).toEqual([]);
+  });
+
+  it("CHEF aussi secrétaire, sans UnitLead : le rôle CHEF borne, aucune unité", () => {
+    const chefSec = user(["CHEF", "SECRETAIRE"], "SCOUTS", []);
+    expect(scopedUnits(chefSec, catalog)).toEqual([]);
+    expect(scopedUnits(user(["CHEF", "SECRETAIRE"], "SCOUTS", ["LOUVETEAUX"]), catalog)).toEqual(["LOUVETEAUX"]);
+  });
+
+  // #128 étape 3 — les sites qui passent déjà par `canActOnUnit` (pédagogie,
+  // référentiel, famille, annonces, événements et budget via `canActOnEvent`)
+  // suivent `ledUnits` sans modification : on le verrouille ici, action par action.
+  it.each([
+    ["pedago.manage", "progression-actions"],
+    ["pedago.referential", "referential-actions"],
+    ["member.family.manage", "family/actions"],
+    ["announcement.publish", "canPublishAnnouncementTo"],
+    ["event.manage", "event-scope"],
+    ["budget.manage", "event-scope (budget)"],
+  ] as const)("propagation : %s (%s) suit les unités encadrées", (action, site) => {
+    const lucas = user(["CHEF"], "COMPAGNONS", ["LOUVETEAUX"]);
+    expect(canActOnUnit(lucas, action, "LOUVETEAUX"), site).toBe(true);
+    expect(canActOnUnit(lucas, action, "COMPAGNONS"), site).toBe(false);
+    // Chef repris par la migration (UnitLead = unit) : mêmes droits qu'avant.
+    const chefRepris = user(["CHEF"], "PIONNIERS", ["PIONNIERS"]);
+    expect(canActOnUnit(chefRepris, action, "PIONNIERS"), site).toBe(true);
+    expect(canActOnUnit(chefRepris, action, "SCOUTS"), site).toBe(false);
+  });
+
+  it("ADMIN : non borné, sans aucun UnitLead", () => {
+    const admin = user(["ADMIN"], null, []);
+    expect(scopedUnits(admin, catalog)).toEqual([...catalog]);
+    expect(inUnitScope(admin, null)).toBe(true);
+    expect(canActOnUnit(admin, "pedago.manage", "COMPAGNONS")).toBe(true);
+    expect(canReadPedagoNotes(admin, "COMPAGNONS")).toBe(true);
+  });
+});
+
+describe("ledUnitsOf — unités encadrées qui comptent (#128)", () => {
+  // Visibilité (salons, annonces) : seules les unités encadrées d'un CHEF
+  // comptent, comme dans inUnitScope et dm-policy.
+  it("CHEF : ses unités encadrées", () => {
+    expect(ledUnitsOf({ role: "CHEF", roles: ["CHEF"], ledUnits: ["LOUVETEAUX"] })).toEqual([
+      "LOUVETEAUX",
+    ]);
+  });
+
+  it("sans rôle Chef : aucune, même avec des UnitLead", () => {
+    expect(
+      ledUnitsOf({ role: "SECRETAIRE", roles: ["SECRETAIRE"], ledUnits: ["LOUVETEAUX"] }),
+    ).toEqual([]);
+  });
+
+  it("CHEF sans ledUnits : aucune (fail-closed)", () => {
+    expect(ledUnitsOf({ role: "CHEF", roles: ["CHEF"], unit: "SCOUTS" })).toEqual([]);
   });
 });

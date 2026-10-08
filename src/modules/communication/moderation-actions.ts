@@ -126,18 +126,22 @@ export async function reportMessage(
 }
 
 // Notifie à la CRÉATION du signalement les modérateurs concernés : tous les
-// ADMIN et RG + les CHEF de l'unité de l'auteur du message visé (pas tous les
-// chefs), jamais l'auteur lui-même — cf. `selectReportRecipients`. Le
+// ADMIN et RG + les CHEF qui encadrent l'unité de l'auteur du message visé
+// (pas tous les chefs), jamais l'auteur lui-même — cf. `selectReportRecipients`. Le
 // signalant n'est notifié qu'à la clôture (cf. `closeReport`), pas ici.
 async function notifyModerators(
   concernedUnit: string | null,
   targetAuthorId: string,
   reason?: string,
 ): Promise<void> {
-  const candidates = await db.user.findMany({
+  const rows = await db.user.findMany({
     where: { status: "ACTIVE" },
-    select: { id: true, role: true, roles: true, unit: true },
+    select: { id: true, role: true, roles: true, unitLeads: { select: { unit: true } } },
   });
+  const candidates = rows.map(({ unitLeads, ...u }) => ({
+    ...u,
+    ledUnits: unitLeads.map((l) => l.unit),
+  }));
   const recipients = selectReportRecipients(candidates, concernedUnit, targetAuthorId);
   if (recipients.length === 0) return;
 

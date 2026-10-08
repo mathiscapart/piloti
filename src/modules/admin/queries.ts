@@ -74,6 +74,8 @@ export async function listManageableUsers(filters: ManageableUserFilters = {}) {
       rejectedAt: true,
       // US-CM-01 — compte enfant sans connexion propre.
       canLogin: true,
+      // #128 — unités encadrées, affichées à côté de l'appartenance.
+      unitLeads: { select: { unit: true } },
     },
   });
 }

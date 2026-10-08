@@ -48,7 +48,14 @@ export async function sendDirectMessage(
 
   const other = await db.user.findUnique({
     where: { id: otherId },
-    select: { status: true, role: true, roles: true, unit: true, birthDate: true },
+    select: {
+      status: true,
+      role: true,
+      roles: true,
+      unit: true,
+      birthDate: true,
+      unitLeads: { select: { unit: true } },
+    },
   });
   if (!other || other.status !== "ACTIVE") {
     return { error: "Destinataire introuvable." };
@@ -57,7 +64,7 @@ export async function sendDirectMessage(
   // SAFE-01 — protection des mineurs : moins de 15 ans jamais, 15-17 ans
   // réservés aux chefs de leur unité, sauf lien familial (toujours autorisé).
   const familyLinked = await isFamilyLinked(user.id, otherId);
-  const verdict = evaluateDmPolicy(toDmParticipant(user), toDmParticipant(other), familyLinked);
+  const verdict = evaluateDmPolicy(user, toDmParticipant(other), familyLinked);
   if (!verdict.allowed) {
     return { error: verdict.reason ?? "Messagerie privée indisponible." };
   }

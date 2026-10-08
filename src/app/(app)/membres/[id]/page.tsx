@@ -7,6 +7,7 @@ import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { UNIT_LABEL, UNITS } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, canActOnUnit, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,8 @@ export default async function MemberDetailPage({ params }: PageProps) {
   // l'email est un placeholder interne (@piloti.invalid), pas une vraie
   // adresse de contact.
   const noLoginAccount = isJeune && user.canLogin === false;
+  // #128 — unités encadrées (chef), distinctes de l'unité d'appartenance.
+  const ledUnits = UNITS.filter((u) => user.unitLeads.some((l) => l.unit === u));
   const hasProfile =
     !!user.profession || !!user.skills || !!user.availability || !!user.helpNotes;
 
@@ -167,6 +170,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
             </div>
             {user.unit ? (
               <p className="text-sm text-trail">{user.unit}</p>
+            ) : null}
+            {ledUnits.length > 0 ? (
+              <p className="text-sm text-trail">
+                Encadre : {ledUnits.map((u) => UNIT_LABEL[u]).join(", ")}
+              </p>
             ) : null}
           </div>
         </div>

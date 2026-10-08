@@ -23,6 +23,10 @@ interface UserAccountFormProps {
     canLogin: boolean;
     birthDate: string | null;
   };
+  // Remplacer une adresse réelle donne l'accès au compte (« mot de passe
+  // oublié ») : canChangeAccountEmail. Sinon le champ est affiché en lecture
+  // seule.
+  canEditEmail: boolean;
 }
 
 // US-CM-01 (évolution) — édition complète d'un compte par l'admin/secrétaire.
@@ -32,7 +36,7 @@ interface UserAccountFormProps {
 // Reste sur la page après l'enregistrement (point central de gestion du
 // compte, cf. section "Gestion du compte" plus bas) plutôt que de renvoyer
 // vers la liste.
-export function UserAccountForm({ user }: UserAccountFormProps) {
+export function UserAccountForm({ user, canEditEmail }: UserAccountFormProps) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState(
     updateUserAccount,
@@ -81,7 +85,7 @@ export function UserAccountForm({ user }: UserAccountFormProps) {
           Ce compte n&apos;a pas de connexion propre (compte enfant, cf.
           US-CM-01).{" "}
           {canEnableLogin(user.birthDate)
-            ? "Renseigner une vraie adresse email ici rendra ce compte connectable."
+            ? "Renseigner une vraie adresse email ici rendra ce compte connectable. Les parents rattachés en seront prévenus."
             : "Ce jeune a moins de 15 ans : son compte reste géré par un parent, il ne peut pas devenir connectable."}
         </p>
       ) : null}
@@ -94,7 +98,15 @@ export function UserAccountForm({ user }: UserAccountFormProps) {
           type="email"
           defaultValue={user.email}
           required
+          readOnly={!canEditEmail}
+          aria-describedby={canEditEmail ? undefined : "email-hint"}
         />
+        {canEditEmail ? null : (
+          <p id="email-hint" className="text-xs text-trail">
+            Seul l&apos;administrateur peut modifier une adresse email déjà
+            attribuée.
+          </p>
+        )}
       </div>
 
       <div className="space-y-1.5">

@@ -115,8 +115,54 @@ describe("audienceUserIds", () => {
   });
 });
 
+describe("audienceUserIds — unités encadrées (#128)", () => {
+  // Seed : Lucas, compagnon CHEF qui encadre les Louveteaux.
+  const lucas = { ...user("lucas", ["CHEF"], "COMPAGNONS"), ledUnits: ["LOUVETEAUX"] };
+  const louveteau = user("louveteau", ["SCOUT"], "LOUVETEAUX");
+  const robin = user("robin", ["SCOUT"], "COMPAGNONS");
+  const all = [lucas, louveteau, robin];
+
+  it("un chef reçoit les annonces des unités qu'il encadre", () => {
+    expect(audienceUserIds(all, [], "LOUVETEAUX").sort()).toEqual(["louveteau", "lucas"]);
+  });
+
+  it("il reste dans l'audience de son unité d'appartenance", () => {
+    expect(audienceUserIds(all, [], "COMPAGNONS").sort()).toEqual(["lucas", "robin"]);
+  });
+
+  it("une unité encadrée sans rôle Chef n'ajoute rien", () => {
+    const pasChef = { ...user("pas-chef", ["SECRETAIRE"], "ADULTES"), ledUnits: ["LOUVETEAUX"] };
+    expect(audienceUserIds([pasChef, louveteau], [], "LOUVETEAUX")).toEqual(["louveteau"]);
+  });
+
+  it("un chef encadrant n'amène pas ses parents dans l'audience", () => {
+    // Il n'est pas jeune de l'unité qu'il encadre : son parent n'est pas visé.
+    const ids = audienceUserIds(
+      [lucas, louveteau, mereElise],
+      [{ parentId: "mere-elise", childId: "lucas" }],
+      "LOUVETEAUX",
+    );
+    expect(ids.sort()).toEqual(["louveteau", "lucas"]);
+  });
+
+  it("un chef repris (UnitLead = unité) : même audience qu'avant", () => {
+    const repris = users.map((u) =>
+      effectiveChef(u) && u.unit ? { ...u, ledUnits: [u.unit] } : u,
+    );
+    for (const audience of ["PIONNIERS", "SCOUTS", "ALL", "PARENTS"]) {
+      expect(audienceUserIds(repris, links, audience).sort()).toEqual(
+        audienceUserIds(users, links, audience).sort(),
+      );
+    }
+  });
+});
+
+function effectiveChef(u: AudienceUser): boolean {
+  return Array.isArray(u.roles) && u.roles.includes("CHEF");
+}
+
 const account = (roles: string[], unit: string | null = null) =>
-  ({ role: roles[0], roles, unit, status: "ACTIVE" }) as const;
+  ({ role: roles[0], roles, unit, ledUnits: unit ? [unit] : [], status: "ACTIVE" }) as const;
 
 describe("canPublishAnnouncementTo", () => {
   const chefPio = account(["CHEF"], "PIONNIERS");

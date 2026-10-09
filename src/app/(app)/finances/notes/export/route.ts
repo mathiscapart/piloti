@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 
 import { csvCell } from "@/lib/csv";
 import { auth } from "@/lib/auth";
+import { formatWall } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import {
   EXPENSE_CATEGORY_LABEL,
@@ -15,12 +16,6 @@ import { listExpenses } from "@/modules/finance/queries";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  timeZone: "UTC",
-});
 const eur = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
 
 export async function GET(request: Request) {
@@ -50,7 +45,7 @@ export async function GET(request: Request) {
   for (const e of filtered) {
     lines.push(
       [
-        DATE_FMT.format(e.date),
+        formatWall(e.date, "dateNumeric"),
         csvCell(`${e.declarant.firstName} ${e.declarant.lastName}`),
         EXPENSE_CATEGORY_LABEL[e.category as ExpenseCategory] ?? e.category,
         eur(e.amountCents),

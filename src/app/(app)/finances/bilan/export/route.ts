@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 
 import { auth } from "@/lib/auth";
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { EXPENSE_CATEGORY_LABEL, type ExpenseCategory } from "@/lib/enums";
 import { can } from "@/lib/permissions";
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
   const year =
     yearRaw && /^\d{4}$/.test(yearRaw)
       ? Number(yearRaw)
-      : new Date().getUTCFullYear();
+      : wallNow().getUTCFullYear(); // année en cours à Paris
 
   const data = await getFinancialDashboard(year);
 

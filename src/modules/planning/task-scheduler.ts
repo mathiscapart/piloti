@@ -1,5 +1,6 @@
 import "server-only";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { notify, notifyMany } from "@/modules/notifications/notify";
 
@@ -11,7 +12,7 @@ const LEAD_HOURS = Number(process.env.TASK_REMINDER_LEAD_HOURS) || 48;
 // Régénère l'occurrence suivante des tâches récurrentes échues non encore
 // régénérées (« une fois à l'échéance, la suivante est générée »).
 export async function processRecurringTasks(): Promise<number> {
-  const now = new Date();
+  const now = wallNow(); // comparé à des heures murales
   const dueTasks = await db.task.findMany({
     where: {
       recurrence: { not: "NONE" },
@@ -54,7 +55,7 @@ export async function processRecurringTasks(): Promise<number> {
 //  - couverte        → rappel aux inscrits.
 // Une seule notification par occurrence (dédup via reminderSentAt).
 export async function sendTaskReminders(): Promise<number> {
-  const now = new Date();
+  const now = wallNow(); // comparé à des heures murales
   const windowEnd = new Date(now.getTime() + LEAD_HOURS * 3_600_000);
 
   const tasks = await db.task.findMany({

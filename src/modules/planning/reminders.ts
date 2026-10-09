@@ -1,5 +1,6 @@
 import "server-only";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { notify } from "@/modules/notifications/notify";
 
@@ -14,7 +15,7 @@ const LEAD_HOURS =
   Number(process.env.REGISTRATION_REMINDER_LEAD_HOURS) || 48;
 
 export async function sendRegistrationReminders(): Promise<number> {
-  const now = new Date();
+  const now = wallNow(); // comparé à des heures murales
   const windowEnd = new Date(now.getTime() + LEAD_HOURS * 3_600_000);
 
   // Événements ouverts dont la date limite tombe dans la fenêtre [maintenant ;

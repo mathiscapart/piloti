@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { todayInput } from "@/lib/datetime";
 import type { ActionResult } from "@/lib/types";
 import {
   createCashBox,
@@ -67,7 +68,7 @@ function TransferForm({ boxes }: { boxes: { id: string; name: string }[] }) {
   const [to, setTo] = useState(boxes[1]?.id ?? "");
   const [amount, setAmount] = useState("");
   const [label, setLabel] = useState("");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInput();
   const [date, setDate] = useState(today);
 
   function submit() {

@@ -2,10 +2,10 @@ import { ArrowLeft, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { formatEventRange } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { canActOnEvent } from "@/modules/planning/event-scope";
-import { formatEventRange } from "@/modules/planning/format";
 import { getAttendanceRoster } from "@/modules/planning/queries";
 
 import { AttendanceList } from "./AttendanceList";

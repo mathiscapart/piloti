@@ -2,6 +2,7 @@ import { ShieldAlert } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatInstant } from "@/lib/datetime";
 import { REPORT_STATUS_LABEL } from "@/lib/enums";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
@@ -9,14 +10,6 @@ import { cn } from "@/lib/utils";
 import { listReports, type ReportStatusFilter } from "@/modules/communication/moderation-queries";
 
 import { ModerationActions } from "./ModerationActions";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 const FILTERS: { value: ReportStatusFilter; label: string }[] = [
   { value: "PENDING", label: "En attente" },
@@ -111,9 +104,9 @@ export default async function ModerationPage({ searchParams }: PageProps) {
                     ) : null}
                   </div>
                   <p className="mt-0.5 text-xs text-trail">
-                    {DATE_FMT.format(r.createdAt)}
+                    {formatInstant(r.createdAt, "dateTime")}
                     {r.moderatorName
-                      ? ` · traité par ${r.moderatorName}${r.resolvedAt ? ` le ${DATE_FMT.format(r.resolvedAt)}` : ""}`
+                      ? ` · traité par ${r.moderatorName}${r.resolvedAt ? ` le ${formatInstant(r.resolvedAt, "dateTime")}` : ""}`
                       : ""}
                   </p>
                   {r.reason ? (

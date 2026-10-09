@@ -2,18 +2,12 @@ import { CalendarDays, MapPin, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { formatEventRange } from "@/lib/datetime";
 import { UNIT_LABEL, type Unit } from "@/lib/enums";
 import type { NextEvent } from "@/modules/dashboard/queries";
 
 // Le prochain événement qui concerne l'utilisateur — l'information la plus
 // consultée d'un groupe scout, et pourtant absente du tableau de bord jusqu'ici.
-
-const JOUR = new Intl.DateTimeFormat("fr-FR", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
-const HEURE = new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 const REPONSES: Record<string, { texte: string; classe: string }> = {
   PRESENT: { texte: "Tu es inscrit", classe: "bg-forest-soft text-forest-ink" },
@@ -22,7 +16,6 @@ const REPONSES: Record<string, { texte: string; classe: string }> = {
 };
 
 export function NextEventCard({ event }: { event: NextEvent }) {
-  const memeJour = event.startDate.toDateString() === event.endDate.toDateString();
   const reponse = event.myResponse ? REPONSES[event.myResponse] : null;
 
   return (
@@ -44,12 +37,8 @@ export function NextEventCard({ event }: { event: NextEvent }) {
       <dl className="space-y-1.5 text-sm text-earth">
         <div className="flex items-center gap-2">
           <CalendarDays className="size-4 shrink-0 text-trail" />
-          <dd>
-            {JOUR.format(event.startDate)}
-            {memeJour
-              ? ` · ${HEURE.format(event.startDate)}`
-              : ` → ${JOUR.format(event.endDate)}`}
-          </dd>
+          {/* Même formateur que /planning : heure murale, en UTC (#115). */}
+          <dd>{formatEventRange(event.startDate, event.endDate)}</dd>
         </div>
         {event.location ? (
           <div className="flex items-center gap-2">

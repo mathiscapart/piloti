@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { formatInstant } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { isChildOf } from "@/modules/family/queries";
@@ -10,12 +11,6 @@ import {
 } from "@/modules/planning/stats";
 
 import { PrintButton } from "../../../../planning/presences/PrintButton";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -50,7 +45,7 @@ export default async function BilanPage({ params }: PageProps) {
             {data.jeune.firstName} {data.jeune.lastName}
           </h2>
           <p className="text-sm text-trail">
-            Bilan édité le {DATE_FMT.format(new Date())}
+            Bilan édité le {formatInstant(new Date(), "dateLong")}
           </p>
         </header>
 

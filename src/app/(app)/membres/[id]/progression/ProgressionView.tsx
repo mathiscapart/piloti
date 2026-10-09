@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { formatInstant, formatWall } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import type { Progression } from "@/modules/pedagogy/progression";
 import {
@@ -22,18 +23,6 @@ import {
   setGoal,
   toggleGoal,
 } from "@/modules/pedagogy/progression-actions";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-const DATETIME_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
 
 interface BadgeOption {
   id: string;
@@ -127,7 +116,7 @@ export function ProgressionView({
                   {s.status === "CONFIRMED" && s.confirmedBy ? (
                     <p className="text-xs text-forest">
                       Validé par {s.confirmedBy.firstName} {s.confirmedBy.lastName}
-                      {s.confirmedAt ? ` · ${DATETIME_FMT.format(s.confirmedAt)}` : ""}
+                      {s.confirmedAt ? ` · ${formatInstant(s.confirmedAt, "date")}` : ""}
                     </p>
                   ) : s.status === "PROPOSED" && s.proposedBy ? (
                     <p className="text-xs text-sun-ink">
@@ -268,7 +257,7 @@ export function ProgressionView({
                   </p>
                   <p className="text-xs text-trail">
                     {g.target ? `Cible : ${g.target}` : "Objectif libre"}
-                    {g.dueDate ? ` · échéance ${DATE_FMT.format(g.dueDate)}` : ""}
+                    {g.dueDate ? ` · échéance ${formatWall(g.dueDate, "date")}` : ""}
                   </p>
                 </div>
                 <span
@@ -348,7 +337,7 @@ export function ProgressionView({
                   </div>
                   <p className="mt-1 text-xs text-trail">
                     {n.author ? `${n.author.firstName} ${n.author.lastName}` : "—"} ·{" "}
-                    {DATETIME_FMT.format(n.createdAt)}
+                    {formatInstant(n.createdAt, "date")}
                   </p>
                 </li>
               ))}

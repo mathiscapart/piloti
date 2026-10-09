@@ -14,6 +14,7 @@ import {
   RECEIPT_REQUIRED_ABOVE_CENTS,
   type ExpenseCategory,
 } from "@/lib/enums";
+import { todayInput } from "@/lib/datetime";
 import type { ActionResult } from "@/lib/types";
 import { createExpense } from "@/modules/finance/actions";
 
@@ -34,7 +35,7 @@ export function ExpenseForm({
     if (state.error) toast.error(state.error);
   }, [state]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInput();
 
   return (
     <form action={formAction} className="space-y-4">

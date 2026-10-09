@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { addMovement } from "@/modules/finance/cashbox-actions";
+import { todayInput } from "@/lib/datetime";
 
 export function AddMovementForm({ cashBoxId }: { cashBoxId: string }) {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function AddMovementForm({ cashBoxId }: { cashBoxId: string }) {
   const [kind, setKind] = useState<"DEPOSIT" | "WITHDRAWAL">("DEPOSIT");
   const [amount, setAmount] = useState("");
   const [label, setLabel] = useState("");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => todayInput());
 
   function submit() {
     start(async () => {

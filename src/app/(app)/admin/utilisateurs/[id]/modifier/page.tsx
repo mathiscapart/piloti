@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { toDateInput } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { can, canAssignRole, canChangeAccountEmail } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
@@ -23,10 +24,10 @@ interface PageProps {
 }
 
 // SAFE-01 — l'`<input type="date">` de l'éditeur attend « YYYY-MM-DD ». Les
-// dates sont stockées à minuit UTC (cf. birthDateSchema), on découpe donc l'ISO
-// plutôt que de passer par le fuseau local, qui décalerait d'un jour.
-function toDateInput(d: Date | null): string | null {
-  return d ? d.toISOString().slice(0, 10) : null;
+// dates sont stockées à minuit UTC (cf. birthDateSchema) : date murale, lue en
+// UTC plutôt que dans le fuseau local, qui décalerait d'un jour.
+function birthDateInput(d: Date | null): string | null {
+  return d ? toDateInput(d) : null;
 }
 
 function parseRoles(raw: unknown): string[] {
@@ -109,7 +110,7 @@ export default async function EditUserAccountPage({ params }: PageProps) {
           email: target.email,
           phone: target.phone,
           canLogin: target.canLogin,
-          birthDate: toDateInput(target.birthDate),
+          birthDate: birthDateInput(target.birthDate),
         }}
         canEditEmail={canChangeAccountEmail(currentUser, target)}
       />
@@ -131,7 +132,7 @@ export default async function EditUserAccountPage({ params }: PageProps) {
           />
           <BirthDateEditor
             userId={target.id}
-            currentBirthDate={toDateInput(target.birthDate)}
+            currentBirthDate={birthDateInput(target.birthDate)}
           />
           <RolesEditor
             userId={target.id}

@@ -15,6 +15,7 @@ import {
   type PaymentMethod,
   type PaymentStatus,
 } from "@/lib/enums";
+import { formatWall, todayInput } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { formatEuros } from "@/modules/finance/format";
 import {
@@ -29,13 +30,6 @@ const STATUS_TONE: Record<PaymentStatus, string> = {
   PENDING: "bg-sun-soft text-sun-ink",
   LATE: "bg-brick-soft text-brick-ink",
 };
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 export interface PaymentHistoryVM {
   id: string;
@@ -69,7 +63,7 @@ export function RecordPaymentRow(props: PaymentRowVM) {
     String(Math.max(0, props.expectedCents - props.paidCents) / 100),
   );
   const [method, setMethod] = useState<PaymentMethod>("CHEQUE");
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => todayInput());
   // #121 — trop-perçu signalé par le serveur, en attente de confirmation.
   const [overpayment, setOverpayment] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -227,7 +221,7 @@ export function RecordPaymentRow(props: PaymentRowVM) {
                 </span>
                 <span className="text-trail">
                   {PAYMENT_METHOD_LABEL[p.method as PaymentMethod] ?? p.method} ·{" "}
-                  {DATE_FMT.format(p.paidAt)}
+                  {formatWall(p.paidAt, "dateNumeric")}
                 </span>
                 {p.cancelledAt ? (
                   <span className="text-trail">

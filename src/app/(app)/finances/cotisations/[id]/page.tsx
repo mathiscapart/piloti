@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { formatWall } from "@/lib/datetime";
 import { UNIT_LABEL, type Unit } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
@@ -18,13 +19,6 @@ function reminderDaysLabel(json: string): string {
     return "7, 15, 30";
   }
 }
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -60,7 +54,7 @@ export default async function CampaignDetailPage({ params }: PageProps) {
             ? (UNIT_LABEL[campaign.unit as Unit] ?? campaign.unit)
             : "Tout le groupe"}
           {campaign.deadline
-            ? ` · échéance ${DATE_FMT.format(campaign.deadline)}`
+            ? ` · échéance ${formatWall(campaign.deadline, "dateLong")}`
             : ""}
         </p>
         {/* Tarifs différenciés (2e enfant / cas social) masqués — décision

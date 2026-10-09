@@ -13,6 +13,7 @@ import {
   type ExpenseStatus,
   type ReimbursementMethod,
 } from "@/lib/enums";
+import { formatWall } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, canReviewExpense } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -25,13 +26,6 @@ import {
 
 import { BatchApproveButton } from "./BatchApproveButton";
 import { ExpenseActions } from "./ExpenseActions";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 const STATUS_TONE: Record<ExpenseStatus, string> = {
   PENDING: "bg-sun-soft text-sun-ink",
@@ -187,7 +181,7 @@ export default async function ExpensesPage({ searchParams }: PageProps) {
                     </span>
                   </div>
                   <p className="mt-0.5 text-sm text-trail">
-                    {DATE_FMT.format(e.date)}
+                    {formatWall(e.date, "date")}
                     {e.event ? ` · ${e.event.name}` : ""}
                     {e.note ? ` · ${e.note}` : ""}
                   </p>

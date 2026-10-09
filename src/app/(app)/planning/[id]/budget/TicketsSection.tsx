@@ -13,6 +13,7 @@ import {
   EXPENSE_CATEGORY_LABEL,
   type ExpenseCategory,
 } from "@/lib/enums";
+import { formatWall } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import { addEventTicket } from "@/modules/finance/budget-actions";
 import { formatEuros } from "@/modules/finance/format";
@@ -33,13 +34,6 @@ const STATUS_LABEL: Record<string, string> = {
   APPROVED: "Validé",
   REIMBURSED: "Remboursé",
 };
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-});
 
 export function TicketsSection({
   eventId,
@@ -188,7 +182,7 @@ export function TicketsSection({
                 </p>
                 <p className="truncate text-xs text-trail">
                   {t.note ? `${t.note} · ` : ""}
-                  {t.declarant} · {DATE_FMT.format(t.date)}
+                  {t.declarant} · {formatWall(t.date, "dayMonth")}
                 </p>
               </div>
               <span

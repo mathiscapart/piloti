@@ -1,5 +1,6 @@
 import "server-only";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { notifyMany } from "@/modules/notifications/notify";
 
@@ -41,7 +42,7 @@ function fillTemplate(tpl: string, vars: { campagne: string; reste: string }): s
 }
 
 export async function sendCampaignReminders(): Promise<number> {
-  const now = new Date();
+  const now = wallNow(); // deadline est une date murale (saisie)
   const campaigns = await db.campaign.findMany({
     where: { deadline: { not: null, lt: now } },
     select: {

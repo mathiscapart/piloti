@@ -32,6 +32,10 @@ const FORBIDDEN: { name: string; re: RegExp }[] = [
     re: /\.(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds)\s*\(/,
   },
   { name: "toISOString().slice/substring/split", re: /\.toISOString\(\)\s*\.\s*(slice|substring|split)\b/ },
+  { name: "getTimezoneOffset", re: /\.getTimezoneOffset\s*\(/ },
+  // new Date(année, mois, jour…) : composantes lues dans le fuseau du serveur.
+  // new Date(Date.UTC(…)) et new Date(x.getTime() + n) restent permis.
+  { name: "new Date(a, m, j) local", re: /\bnew Date\(\s*(?!Date\.UTC\b)[^()'"`]*,/ },
 ];
 
 // Exceptions : chemin relatif à src → motifs tolérés, et pourquoi.

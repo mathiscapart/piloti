@@ -2,9 +2,9 @@ import { CalendarDays, MapPin, Users } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { formatEventRange } from "@/lib/datetime";
 import { UNIT_LABEL, type Unit } from "@/lib/enums";
 import type { NextEvent } from "@/modules/dashboard/queries";
-import { formatEventRange } from "@/modules/planning/format";
 
 // Le prochain événement qui concerne l'utilisateur — l'information la plus
 // consultée d'un groupe scout, et pourtant absente du tableau de bord jusqu'ici.

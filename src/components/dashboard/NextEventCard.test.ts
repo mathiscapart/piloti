@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NextEvent } from "@/modules/dashboard/queries";
 
 // #115 — Les heures d'événement sont stockées en « heure murale » UTC
-// (cf. planning/format.ts) : la carte « Prochain rendez-vous » doit afficher
+// (cf. src/lib/datetime.ts) : la carte « Prochain rendez-vous » doit afficher
 // la même heure que /planning, quel que soit le fuseau du serveur.
 
 const ORIGINAL_TZ = process.env.TZ;
@@ -19,7 +17,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-// Les formateurs (planning/format.ts) sont créés au chargement du module : on
+// Les formateurs (src/lib/datetime.ts) sont créés au chargement du module : on
 // fixe le fuseau AVANT d'importer, et on recharge les modules à chaque rendu.
 async function renderIn(tz: string, event: NextEvent): Promise<string> {
   process.env.TZ = tz;
@@ -50,7 +48,7 @@ const ZONES = ["UTC", "Europe/Paris", "America/New_York"];
 describe("NextEventCard — indépendance au fuseau du serveur", () => {
   it("affiche l'heure murale saisie (15:46), comme le planning", async () => {
     const event = eventAt("2026-10-02T15:46:00Z", "2026-10-02T18:00:00Z");
-    const { formatEventRange } = await import("@/modules/planning/format");
+    const { formatEventRange } = await import("@/lib/datetime");
     const planning = formatEventRange(event.startDate, event.endDate);
 
     for (const tz of ZONES) {
@@ -92,29 +90,5 @@ describe("NextEventCard — indépendance au fuseau du serveur", () => {
   });
 });
 
-// Garde-fou statique : dans les fichiers corrigés, aucune date n'est formatée
-// dans le fuseau implicite du serveur.
-const FICHIERS = [
-  "./NextEventCard.tsx",
-  "../../modules/planning/format.ts",
-];
-
-describe("Formatage des dates d'événement — timeZone explicite", () => {
-  for (const relatif of FICHIERS) {
-    const source = readFileSync(fileURLToPath(new URL(relatif, import.meta.url)), "utf8");
-
-    it(`${relatif} : chaque Intl.DateTimeFormat précise un timeZone`, () => {
-      const appels = source.split("new Intl.DateTimeFormat(").slice(1);
-      for (const appel of appels) {
-        const options = appel.slice(0, appel.indexOf(")"));
-        expect(options).toContain("timeZone");
-      }
-    });
-
-    it(`${relatif} : aucune méthode de Date dépendante du fuseau local`, () => {
-      expect(source).not.toMatch(
-        /\.(toLocaleString|toLocaleDateString|toLocaleTimeString|toDateString|toTimeString|getFullYear|getMonth|getDate|getDay|getHours|getMinutes)\(/,
-      );
-    });
-  }
-});
+// Le garde-fou statique (aucun formatage hors de src/lib/datetime.ts) est
+// global : src/lib/datetime-usage.test.ts.

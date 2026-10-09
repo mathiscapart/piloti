@@ -12,10 +12,10 @@ import {
   type EventType,
   type Unit,
 } from "@/lib/enums";
+import { formatEventRange, monthKey, monthLabel } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, scopedUnits } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
-import { formatEventRange, monthKey, monthLabel } from "@/modules/planning/format";
 import { listEvents, type EventListItem } from "@/modules/planning/queries";
 import { listOpenTasksPreview } from "@/modules/planning/tasks";
 

@@ -3,12 +3,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { listPlaceOptions } from "@/modules/camp/places";
+import { toDatetimeLocal } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { UNITS } from "@/lib/enums";
 import { can, scopedUnits } from "@/lib/permissions";
 import { canActOnEvent } from "@/modules/planning/event-scope";
 import { updateEvent } from "@/modules/planning/actions";
-import { toDatetimeLocal } from "@/modules/planning/format";
 import { getEvent } from "@/modules/planning/queries";
 
 import { EventForm } from "../../EventForm";

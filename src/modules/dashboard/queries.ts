@@ -1,3 +1,4 @@
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import type { CurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
@@ -49,7 +50,7 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
     attendance: can(user, "event.manage"),
   };
 
-  const maintenant = new Date();
+  const maintenant = wallNow(); // comparé à des heures murales (endDate)
 
   const [
     expenses,
@@ -175,7 +176,7 @@ export async function getNextEvent(user: CurrentUser): Promise<NextEvent | null>
 
   const ev = await db.event.findFirst({
     where: {
-      endDate: { gte: new Date() },
+      endDate: { gte: wallNow() },
       ...(organise
         ? {}
         : { OR: [{ unit: null }, ...(user.unit ? [{ unit: user.unit }] : [])] }),

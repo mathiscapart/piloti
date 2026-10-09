@@ -2,27 +2,23 @@ import { CornerDownLeft, Droplets, Phone } from "lucide-react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { formatWall, wallNow } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import type { LoanListItem } from "@/modules/inventory/queries";
 
 import { DryingDialog, type DryingContactOption } from "./DryingDialog";
 import { LoanStatusBadge } from "./LoanStatusBadge";
 
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
 function daysOverdue(expectedReturn: Date): number {
-  const ms = Date.now() - expectedReturn.getTime();
+  // Date de retour murale (saisie, minuit UTC) : comparée à wallNow().
+  const ms = wallNow().getTime() - expectedReturn.getTime();
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 }
 
 function isLoanLate(loan: LoanListItem): boolean {
   return (
     loan.status === "RETARD" ||
-    (loan.status === "ACTIF" && loan.expectedReturn < new Date())
+    (loan.status === "ACTIF" && loan.expectedReturn < wallNow())
   );
 }
 
@@ -65,7 +61,7 @@ export function LoanGroupCard({
           <p className="text-sm text-trail">
             {head.eventName ? `${head.eventName} · ` : ""}
             {loans.length} article{loans.length > 1 ? "s" : ""}
-            {" · "}sortie le {DATE_FMT.format(head.startDate)}
+            {" · "}sortie le {formatWall(head.startDate, "date")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -120,7 +116,7 @@ export function LoanGroupCard({
                   )}
                 >
                   Retour {late ? "était" : "prévu"} le{" "}
-                  {DATE_FMT.format(loan.expectedReturn)}
+                  {formatWall(loan.expectedReturn, "date")}
                   {overdue > 0 ? ` · ${overdue} j de retard` : ""}
                 </p>
                 {loan.status === "SECHAGE" && loan.dryingLocation ? (

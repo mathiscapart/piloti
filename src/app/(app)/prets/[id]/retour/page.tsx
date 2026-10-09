@@ -4,15 +4,10 @@ import { notFound } from "next/navigation";
 
 import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { ReturnForm } from "@/components/loans/ReturnForm";
+import { formatWall } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { requireCan } from "@/lib/require-can";
 import { getLoanDetail } from "@/modules/inventory/queries";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-});
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -95,8 +90,8 @@ export default async function ReturnLoanPage({ params }: PageProps) {
               {loan.eventName ? ` · ${loan.eventName}` : ""}
             </p>
             <p className="text-sm text-trail">
-              Du {DATE_FMT.format(loan.startDate)} au{" "}
-              {DATE_FMT.format(loan.expectedReturn)}
+              Du {formatWall(loan.startDate, "dateLong")} au{" "}
+              {formatWall(loan.expectedReturn, "dateLong")}
             </p>
           </div>
           <LoanStatusBadge status={loan.status} />

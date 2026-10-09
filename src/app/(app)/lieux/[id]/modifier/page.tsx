@@ -2,17 +2,13 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { formatInstant } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, canManagePlace } from "@/lib/permissions";
 import { ownerContactVersion } from "@/modules/camp/owner-consent";
 
 import { PlaceForm, type PlaceFormValues } from "../../PlaceForm";
-
-const REFUSED_ON_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "2-digit",
-});
 
 function parseJsonArray(raw: string): string[] {
   try {
@@ -60,7 +56,7 @@ export default async function EditPlacePage({ params }: PageProps) {
     photos: parseJsonArray(place.photosJson),
     ownerRefusedOn:
       place.ownerConsentStatus === "REFUSED" && place.ownerConsentDecidedAt
-        ? REFUSED_ON_FMT.format(place.ownerConsentDecidedAt)
+        ? formatInstant(place.ownerConsentDecidedAt, "dayMonthNumeric")
         : undefined,
   };
 

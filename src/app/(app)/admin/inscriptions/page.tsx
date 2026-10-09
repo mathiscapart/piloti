@@ -1,6 +1,7 @@
 import { UserPlus } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatInstant } from "@/lib/datetime";
 import { computeAge, isMinor } from "@/lib/legal/age";
 import { UNIT_LABEL, type Unit } from "@/lib/enums";
 import { can } from "@/lib/permissions";
@@ -9,12 +10,6 @@ import { listPendingUsers } from "@/modules/admin/queries";
 
 import { ApproveDialog } from "./approve-dialog";
 import { RejectDialog } from "./reject-dialog";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
 
 export default async function AdminInscriptionsPage() {
   // US-32 — ADMIN + SECRÉTAIRE valident les inscriptions.
@@ -66,7 +61,7 @@ export default async function AdminInscriptionsPage() {
                   </p>
                   <p className="text-sm text-trail">{u.email}</p>
                   <p className="mt-1 text-xs text-trail">
-                    Demande le {DATE_FMT.format(u.createdAt)}
+                    Demande le {formatInstant(u.createdAt, "date")}
                     {age !== null ? ` · ${age} ans` : ""}
                     {u.requestedRole === "PARENT" ? " · 👪 Parent" : ""}
                     {u.unit ? ` · ${UNIT_LABEL[u.unit as Unit] ?? u.unit}` : ""}

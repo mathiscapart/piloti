@@ -13,6 +13,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { formatInstant } from "@/lib/datetime";
 import { ROLE_LABEL, ROLES, UNIT_LABEL, UNITS, type Role } from "@/lib/enums";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
@@ -22,12 +23,6 @@ import { rejectedPurgeDate } from "@/modules/admin/rejected-retention";
 
 import { DeleteUserButton } from "./user-actions";
 import { UserFiltersForm } from "./user-filters-form";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
 
 // US-29 — parse le JSON des rôles additionnels de façon défensive.
 function parseRoles(raw: unknown): string[] {
@@ -369,7 +364,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                   {rejected ? (
                     <p className="text-xs text-trail">
                       Anonymisation automatique le{" "}
-                      {u.rejectedAt ? DATE_FMT.format(rejectedPurgeDate(u.rejectedAt)) : "—"}
+                      {u.rejectedAt ? formatInstant(rejectedPurgeDate(u.rejectedAt), "date") : "—"}
                     </p>
                   ) : null}
                   <div className="space-y-1">
@@ -458,7 +453,7 @@ export default async function AdminUtilisateursPage({ searchParams }: PageProps)
                         {rejected ? (
                           <p className="text-xs text-trail">
                             Anonymisation automatique le{" "}
-                            {u.rejectedAt ? DATE_FMT.format(rejectedPurgeDate(u.rejectedAt)) : "—"}
+                            {u.rejectedAt ? formatInstant(rejectedPurgeDate(u.rejectedAt), "date") : "—"}
                           </p>
                         ) : null}
                       </td>

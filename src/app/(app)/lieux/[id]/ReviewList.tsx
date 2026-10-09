@@ -4,13 +4,8 @@ import { useMemo, useState } from "react";
 
 import { Stars } from "@/components/camp/Stars";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { formatInstant } from "@/lib/datetime";
 import { UNIT_LABEL, UNITS, type Unit } from "@/lib/enums";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
 
 export interface ReviewListItem {
   id: string;
@@ -140,7 +135,7 @@ export function ReviewList({ reviews }: { reviews: ReviewListItem[] }) {
                 <p className="whitespace-pre-wrap text-sm text-earth">{r.comment}</p>
               ) : null}
               <p className="text-xs text-trail">
-                {DATE_FMT.format(r.createdAt)}
+                {formatInstant(r.createdAt, "date")}
                 {r.event
                   ? ` · ${r.event.name}${
                       r.event.unit

@@ -1,102 +1,224 @@
 // #115 — invariant : src/lib/datetime.ts est le SEUL endroit qui formate une
 // date ou lit ses composantes dans un fuseau. Ailleurs, aucun
 // `Intl.DateTimeFormat`, `toLocale*String`, `toDateString`, getter/setter
-// local (`getHours`, `setDate`…) ni `toISOString().slice(0, 10)` : chacun
-// dépend du fuseau du serveur (ou, pour le dernier, tronque en UTC un instant
-// réel). Même raison d'être que unit-lead-writes.test.ts : un site oublié ne se
-// voit qu'en production, le jour où le fuseau du serveur change.
+// local (`getHours`, `setDate`…), `new Date(a, m, j)`, chaîne date-heure sans
+// fuseau ni `toISOString().slice(0, 10)` : chacun dépend du fuseau du serveur
+// (ou, pour le dernier, tronque en UTC un instant réel). Même raison d'être que
+// unit-lead-writes.test.ts : un site oublié ne se voit qu'en production, le
+// jour où le fuseau du serveur change.
+//
+// Chaque fichier est analysé en entier (pas ligne par ligne) : un appel coupé
+// par Prettier sur plusieurs lignes est détecté, le numéro de ligne est
+// recalculé depuis la position.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const SRC = join(process.cwd(), "src");
-const MODULE = "lib/datetime.ts";
+const ROOT = process.cwd();
+const SCANNED_DIRS = ["src", "prisma", "scripts", "public"];
+const MODULE = "src/lib/datetime.ts";
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) return sourceFiles(full);
-    if (!/\.tsx?$/.test(entry) || /\.test\.tsx?$/.test(entry)) return [];
+    if (!/\.(tsx?|m?js)$/.test(entry) || /\.test\.tsx?$/.test(entry)) return [];
     return [full];
   });
 }
 
-const FORBIDDEN: { name: string; re: RegExp }[] = [
-  { name: "Intl.DateTimeFormat", re: /\bIntl\s*\.\s*DateTimeFormat\b/ },
-  { name: "toLocaleDateString / toLocaleTimeString", re: /\.toLocale(Date|Time)String\s*\(/ },
-  { name: "toLocaleString", re: /\.toLocaleString\s*\(/ },
-  { name: "toDateString / toTimeString", re: /\.to(Date|Time)String\s*\(/ },
+// new Date(a, m, j…) : composantes lues dans le fuseau du serveur. On compte les
+// virgules au premier niveau des arguments, parenthèses imbriquées et chaînes
+// comprises : new Date(Number(y), m - 1, d) est détecté, new Date(Date.UTC(…))
+// et new Date(x.getTime() + n) restent permis.
+function localDateConstructors(source: string): number[] {
+  const hits: number[] = [];
+  for (const m of source.matchAll(/\bnew\s+Date\s*\(/g)) {
+    let depth = 0;
+    let quote: string | null = null;
+    for (let i = m.index + m[0].length; i < source.length; i++) {
+      const c = source[i];
+      if (quote) {
+        if (c === "\\") i++;
+        else if (c === quote) quote = null;
+      } else if (c === '"' || c === "'" || c === "`") quote = c;
+      else if ("([{".includes(c)) depth++;
+      else if (")]}".includes(c)) {
+        if (depth === 0) break;
+        depth--;
+      } else if (c === "," && depth === 0) {
+        hits.push(m.index);
+        break;
+      }
+    }
+  }
+  return hits;
+}
+
+function regexRule(re: RegExp) {
+  return (source: string) => [...source.matchAll(re)].map((m) => m.index);
+}
+
+const FORBIDDEN: { name: string; find: (source: string) => number[] }[] = [
+  { name: "Intl.DateTimeFormat", find: regexRule(/\bIntl\s*\.\s*DateTimeFormat\b/g) },
+  {
+    name: "toLocaleDateString / toLocaleTimeString",
+    find: regexRule(/\.toLocale(Date|Time)String\s*\(/g),
+  },
+  { name: "toLocaleString", find: regexRule(/\.toLocaleString\s*\(/g) },
+  { name: "toDateString / toTimeString", find: regexRule(/\.to(Date|Time)String\s*\(/g) },
   {
     name: "getter/setter dans le fuseau du serveur",
-    re: /\.(get|set)(FullYear|Month|Date|Day|Hours|Minutes|Seconds)\s*\(/,
+    find: regexRule(/\.(get|set)(FullYear|Year|Month|Date|Day|Hours|Minutes|Seconds)\s*\(/g),
   },
-  { name: "toISOString().slice/substring/split", re: /\.toISOString\(\)\s*\.\s*(slice|substring|split)\b/ },
-  { name: "getTimezoneOffset", re: /\.getTimezoneOffset\s*\(/ },
-  // new Date(année, mois, jour…) : composantes lues dans le fuseau du serveur.
-  // new Date(Date.UTC(…)) et new Date(x.getTime() + n) restent permis.
-  { name: "new Date(a, m, j) local", re: /\bnew Date\(\s*(?!Date\.UTC\b)[^()'"`]*,/ },
+  {
+    name: "toISOString().slice/substring/substr/split",
+    find: regexRule(/\.toISOString\(\s*\)\s*\??\.\s*(slice|substring|substr|split)\b/g),
+  },
+  { name: "getTimezoneOffset", find: regexRule(/\.getTimezoneOffset\s*\(/g) },
+  { name: "new Date(a, m, j) local", find: localDateConstructors },
+  // "2026-10-12T14:00" sans Z ni décalage : lue dans le fuseau du serveur.
+  // Une date seule ("2026-10-12") est lue en UTC et reste permise.
+  {
+    name: "chaîne date-heure sans fuseau",
+    find: regexRule(
+      /\b(?:new\s+Date|Date\.parse)\s*\(\s*(["'`])[^"'`]*?[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\1/g,
+    ),
+  },
 ];
 
-// Exceptions : chemin relatif à src → motifs tolérés, et pourquoi.
-const EXCEPTIONS: Record<string, { allow: string[]; why: string }> = {
+// Exceptions : chemin relatif à la racine → nombre exact d'occurrences tolérées
+// par règle, et pourquoi. Le nombre est exact : un appel de plus dans un fichier
+// d'exception fait échouer le verrou.
+const EXCEPTIONS: Record<string, { allow: Record<string, number>; why: string }> = {
   // Nombres, pas des dates : Number.prototype.toLocaleString.
-  "app/(public)/empreinte-ia/page.tsx": { allow: ["toLocaleString"], why: "nombres (kWh, litres)" },
-  "modules/finance/format.ts": { allow: ["toLocaleString"], why: "montants en euros" },
-  "app/(app)/finances/tranches/BracketsAdmin.tsx": { allow: ["toLocaleString"], why: "pourcentage" },
-  "app/(app)/membres/[id]/BracketSelect.tsx": { allow: ["toLocaleString"], why: "pourcentage" },
+  "src/app/(public)/empreinte-ia/page.tsx": {
+    allow: { toLocaleString: 7 },
+    why: "nombres (kWh, litres)",
+  },
+  "src/modules/finance/format.ts": { allow: { toLocaleString: 1 }, why: "montants en euros" },
+  "src/app/(app)/finances/tranches/BracketsAdmin.tsx": {
+    allow: { toLocaleString: 1 },
+    why: "pourcentage",
+  },
+  "src/app/(app)/membres/[id]/BracketSelect.tsx": {
+    allow: { toLocaleString: 1 },
+    why: "pourcentage",
+  },
   // Âge révolu (protection des mineurs) : age.test.ts fixe ses dates en
   // heure locale ; le passer en UTC changerait ses résultats. Signalé dans #115.
-  "lib/legal/age.ts": {
-    allow: ["getter/setter dans le fuseau du serveur"],
+  "src/lib/legal/age.ts": {
+    allow: { "getter/setter dans le fuseau du serveur": 8 },
     why: "calcul d'âge verrouillé par age.test.ts en heure locale",
   },
   // Chemin de stockage d'un fichier (écriture, hors périmètre lecture de #115).
-  "lib/upload.ts": {
-    allow: ["getter/setter dans le fuseau du serveur"],
+  "src/lib/upload.ts": {
+    allow: { "getter/setter dans le fuseau du serveur": 2 },
     why: "dossier AAAA/MM d'un fichier déposé, chemin écrit en base",
   },
 };
 
-const FILES = sourceFiles(SRC);
+function lineOf(source: string, index: number): number {
+  return source.slice(0, index).split("\n").length;
+}
+
+function violationsIn(source: string, allowed: string[] = []): string[] {
+  return FORBIDDEN.filter(({ name }) => !allowed.includes(name)).flatMap(({ name, find }) =>
+    find(source).map((index) => `${lineOf(source, index)} — ${name}`),
+  );
+}
+
+const FILES = SCANNED_DIRS.flatMap((dir) => sourceFiles(join(ROOT, dir))).map((f) =>
+  relative(ROOT, f),
+);
+
+describe("dates : le détecteur du verrou", () => {
+  it.each([
+    ["Intl.DateTimeFormat", `new Intl.DateTimeFormat("fr-FR", {})`],
+    ["toLocaleDateString / toLocaleTimeString", `d.toLocaleDateString("fr-FR")`],
+    ["toLocaleString", `d.toLocaleString()`],
+    ["toDateString / toTimeString", `d.toDateString()`],
+    ["getter/setter dans le fuseau du serveur", `d.getHours()`],
+    ["getter/setter dans le fuseau du serveur", `d.getYear()`],
+    ["getter/setter dans le fuseau du serveur", `d.setDate(1)`],
+    ["toISOString().slice/substring/substr/split", `d.toISOString().slice(0, 10)`],
+    ["toISOString().slice/substring/substr/split", `d.toISOString().substr(0, 10)`],
+    ["toISOString().slice/substring/substr/split", `d.toISOString().split("T")[0]`],
+    // Coupé par Prettier sur deux lignes.
+    ["toISOString().slice/substring/substr/split", `someLongName\n  .toISOString()\n  .slice(0, 10)`],
+    ["getTimezoneOffset", `d.getTimezoneOffset()`],
+    ["new Date(a, m, j) local", `new Date(2026, 2, 29)`],
+    ["new Date(a, m, j) local", `new Date(Number(y), m - 1, d)`],
+    ["new Date(a, m, j) local", `new Date(\n  parseInt(parts[0], 10),\n  0,\n)`],
+    ["chaîne date-heure sans fuseau", `new Date("2026-10-12T14:00")`],
+    ["chaîne date-heure sans fuseau", `new Date('2026-10-12T14:00:30.5')`],
+    ["chaîne date-heure sans fuseau", `new Date("2026-10-12 14:00")`],
+    ["chaîne date-heure sans fuseau", `Date.parse("2026-10-12T14:00")`],
+    ["chaîne date-heure sans fuseau", "new Date(`${day}T00:00`)"],
+  ])("détecte « %s » dans %j", (name, code) => {
+    expect(violationsIn(code).map((v) => v.split(" — ")[1])).toContain(name);
+  });
+
+  it.each([
+    `new Date()`,
+    `new Date(Date.UTC(y, m - 1, d))`,
+    `new Date(Date.UTC(Number(y), m - 1, d, 12, 0))`,
+    `new Date(x.getTime() + 3600 * 1000)`,
+    `new Date(todayInput())`,
+    `new Date(Math.max(a, b))`,
+    `new Date(f("a, b"))`,
+    `new Date("2026-10-12")`,
+    "new Date(`${y}-05-15`)",
+    `new Date("2026-10-12T14:00Z")`,
+    `new Date("2026-10-12T14:00:00.000Z")`,
+    `new Date("2026-10-12T14:00+02:00")`,
+    `d.toISOString()`,
+    `d.getUTCHours() + d.getUTCFullYear()`,
+    `"abc".substr(1)`,
+  ])("laisse passer %j", (code) => {
+    expect(violationsIn(code)).toEqual([]);
+  });
+
+  it("calcule le numéro de ligne depuis la position", () => {
+    expect(violationsIn(`const a = 1;\n\nconst h = d\n  .getHours();`)).toEqual([
+      "4 — getter/setter dans le fuseau du serveur",
+    ]);
+  });
+});
 
 describe("dates : une seule base, src/lib/datetime.ts", () => {
   it("analyse bien l'arborescence des sources", () => {
     expect(FILES.length).toBeGreaterThan(100);
-    expect(FILES.map((f) => relative(SRC, f))).toContain(MODULE);
+    expect(FILES).toContain(MODULE);
+    expect(FILES).toContain("prisma/seed.ts");
+    expect(FILES).toContain("public/sw.js");
+    expect(FILES).toContain("scripts/gen-icons.mjs");
   });
 
-  it("chaque exception existe encore et sert encore", () => {
+  it("chaque exception existe encore et garde son nombre exact d'occurrences", () => {
     for (const [path, { allow }] of Object.entries(EXCEPTIONS)) {
-      const source = readFileSync(join(SRC, path), "utf8");
-      for (const name of allow) {
+      const source = readFileSync(join(ROOT, path), "utf8");
+      for (const [name, count] of Object.entries(allow)) {
         const rule = FORBIDDEN.find((f) => f.name === name);
         expect(rule, `${path} : règle « ${name} » inconnue`).toBeDefined();
-        expect(rule!.re.test(source), `${path} : exception « ${name} » devenue inutile`).toBe(true);
+        expect(rule!.find(source).length, `${path} : exception « ${name} »`).toBe(count);
       }
     }
   });
 
   it("aucun formatage ni calcul de date dans le fuseau du serveur hors du module", () => {
-    const violations: string[] = [];
-    for (const file of FILES) {
-      const path = relative(SRC, file);
-      if (path === MODULE) continue;
-      const lines = readFileSync(file, "utf8").split("\n");
-      const allowed = EXCEPTIONS[path]?.allow ?? [];
-      lines.forEach((line, i) => {
-        for (const { name, re } of FORBIDDEN) {
-          if (!allowed.includes(name) && re.test(line)) {
-            violations.push(`${path}:${i + 1} — ${name}`);
-          }
-        }
-      });
-    }
+    const violations = FILES.filter((path) => path !== MODULE).flatMap((path) =>
+      violationsIn(
+        readFileSync(join(ROOT, path), "utf8"),
+        Object.keys(EXCEPTIONS[path]?.allow ?? {}),
+      ).map((v) => `${path}:${v}`),
+    );
     expect(violations).toEqual([]);
   });
 
   it("dans le module, chaque Intl.DateTimeFormat fixe son timeZone", () => {
-    const source = readFileSync(join(SRC, MODULE), "utf8");
+    const source = readFileSync(join(ROOT, MODULE), "utf8");
     const calls = [...source.matchAll(/new Intl\.DateTimeFormat\(([\s\S]*?)\);/g)];
     expect(calls.length).toBeGreaterThan(0);
     for (const [, args] of calls) expect(args).toMatch(/timeZone/);

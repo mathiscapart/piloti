@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
 import { withAudit } from "@/lib/audit";
+import { todayInput } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import {
   EXPENSE_CATEGORIES,
@@ -289,7 +290,7 @@ export async function addEventTicket(
         data: {
           declarantId: user.id,
           amountCents,
-          date: new Date(), // ticket saisi en direct
+          date: new Date(todayInput()), // ticket saisi en direct : jour mural de Paris
           category,
           eventId,
           note,

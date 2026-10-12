@@ -102,7 +102,7 @@ const FORBIDDEN: { name: string; find: (source: string) => number[] }[] = [
         /\b(?:new\s+Date|Date\.parse)\s*\(\s*`[^`]*T\$\{[^`]*(?<!Z|[+-]\d{2}:\d{2})`/g,
       )(source),
       ...regexRule(
-        /\b(?:new\s+Date|Date\.parse)\s*\([^()]*?\+\s*(["'`])T[^"'`]*(?<!Z|[+-]\d{2}:\d{2})\1/g,
+        /\b(?:new\s+Date|Date\.parse)\s*\([^;\n]*?\+\s*(["'`])T[^"'`]*(?<!Z|[+-]\d{2}:\d{2})\1/g,
       )(source),
     ],
   },
@@ -178,6 +178,7 @@ describe("dates : le détecteur du verrou", () => {
     ["chaîne date-heure sans fuseau", "new Date(`${day}T00:00`)"],
     ["chaîne date-heure sans fuseau", "new Date(`${day}T${hh}:${mm}`)"],
     ["chaîne date-heure sans fuseau", `new Date(day + "T14:00")`],
+    ["chaîne date-heure sans fuseau", `new Date(todayInput() + "T12:00")`],
     // Apostrophe dans un commentaire : ne doit pas ouvrir une chaîne.
     ["new Date(a, m, j) local", `new Date( // l'an\n  y, m, 1); const s = 'z';`],
   ])("détecte « %s » dans %j", (name, code) => {

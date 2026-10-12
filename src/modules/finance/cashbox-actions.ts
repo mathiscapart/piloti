@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { withAudit } from "@/lib/audit";
+import { todayInput } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
@@ -12,7 +13,7 @@ import { parseAmountToCents } from "./format";
 
 function parseDate(raw: string): Date {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
-  if (!m) return new Date();
+  if (!m) return new Date(todayInput());
   const [, y, mo, d] = m.map(Number);
   return new Date(Date.UTC(y, mo - 1, d));
 }

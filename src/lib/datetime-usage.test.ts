@@ -28,10 +28,16 @@ function sourceFiles(dir: string): string[] {
   });
 }
 
+function endOf(source: string, marker: string, from: number): number {
+  const end = source.indexOf(marker, from);
+  return end < 0 ? source.length : end;
+}
+
 // new Date(a, m, j…) : composantes lues dans le fuseau du serveur. On compte les
-// virgules au premier niveau des arguments, parenthèses imbriquées et chaînes
-// comprises : new Date(Number(y), m - 1, d) est détecté, new Date(Date.UTC(…))
-// et new Date(x.getTime() + n) restent permis.
+// virgules au premier niveau des arguments, en sautant parenthèses imbriquées,
+// chaînes et commentaires : new Date(Number(y), m - 1, d) est détecté,
+// new Date(Date.UTC(…)), new Date(x.getTime() + n) et la virgule finale de
+// Prettier (new Date(\n  x,\n)) restent permis.
 function localDateConstructors(source: string): number[] {
   const hits: number[] = [];
   for (const m of source.matchAll(/\bnew\s+Date\s*\(/g)) {
@@ -42,12 +48,15 @@ function localDateConstructors(source: string): number[] {
       if (quote) {
         if (c === "\\") i++;
         else if (c === quote) quote = null;
-      } else if (c === '"' || c === "'" || c === "`") quote = c;
+      } else if (source.startsWith("//", i)) i = endOf(source, "\n", i);
+      else if (source.startsWith("/*", i)) i = endOf(source, "*/", i) + 1;
+      else if (c === '"' || c === "'" || c === "`") quote = c;
       else if ("([{".includes(c)) depth++;
       else if (")]}".includes(c)) {
         if (depth === 0) break;
         depth--;
       } else if (c === "," && depth === 0) {
+        if (/^\s*\)/.test(source.slice(i + 1, i + 200))) continue;
         hits.push(m.index);
         break;
       }
@@ -79,12 +88,23 @@ const FORBIDDEN: { name: string; find: (source: string) => number[] }[] = [
   { name: "getTimezoneOffset", find: regexRule(/\.getTimezoneOffset\s*\(/g) },
   { name: "new Date(a, m, j) local", find: localDateConstructors },
   // "2026-10-12T14:00" sans Z ni décalage : lue dans le fuseau du serveur.
-  // Une date seule ("2026-10-12") est lue en UTC et reste permise.
+  // Une date seule ("2026-10-12") est lue en UTC et reste permise. Seules les
+  // chaînes écrites dans l'appel sont vues : littéral, gabarit (`${d}T${h}:00`)
+  // ou concaténation (d + "T14:00"). Une valeur venue d'ailleurs (champ
+  // datetime-local d'un formulaire) échappe à toute analyse statique.
   {
     name: "chaîne date-heure sans fuseau",
-    find: regexRule(
-      /\b(?:new\s+Date|Date\.parse)\s*\(\s*(["'`])[^"'`]*?[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\1/g,
-    ),
+    find: (source) => [
+      ...regexRule(
+        /\b(?:new\s+Date|Date\.parse)\s*\(\s*(["'`])[^"'`]*?[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?\1/g,
+      )(source),
+      ...regexRule(
+        /\b(?:new\s+Date|Date\.parse)\s*\(\s*`[^`]*T\$\{[^`]*(?<!Z|[+-]\d{2}:\d{2})`/g,
+      )(source),
+      ...regexRule(
+        /\b(?:new\s+Date|Date\.parse)\s*\([^()]*?\+\s*(["'`])T[^"'`]*(?<!Z|[+-]\d{2}:\d{2})\1/g,
+      )(source),
+    ],
   },
 ];
 
@@ -156,6 +176,10 @@ describe("dates : le détecteur du verrou", () => {
     ["chaîne date-heure sans fuseau", `new Date("2026-10-12 14:00")`],
     ["chaîne date-heure sans fuseau", `Date.parse("2026-10-12T14:00")`],
     ["chaîne date-heure sans fuseau", "new Date(`${day}T00:00`)"],
+    ["chaîne date-heure sans fuseau", "new Date(`${day}T${hh}:${mm}`)"],
+    ["chaîne date-heure sans fuseau", `new Date(day + "T14:00")`],
+    // Apostrophe dans un commentaire : ne doit pas ouvrir une chaîne.
+    ["new Date(a, m, j) local", `new Date( // l'an\n  y, m, 1); const s = 'z';`],
   ])("détecte « %s » dans %j", (name, code) => {
     expect(violationsIn(code).map((v) => v.split(" — ")[1])).toContain(name);
   });
@@ -176,6 +200,14 @@ describe("dates : le détecteur du verrou", () => {
     `d.toISOString()`,
     `d.getUTCHours() + d.getUTCFullYear()`,
     `"abc".substr(1)`,
+    // Virgule finale ajoutée par Prettier : un seul argument.
+    `new Date(\n  someVeryLongExpression,\n)`,
+    // Virgule dans un commentaire, pas entre deux arguments.
+    `new Date(x /* a, b */)`,
+    `new Date(x // a, b\n)`,
+    "new Date(`${day}T${hh}:${mm}Z`)",
+    "new Date(`${day}T${hh}:00+02:00`)",
+    `new Date(day + "T14:00Z")`,
   ])("laisse passer %j", (code) => {
     expect(violationsIn(code)).toEqual([]);
   });

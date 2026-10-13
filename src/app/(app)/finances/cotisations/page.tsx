@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatWall } from "@/lib/datetime";
 import { UNIT_LABEL, type Unit } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
@@ -10,13 +11,6 @@ import { formatEuros } from "@/modules/finance/format";
 import { listCampaigns } from "@/modules/finance/campaigns";
 
 import { CampaignForm } from "./CampaignForm";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 export default async function CampaignsPage() {
   const user = await getCurrentUser();
@@ -67,7 +61,7 @@ export default async function CampaignsPage() {
                 <p className="text-xs text-trail">
                   {formatEuros(c.amountCents)} / jeune ·{" "}
                   {c.unit ? (UNIT_LABEL[c.unit as Unit] ?? c.unit) : "Tout le groupe"}
-                  {c.deadline ? ` · échéance ${DATE_FMT.format(c.deadline)}` : ""}
+                  {c.deadline ? ` · échéance ${formatWall(c.deadline, "date")}` : ""}
                 </p>
               </Link>
             </li>

@@ -13,10 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { BorrowerOption } from "@/modules/inventory/queries";
+import { toDateInput, todayInput, wallNow } from "@/lib/datetime";
 
-const today = () => new Date().toISOString().slice(0, 10);
+// Jour de Paris, pas d'UTC : entre minuit et 2 h, UTC est encore la veille.
+const today = () => todayInput();
 const inDays = (n: number) =>
-  new Date(Date.now() + n * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  toDateInput(new Date(wallNow().getTime() + n * 24 * 60 * 60 * 1000));
 
 interface Props {
   // null = mode « jeune » : emprunteur forcé à soi-même (pas d'annuaire).

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 
 // US-P08 / US-P09 — statistiques de présence à partir des pointages (US-P07).
@@ -27,7 +28,7 @@ async function getPointedEventsForUnit(unit: string | null): Promise<{
   events: PointedEvent[];
   presentByEvent: Map<string, Set<string>>;
 }> {
-  const now = new Date();
+  const now = wallNow(); // comparé à des heures murales
   const events = await db.event.findMany({
     where: {
       endDate: { lt: now },

@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { formatWall } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -9,13 +10,6 @@ import { getCashBox } from "@/modules/finance/cashbox";
 import { formatEuros } from "@/modules/finance/format";
 
 import { AddMovementForm } from "../AddMovementForm";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -71,7 +65,7 @@ export default async function CashBoxDetailPage({ params }: PageProps) {
                   <p className="truncate text-sm font-medium text-earth">
                     {t.label}
                   </p>
-                  <p className="text-xs text-trail">{DATE_FMT.format(t.date)}</p>
+                  <p className="text-xs text-trail">{formatWall(t.date, "date")}</p>
                 </div>
                 <span
                   className={cn(

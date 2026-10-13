@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { UNITS } from "@/lib/enums";
 
@@ -13,7 +14,7 @@ export interface EventFilter {
 }
 
 export async function listEvents(opts: EventFilter = {}) {
-  const now = new Date();
+  const now = wallNow(); // endDate est une heure murale
   const where: Prisma.EventWhereInput = {};
 
   if (opts.unit && (UNITS as readonly string[]).includes(opts.unit)) {
@@ -196,5 +197,5 @@ export type EventLoan = Awaited<ReturnType<typeof getEventLoans>>[number];
 
 // Compteur d'événements à venir (badge dashboard / nav éventuel).
 export async function countUpcomingEvents() {
-  return db.event.count({ where: { endDate: { gte: new Date() } } });
+  return db.event.count({ where: { endDate: { gte: wallNow() } } });
 }

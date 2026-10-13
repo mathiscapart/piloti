@@ -2,6 +2,7 @@ import "dotenv/config";
 
 import { randomBytes } from "node:crypto";
 
+import { wallNow } from "../src/lib/datetime";
 import { db } from "../src/lib/db";
 import type { AccountStatus, Role, Unit } from "../src/lib/enums";
 import { PRIVACY_VERSION, TERMS_VERSION } from "../src/lib/legal/versions";
@@ -1104,7 +1105,7 @@ async function main() {
     ],
   });
 
-  const annee = new Date().getFullYear();
+  const annee = wallNow().getUTCFullYear();
   // US-F03 — échéance PASSÉE (créée bien avant elle) : sans quoi
   // `sendCampaignReminders` (campaign-scheduler.ts) ne considère jamais cette
   // campagne comme en retard et les CampaignReminder ci-dessous n'auraient rien

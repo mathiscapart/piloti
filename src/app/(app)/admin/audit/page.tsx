@@ -19,6 +19,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatInstant } from "@/lib/datetime";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import {
@@ -26,15 +27,6 @@ import {
   listAuditLog,
   listAuditUsers,
 } from "@/modules/admin/queries";
-
-const DATETIME_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
 
 const ACTION_LABEL: Record<string, string> = {
   USER_REGISTERED: "Inscription",
@@ -235,7 +227,7 @@ export default async function AdminAuditPage({ searchParams }: PageProps) {
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="font-bold text-earth">{label}</p>
                     <time className="text-xs text-trail">
-                      {DATETIME_FMT.format(it.createdAt)}
+                      {formatInstant(it.createdAt, "dateTime")}
                     </time>
                   </div>
                   <p className="text-sm text-trail">

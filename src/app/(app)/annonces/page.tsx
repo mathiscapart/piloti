@@ -2,6 +2,7 @@ import { Megaphone, Plus } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatInstant } from "@/lib/datetime";
 import { ANNOUNCEMENT_AUDIENCE_LABEL } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
@@ -15,14 +16,6 @@ import {
 } from "./AnnouncementActions";
 
 export const dynamic = "force-dynamic";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
 
 export default async function AnnouncementsPage() {
   const user = await getCurrentUser();
@@ -104,7 +97,7 @@ export default async function AnnouncementsPage() {
 
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <p className="text-xs text-trail">
-                  {a.authorName} · {DATE_FMT.format(a.createdAt)} ·{" "}
+                  {a.authorName} · {formatInstant(a.createdAt, "dayMonthTime")} ·{" "}
                   {ANNOUNCEMENT_AUDIENCE_LABEL[a.audience] ?? a.audience}
                 </p>
                 {/* US-C03 — taux de lecture + relance (auteur / admin). */}

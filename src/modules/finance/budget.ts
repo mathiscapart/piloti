@@ -35,7 +35,7 @@ export async function getEventBudget(eventId: string) {
     // tickets, avant même le remboursement).
     db.expense.findMany({
       where: { eventId, status: { not: "REJECTED" } },
-      orderBy: { date: "desc" },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
       select: {
         id: true,
         category: true,

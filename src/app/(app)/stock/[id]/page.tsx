@@ -22,23 +22,10 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { formatInstant, formatWall } from "@/lib/datetime";
 import { requireCan } from "@/lib/require-can";
 import { getEquipmentDetail, listCategories } from "@/modules/inventory/queries";
 import { CONDITION_LABEL } from "@/modules/inventory/types";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
-const DATETIME_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -122,7 +109,7 @@ export default async function EquipmentDetailPage({
           <h1 className="text-2xl font-black text-earth md:text-3xl">{eq.name}</h1>
           <p className="text-xs text-trail">
             ID <code className="font-mono text-earth">{eq.id.slice(-8)}</code>
-            {" · "}créé le {DATE_FMT.format(eq.createdAt)}
+            {" · "}créé le {formatInstant(eq.createdAt, "date")}
             {eq.location ? ` · ${eq.location}` : ""}
           </p>
           {eq.notes ? (
@@ -194,7 +181,7 @@ export default async function EquipmentDetailPage({
                     </p>
                   </div>
                   <time className="text-xs text-trail">
-                    {loan.returnedAt ? DATE_FMT.format(loan.returnedAt) : ""}
+                    {loan.returnedAt ? formatInstant(loan.returnedAt, "date") : ""}
                   </time>
                 </li>
               ))}
@@ -244,7 +231,7 @@ export default async function EquipmentDetailPage({
                       </p>
                     </div>
                     <time className="text-xs text-trail">
-                      {DATETIME_FMT.format(log.createdAt)}
+                      {formatInstant(log.createdAt, "dayMonthTime")}
                     </time>
                   </li>
                 ))}
@@ -273,10 +260,10 @@ export default async function EquipmentDetailPage({
                           {loan.eventName ? ` · ${loan.eventName}` : ""}
                         </p>
                         <p className="text-xs text-trail">
-                          {DATE_FMT.format(loan.startDate)} →{" "}
-                          {DATE_FMT.format(loan.expectedReturn)}
+                          {formatWall(loan.startDate, "date")} →{" "}
+                          {formatWall(loan.expectedReturn, "date")}
                           {loan.returnedAt
-                            ? ` · rendu le ${DATE_FMT.format(loan.returnedAt)}`
+                            ? ` · rendu le ${formatInstant(loan.returnedAt, "date")}`
                             : ""}
                         </p>
                       </div>
@@ -296,7 +283,7 @@ export default async function EquipmentDetailPage({
               </div>
               <p className="text-xs text-trail">
                 {CONDITION_LABEL[eq.condition as keyof typeof CONDITION_LABEL] ?? eq.condition} ·
-                dernière mise à jour le {DATE_FMT.format(eq.updatedAt)}
+                dernière mise à jour le {formatInstant(eq.updatedAt, "date")}
               </p>
               <p className="text-xs text-trail">
                 L&apos;historique des changements d&apos;état détaillé arrive en
@@ -332,7 +319,7 @@ export default async function EquipmentDetailPage({
                         ) : null}
                         <p className="text-xs text-trail">
                           Par {inc.reporter.firstName} {inc.reporter.lastName} ·{" "}
-                          {DATETIME_FMT.format(inc.createdAt)}
+                          {formatInstant(inc.createdAt, "dayMonthTime")}
                         </p>
                       </div>
                     </div>

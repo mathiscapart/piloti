@@ -7,6 +7,7 @@ import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { UserAvatar } from "@/components/ui/user-avatar";
+import { formatWall, wallNow } from "@/lib/datetime";
 import { UNIT_LABEL, UNITS } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, canActOnUnit, effectiveRoles } from "@/lib/permissions";
@@ -27,12 +28,6 @@ import { FamilySection } from "./FamilySection";
 import { ImageRightsSection } from "./ImageRightsSection";
 import { MemberProfileForm } from "./MemberProfileForm";
 
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Administrateur",
   CHEF: "Chef",
@@ -41,12 +36,6 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 // Date d'événement : formatée en UTC (heure murale, cf. module planning).
-const EVENT_DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  timeZone: "UTC",
-});
-
 interface PageProps {
   params: Promise<{ id: string }>;
 }
@@ -61,7 +50,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
   if (!member) notFound();
 
   const { user, loans } = member;
-  const now = new Date();
+  const now = wallNow(); // expectedReturn est une date murale (saisie)
 
   // US-26 — annuaire des compétences : RG (member.directory) ou admin peuvent
   // CONSULTER et ÉDITER le profil parent ; les autres rôles avec member.view le
@@ -320,7 +309,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
                     )}
                     title={t.event.name}
                   >
-                    {EVENT_DAY_FMT.format(t.event.startDate)}
+                    {formatWall(t.event.startDate, "dayMonth")}
                   </li>
                 ))}
               </ul>
@@ -382,7 +371,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
                       )}
                     >
                       Retour {late ? "était" : "prévu"} le{" "}
-                      {DATE_FMT.format(loan.expectedReturn)}
+                      {formatWall(loan.expectedReturn, "date")}
                       {loan.eventName ? ` · ${loan.eventName}` : ""}
                     </p>
                   </div>

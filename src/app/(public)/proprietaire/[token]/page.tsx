@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { formatInstant } from "@/lib/datetime";
 import { ORG_GROUP, ORG_NAME, ORG_PRIVACY_EMAIL } from "@/lib/legal/organization";
 import {
   getOwnerConsentByToken,
@@ -73,7 +74,7 @@ export default async function ProprietairePage({
             ? "Vous avez autorisé le groupe à utiliser vos coordonnées pour organiser un camp."
             : "Vous avez demandé leur effacement : elles ont été supprimées de l'application."}
           {dossier.decidedAt
-            ? ` Décision enregistrée le ${dossier.decidedAt.toLocaleDateString("fr-FR")}.`
+            ? ` Décision enregistrée le ${formatInstant(dossier.decidedAt, "dateNumeric")}.`
             : null}
         </p>
         <p>

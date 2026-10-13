@@ -2,6 +2,7 @@ import { Gift } from "lucide-react";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatInstant, formatWall } from "@/lib/datetime";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
@@ -16,12 +17,6 @@ import {
 } from "@/modules/inventory/types";
 
 import { DonationReviewActions } from "./donation-review-actions";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
 
 const FILTERS: { value: DonationStatusFilter; label: string }[] = [
   { value: "pending", label: "En attente" },
@@ -128,9 +123,9 @@ export default async function AdminDonationsPage({ searchParams }: PageProps) {
                   </p>
                   <p className="text-xs text-trail">
                     {d.donorName ? `Don de ${d.donorName} · ` : ""}
-                    proposé le {DATE_FMT.format(d.createdAt)}
+                    proposé le {formatInstant(d.createdAt, "date")}
                     {d.dropoffDate
-                      ? ` · dépôt prévu le ${DATE_FMT.format(d.dropoffDate)}`
+                      ? ` · dépôt prévu le ${formatWall(d.dropoffDate, "date")}`
                       : ""}
                   </p>
                   {d.note ? (

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Textarea } from "@/components/ui/textarea";
+import { formatInstant } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import {
   fetchThread,
@@ -14,12 +15,6 @@ import {
 } from "@/modules/communication/dm-actions";
 import type { Thread } from "@/modules/communication/dm-queries";
 import { reportMessage } from "@/modules/communication/moderation-actions";
-
-const TIME_FMT = new Intl.DateTimeFormat("fr-FR", {
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
 
 export function ThreadView({ initial }: { initial: Thread }) {
   const otherId = initial.otherId;
@@ -127,7 +122,7 @@ export function ThreadView({ initial }: { initial: Thread }) {
                     m.mine ? "text-snow/70" : "text-trail",
                   )}
                 >
-                  {TIME_FMT.format(new Date(m.createdAt))}
+                  {formatInstant(new Date(m.createdAt), "time")}
                 </p>
               </div>
               {!m.mine ? (

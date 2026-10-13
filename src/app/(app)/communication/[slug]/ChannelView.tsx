@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { formatInstant } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import {
   deleteMessage,
@@ -45,14 +46,6 @@ interface Msg {
 
 // Fuseau fixé sur Europe/Paris : sinon le serveur (conteneur en UTC) et le
 // navigateur (heure locale) formatent différemment → erreur d'hydratation React.
-const TIME_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
-
 export function ChannelView({
   channelId,
   initialMessages,
@@ -342,7 +335,7 @@ function MessageRow({
           {msg.author.firstName} {msg.author.lastName}
         </span>
         <time className="text-[11px] text-trail">
-          {TIME_FMT.format(new Date(msg.createdAt))}
+          {formatInstant(new Date(msg.createdAt), "dayMonthNumericTime")}
           {msg.editedAt ? " · modifié" : ""}
           {msg.pinnedAt ? " · 📌" : ""}
         </time>

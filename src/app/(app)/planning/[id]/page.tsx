@@ -25,6 +25,7 @@ import {
   type RsvpResponse,
   type Unit,
 } from "@/lib/enums";
+import { formatEventRange, formatWall, wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
@@ -32,7 +33,6 @@ import { cn } from "@/lib/utils";
 import { getChildrenOf } from "@/modules/family/queries";
 import { isConcernedByEvent } from "@/modules/planning/audience";
 import { canActOnEvent } from "@/modules/planning/event-scope";
-import { formatEventRange } from "@/modules/planning/format";
 import {
   getAttendanceCount,
   getEventLoans,
@@ -44,14 +44,6 @@ import { DeleteEventButton } from "../DeleteEventButton";
 import { PrintButton } from "../presences/PrintButton";
 import { RsvpControl } from "../RsvpControl";
 import { WithdrawRegistrationButton } from "../WithdrawRegistrationButton";
-
-const DEADLINE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "UTC",
-});
 
 const RSVP_TONE: Record<RsvpResponse, string> = {
   PRESENT: "text-forest-ink",
@@ -91,7 +83,7 @@ export default async function EventDetailPage({ params }: PageProps) {
 
   const deadlinePassed =
     event.registrationDeadline != null &&
-    event.registrationDeadline < new Date();
+    event.registrationDeadline < wallNow();
 
   // US-P04 + rattachement familial : un parent peut inscrire ses enfants.
   const myChildren = event.registrationOpen
@@ -132,7 +124,7 @@ export default async function EventDetailPage({ params }: PageProps) {
         select: { id: true, name: true },
       })
     : null;
-  const eventEnded = event.endDate < new Date();
+  const eventEnded = event.endDate < wallNow();
   const canReviewPlace = can(user, "place.review");
 
   // US-P12 — matériel mobilisé (prêts rattachés), pour qui peut voir les prêts.
@@ -266,7 +258,7 @@ export default async function EventDetailPage({ params }: PageProps) {
                 )}
               >
                 {deadlinePassed ? "Clôturée le " : "Jusqu'au "}
-                {DEADLINE_FMT.format(event.registrationDeadline)}
+                {formatWall(event.registrationDeadline, "dayMonthLongTime")}
               </span>
             ) : null}
           </div>

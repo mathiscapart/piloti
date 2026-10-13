@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 
 import { withAudit } from "@/lib/audit";
+import { todayInput } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { PAYMENT_METHODS, UNITS } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
@@ -124,7 +125,7 @@ export async function recordPayment(
   if (!(PAYMENT_METHODS as readonly string[]).includes(method)) {
     return { error: "Mode de paiement invalide." };
   }
-  const paidAt = parseDate(dateStr) ?? new Date();
+  const paidAt = parseDate(dateStr) ?? new Date(todayInput());
 
   const row = (await getCampaignDetail(campaignId))?.rows.find(
     (r) => r.user.id === userId,

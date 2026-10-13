@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 
@@ -40,7 +41,7 @@ export async function getDashboardData() {
         where: {
           OR: [
             { status: "RETARD" },
-            { AND: [{ status: "ACTIF" }, { expectedReturn: { lt: new Date() } }] },
+            { AND: [{ status: "ACTIF" }, { expectedReturn: { lt: wallNow() } }] },
           ],
         },
         orderBy: { expectedReturn: "asc" },
@@ -246,7 +247,7 @@ export type CategoryTreeNode = Awaited<
 export type LoanFilter = "all" | "retard" | "bientot" | "sechage" | "actifs";
 
 export async function listLoans(filter: LoanFilter = "all") {
-  const now = new Date();
+  const now = wallNow(); // dates de prêt murales (saisies, minuit UTC)
   const inNDays = new Date(now.getTime() + UPCOMING_DUE_DAYS * 24 * 60 * 60 * 1000);
 
   const where: Prisma.LoanWhereInput = {};
@@ -390,7 +391,7 @@ export async function listBorrowableEquipment(
     });
   }
 
-  const now = new Date();
+  const now = wallNow(); // dates de prêt murales (saisies, minuit UTC)
   return rows.map((eq) => {
     // Issue #73 — règle partagée avec `createLoan` (cf. ./availability).
     const loans = period ? blockingLoans(eq.loans, period, now) : eq.loans;

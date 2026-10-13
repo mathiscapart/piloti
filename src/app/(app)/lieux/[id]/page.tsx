@@ -17,6 +17,7 @@ import {
   CAMP_EQUIPMENT_LABEL,
   type CampEquipment,
 } from "@/lib/enums";
+import { formatInstant, formatWall } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, canManagePlace } from "@/lib/permissions";
 import {
@@ -31,18 +32,6 @@ import { PlaceNavActions } from "./PlaceNavActions";
 import { ResendOwnerConsentButton } from "./ResendOwnerConsentButton";
 import { ReviewForm } from "./ReviewForm";
 import { ReviewList } from "./ReviewList";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-const EVENT_DAY_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 const MODIF_LABEL: Record<string, string> = {
   PLACE_CREATED: "Création",
@@ -320,7 +309,7 @@ export default async function PlaceDetailPage({ params }: PageProps) {
                   {e.name}
                 </Link>
                 <span className="text-trail">
-                  · {EVENT_DAY_FMT.format(e.startDate)}
+                  · {formatWall(e.startDate, "date")}
                   {e.unit ? ` · ${e.unit}` : ""}
                 </span>
               </li>
@@ -347,7 +336,7 @@ export default async function PlaceDetailPage({ params }: PageProps) {
               <li key={m.id} className="text-xs text-trail">
                 {MODIF_LABEL[m.action] ?? m.action} ·{" "}
                 {m.editor ? `${m.editor.firstName} ${m.editor.lastName}` : "—"} ·{" "}
-                {DATE_FMT.format(m.createdAt)}
+                {formatInstant(m.createdAt, "date")}
               </li>
             ))}
           </ul>

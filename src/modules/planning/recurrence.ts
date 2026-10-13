@@ -26,7 +26,8 @@ export function advanceDate(
 }
 
 // Données de l'occurrence suivante d'une tâche récurrente (échéance avancée,
-// statut/inscriptions remis à zéro). Partagé par la coche et le scheduler.
+// statut/inscriptions remis à zéro, responsable conservé — #113). Partagé par
+// la coche et le scheduler.
 export function nextOccurrenceData(task: {
   title: string;
   recurrence: string;
@@ -34,6 +35,7 @@ export function nextOccurrenceData(task: {
   groupTask: boolean;
   minRequired: number;
   createdById: string | null;
+  assigneeId: string | null;
   dueDate: Date | null;
 }) {
   return {
@@ -43,6 +45,7 @@ export function nextOccurrenceData(task: {
     groupTask: task.groupTask,
     minRequired: task.minRequired,
     createdById: task.createdById,
+    assigneeId: task.assigneeId,
     dueDate: task.dueDate
       ? advanceDate(task.dueDate, task.recurrence as Recurrence, task.recurrenceEvery)
       : null,

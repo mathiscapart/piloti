@@ -41,6 +41,12 @@ describe("nextOccurrenceData", () => {
     expect(next.dueDate).toEqual(new Date(Date.UTC(2026, 8, 27)));
   });
 
+  it("ne reporte qu'un responsable ACTIVE (liste blanche, pas liste noire)", () => {
+    expect(
+      nextOccurrenceData({ ...baseTask, assignee: { status: "PENDING" } }).assigneeId,
+    ).toBeNull();
+  });
+
   it("garde une échéance absente à null (le responsable est quand même reporté)", () => {
     const next = nextOccurrenceData({ ...baseTask, dueDate: null });
     expect(next.dueDate).toBeNull();

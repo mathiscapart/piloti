@@ -26,8 +26,9 @@ export function advanceDate(
 }
 
 // Données de l'occurrence suivante d'une tâche récurrente (échéance avancée,
-// statut/inscriptions remis à zéro). Le responsable est conservé s'il est encore
-// actif (#113) ; suspendu ou anonymisé, il n'est pas reconduit (décision PR #191).
+// statut/inscriptions remis à zéro). Le responsable n'est conservé que s'il est
+// ACTIVE (#113) : suspendu, anonymisé ou tout autre statut, il n'est pas
+// reconduit (décision PR #191).
 // Partagé par la coche et le scheduler.
 export function nextOccurrenceData(task: {
   title: string;

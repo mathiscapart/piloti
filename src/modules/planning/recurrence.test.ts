@@ -10,18 +10,35 @@ const baseTask = {
   minRequired: 0,
   createdById: "creator",
   assigneeId: "u1",
+  assignee: { status: "ACTIVE" },
   dueDate: new Date(Date.UTC(2026, 8, 20)),
 };
 
 describe("nextOccurrenceData", () => {
-  it("reporte le responsable et avance l'échéance d'une semaine", () => {
+  it("reporte un responsable actif et avance l'échéance d'une semaine", () => {
     const next = nextOccurrenceData(baseTask);
     expect(next.assigneeId).toBe("u1");
     expect(next.dueDate).toEqual(new Date(Date.UTC(2026, 8, 27)));
   });
 
   it("garde une tâche sans responsable sans responsable", () => {
-    expect(nextOccurrenceData({ ...baseTask, assigneeId: null }).assigneeId).toBeNull();
+    expect(
+      nextOccurrenceData({ ...baseTask, assigneeId: null, assignee: null }).assigneeId,
+    ).toBeNull();
+  });
+
+  // Décision de Mathis sur la PR #191 : un responsable qui n'est plus actif
+  // n'est pas reconduit, l'occurrence suivante repart sans responsable.
+  it("ne reporte pas un responsable suspendu", () => {
+    const next = nextOccurrenceData({ ...baseTask, assignee: { status: "SUSPENDED" } });
+    expect(next.assigneeId).toBeNull();
+    expect(next.dueDate).toEqual(new Date(Date.UTC(2026, 8, 27)));
+  });
+
+  it("ne reporte pas un responsable anonymisé (compte supprimé)", () => {
+    const next = nextOccurrenceData({ ...baseTask, assignee: { status: "DELETED" } });
+    expect(next.assigneeId).toBeNull();
+    expect(next.dueDate).toEqual(new Date(Date.UTC(2026, 8, 27)));
   });
 
   it("garde une échéance absente à null (le responsable est quand même reporté)", () => {

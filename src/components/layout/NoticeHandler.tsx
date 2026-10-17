@@ -8,6 +8,7 @@ const SUCCESS_MESSAGES: Record<string, string> = {
   "equipment-created": "Article créé.",
   "equipment-updated": "Article mis à jour.",
   "equipment-archived": "Article archivé.",
+  "equipment-restored": "Article restauré.",
   "loan-created": "Prêt enregistré.",
   "loan-returned": "Retour validé.",
   "loan-drying": "Article mis en séchage.",

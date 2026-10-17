@@ -12,6 +12,7 @@ import { can } from "@/lib/permissions";
 
 import type { ActionResult } from "@/lib/types";
 
+import { archiveRefusal, updateRefusal } from "./archive";
 import { equipmentInputSchema } from "./types";
 
 // US-17 — un article d'une catégorie pesable est géré à l'unité : quantité = 1
@@ -93,6 +94,12 @@ export async function updateEquipment(
   if (!can(user, "equipment.update")) {
     return { error: "Vous n'avez pas la permission de modifier ce matériel." };
   }
+
+  // Issue #110 — un article archivé est en lecture seule.
+  const refusal = updateRefusal(
+    await db.equipment.findUnique({ where: { id }, select: { archived: true } }),
+  );
+  if (refusal) return { error: refusal };
 
   const parsed = equipmentInputSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -260,6 +267,14 @@ export async function archiveEquipment(id: string): Promise<ActionResult> {
     return { error: "Seul un administrateur peut archiver un article." };
   }
 
+  // Issue #110 — un prêt en cours ne doit pas pointer vers un article masqué.
+  const loans = await db.loan.findMany({
+    where: { equipmentId: id },
+    select: { status: true },
+  });
+  const refusal = archiveRefusal(loans.map((l) => l.status));
+  if (refusal) return { error: refusal };
+
   await withAudit(
     (tx) => tx.equipment.update({ where: { id }, data: { archived: true } }),
     {
@@ -272,4 +287,34 @@ export async function archiveEquipment(id: string): Promise<ActionResult> {
   revalidatePath("/stock");
   revalidatePath(`/stock/${id}`);
   redirect("/stock?notice=equipment-archived");
+}
+
+// Issue #110 — restaure un article archivé : il réapparaît dans le catalogue.
+export async function restoreEquipment(id: string): Promise<ActionResult> {
+  const user = await getCurrentUser();
+  if (!can(user, "equipment.archive")) {
+    return { error: "Vous n'avez pas la permission de restaurer un article." };
+  }
+
+  const eq = await db.equipment.findUnique({
+    where: { id },
+    select: { archived: true },
+  });
+  if (!eq) return { error: "Article introuvable." };
+
+  // Déjà restauré (fiche obsolète) : on recharge simplement la fiche.
+  if (eq.archived) {
+    await withAudit(
+      (tx) => tx.equipment.update({ where: { id }, data: { archived: false } }),
+      {
+        action: "EQUIPMENT_RESTORED",
+        userId: user.id,
+        equipmentId: id,
+      },
+    );
+  }
+
+  revalidatePath("/stock");
+  revalidatePath(`/stock/${id}`);
+  redirect(`/stock/${id}?notice=equipment-restored`);
 }

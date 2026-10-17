@@ -17,12 +17,19 @@ export function advanceDate(
     case "WEEKLY":
       return new Date(Date.UTC(y, m, d + 7 * n));
     case "MONTHLY":
-      return new Date(Date.UTC(y, m + n, d));
+      return addMonthsClamped(y, m + n, d);
     case "YEARLY":
-      return new Date(Date.UTC(y + n, m, d));
+      return addMonthsClamped(y + n, m, d);
     default:
       return date;
   }
+}
+
+// #195 — plafonne au dernier jour du mois cible (31/01 → 28/02, pas 03/03).
+// Ne voyant que la date précédente, la série reste ensuite au jour plafonné.
+function addMonthsClamped(y: number, m: number, d: number): Date {
+  const lastDay = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m, Math.min(d, lastDay)));
 }
 
 // Données de l'occurrence suivante d'une tâche récurrente (échéance avancée,

@@ -27,6 +27,8 @@ export async function processRecurringTasks(): Promise<number> {
       groupTask: true,
       minRequired: true,
       createdById: true,
+      assigneeId: true,
+      assignee: { select: { status: true } },
       dueDate: true,
     },
   });

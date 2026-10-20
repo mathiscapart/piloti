@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Archive,
+  ArchiveRestore,
   CheckCircle2,
   Clock,
   Droplets,
@@ -70,7 +71,7 @@ const ACTION_ICON: Record<string, LucideIcon> = {
   EQUIPMENT_CREATED: Package,
   EQUIPMENT_UPDATED: Pencil,
   EQUIPMENT_ARCHIVED: Archive,
-  EQUIPMENT_RESTORED: Archive,
+  EQUIPMENT_RESTORED: ArchiveRestore,
   EQUIPMENT_STATUS_CHANGED: Pencil,
   LOAN_CREATED: Truck,
   LOAN_RETURNED: Truck,

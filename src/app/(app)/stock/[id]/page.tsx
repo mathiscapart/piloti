@@ -193,12 +193,14 @@ export default async function EquipmentDetailPage({
         </section>
       ) : null}
 
-      {/* US-15 — identification NFC */}
-      <NfcSection
-        equipmentId={eq.id}
-        nfcUid={eq.nfcUid}
-        resolverBaseUrl={process.env.BETTER_AUTH_URL ?? ""}
-      />
+      {/* US-15 — identification NFC (masquée si archivé : lecture seule, #110) */}
+      {!eq.archived ? (
+        <NfcSection
+          equipmentId={eq.id}
+          nfcUid={eq.nfcUid}
+          resolverBaseUrl={process.env.BETTER_AUTH_URL ?? ""}
+        />
+      ) : null}
 
       {/* Tabs */}
       <section>
@@ -342,13 +344,7 @@ export default async function EquipmentDetailPage({
         <div className="mx-auto flex max-w-4xl gap-2">
           {/* Issue #110 — article archivé : fiche en lecture seule. */}
           {eq.archived ? (
-            can(user, "equipment.archive") ? (
-              <RestoreButton id={eq.id} />
-            ) : (
-              <p className="flex-1 text-center text-sm text-trail">
-                Article archivé : consultation seule.
-              </p>
-            )
+            <ArchivedFooter id={eq.id} canRestore={can(user, "equipment.archive")} />
           ) : (
             <>
               <Button asChild className="flex-1">
@@ -418,5 +414,14 @@ function LoanStatusBadge({ status }: { status: string }) {
     >
       {c.label}
     </span>
+  );
+}
+
+function ArchivedFooter({ id, canRestore }: { id: string; canRestore: boolean }) {
+  if (canRestore) return <RestoreButton id={id} />;
+  return (
+    <p className="flex-1 text-center text-sm text-trail">
+      Article archivé : consultation seule.
+    </p>
   );
 }

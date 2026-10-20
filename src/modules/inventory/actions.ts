@@ -6,13 +6,18 @@ import type { z } from "zod";
 
 import { withAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { parseAndValidate } from "@/lib/import-equipment";
 import { can } from "@/lib/permissions";
 
 import type { ActionResult } from "@/lib/types";
 
-import { archiveRefusal, updateRefusal } from "./archive";
+import {
+  ACTIVE_LOAN_ARCHIVE_ERROR,
+  restoreRefusal,
+  updateRefusal,
+} from "./archive";
 import { equipmentInputSchema } from "./types";
 
 // US-17 — un article d'une catégorie pesable est géré à l'unité : quantité = 1
@@ -95,10 +100,7 @@ export async function updateEquipment(
     return { error: "Vous n'avez pas la permission de modifier ce matériel." };
   }
 
-  // Issue #110 — un article archivé est en lecture seule.
-  const refusal = updateRefusal(
-    await db.equipment.findUnique({ where: { id }, select: { archived: true } }),
-  );
+  const refusal = await readOnlyRefusal(id);
   if (refusal) return { error: refusal };
 
   const parsed = equipmentInputSchema.safeParse(Object.fromEntries(formData));
@@ -136,6 +138,9 @@ export async function setEquipmentNfc(
     return { error: "Vous n'avez pas la permission de modifier ce matériel." };
   }
 
+  const refusal = await readOnlyRefusal(id);
+  if (refusal) return { error: refusal };
+
   const cleanUid = uid.trim();
   if (!cleanUid) return { error: "UID NFC vide." };
 
@@ -167,6 +172,9 @@ export async function clearEquipmentNfc(id: string): Promise<ActionResult> {
   if (!can(user, "equipment.update")) {
     return { error: "Vous n'avez pas la permission de modifier ce matériel." };
   }
+
+  const refusal = await readOnlyRefusal(id);
+  if (refusal) return { error: refusal };
 
   await withAudit(
     (tx) => tx.equipment.update({ where: { id }, data: { nfcUid: null } }),
@@ -268,12 +276,10 @@ export async function archiveEquipment(id: string): Promise<ActionResult> {
   }
 
   // Issue #110 — un prêt en cours ne doit pas pointer vers un article masqué.
-  const loans = await db.loan.findMany({
-    where: { equipmentId: id },
-    select: { status: true },
+  const activeLoans = await db.loan.count({
+    where: { equipmentId: id, status: { in: [...ACTIVE_LOAN_STATUSES] } },
   });
-  const refusal = archiveRefusal(loans.map((l) => l.status));
-  if (refusal) return { error: refusal };
+  if (activeLoans > 0) return { error: ACTIVE_LOAN_ARCHIVE_ERROR };
 
   await withAudit(
     (tx) => tx.equipment.update({ where: { id }, data: { archived: true } }),
@@ -298,23 +304,37 @@ export async function restoreEquipment(id: string): Promise<ActionResult> {
 
   const eq = await db.equipment.findUnique({
     where: { id },
-    select: { archived: true },
+    select: { archived: true, category: true },
   });
   if (!eq) return { error: "Article introuvable." };
-
   // Déjà restauré (fiche obsolète) : on recharge simplement la fiche.
-  if (eq.archived) {
-    await withAudit(
-      (tx) => tx.equipment.update({ where: { id }, data: { archived: false } }),
-      {
-        action: "EQUIPMENT_RESTORED",
-        userId: user.id,
-        equipmentId: id,
-      },
-    );
-  }
+  if (!eq.archived) redirect(`/stock/${id}`);
+
+  const refusal = restoreRefusal(
+    await db.category.findUnique({
+      where: { slug: eq.category },
+      select: { archived: true, label: true },
+    }),
+  );
+  if (refusal) return { error: refusal };
+
+  await withAudit(
+    (tx) => tx.equipment.update({ where: { id }, data: { archived: false } }),
+    {
+      action: "EQUIPMENT_RESTORED",
+      userId: user.id,
+      equipmentId: id,
+    },
+  );
 
   revalidatePath("/stock");
   revalidatePath(`/stock/${id}`);
   redirect(`/stock/${id}?notice=equipment-restored`);
+}
+
+// Issue #110 — un article archivé est en lecture seule.
+async function readOnlyRefusal(id: string): Promise<string | null> {
+  return updateRefusal(
+    await db.equipment.findUnique({ where: { id }, select: { archived: true } }),
+  );
 }

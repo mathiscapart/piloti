@@ -9,6 +9,7 @@ import { withAudit } from "@/lib/audit";
 import { can } from "@/lib/permissions";
 
 import type { ActionResult } from "@/lib/types";
+import { updateRefusal } from "./archive";
 import { createIncidentSchema, resolveIncidentSchema } from "./types";
 
 export async function createIncident(
@@ -31,6 +32,15 @@ export async function createIncident(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Données invalides." };
   }
+
+  // Issue #110 — pas d'incident sur un article archivé (lecture seule).
+  const refusal = updateRefusal(
+    await db.equipment.findUnique({
+      where: { id: parsed.data.equipmentId },
+      select: { archived: true },
+    }),
+  );
+  if (refusal) return { error: refusal };
 
   await withAudit(
     (tx) =>

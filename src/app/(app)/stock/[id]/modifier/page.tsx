@@ -1,12 +1,11 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { EquipmentForm } from "@/components/equipment/EquipmentForm";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { updateEquipment } from "@/modules/inventory/actions";
-import { ARCHIVED_READ_ONLY_ERROR } from "@/modules/inventory/archive";
 import { listCategories } from "@/modules/inventory/queries";
 import { db } from "@/lib/db";
 
@@ -24,6 +23,8 @@ export default async function EditEquipmentPage({ params }: PageProps) {
     listCategories(),
   ]);
   if (!eq) notFound();
+  // Issue #110 — un article archivé n'est pas modifiable : retour à la fiche.
+  if (eq.archived) redirect(`/stock/${id}`);
 
   // Server Action curryfiée avec l'id (Next.js Server Actions bind-friendly)
   const action = updateEquipment.bind(null, id);
@@ -44,31 +45,24 @@ export default async function EditEquipmentPage({ params }: PageProps) {
         </p>
       </header>
 
-      {/* Issue #110 — un article archivé n'est pas modifiable. */}
-      {eq.archived ? (
-        <p className="rounded-2xl bg-sand p-5 text-sm font-bold text-earth">
-          {ARCHIVED_READ_ONLY_ERROR}
-        </p>
-      ) : (
-        <EquipmentForm
-          action={action}
-          categories={categories}
-          initial={{
-            name: eq.name,
-            category: eq.category,
-            totalQty: eq.totalQty,
-            condition: eq.condition,
-            location: eq.location,
-            photo: eq.photo,
-            notes: eq.notes,
-            baseWeightKg: eq.baseWeightKg,
-          }}
-          submitLabel="Enregistrer"
-          pendingLabel="Enregistrement…"
-        />
-      )}
+      <EquipmentForm
+        action={action}
+        categories={categories}
+        initial={{
+          name: eq.name,
+          category: eq.category,
+          totalQty: eq.totalQty,
+          condition: eq.condition,
+          location: eq.location,
+          photo: eq.photo,
+          notes: eq.notes,
+          baseWeightKg: eq.baseWeightKg,
+        }}
+        submitLabel="Enregistrer"
+        pendingLabel="Enregistrement…"
+      />
 
-      {can(user, "equipment.archive") && !eq.archived ? (
+      {can(user, "equipment.archive") ? (
         <section className="space-y-2 rounded-2xl border border-brick/30 bg-brick-soft/30 p-5">
           <h2 className="font-bold text-brick-ink">Zone administrateur</h2>
           <p className="text-sm text-earth">

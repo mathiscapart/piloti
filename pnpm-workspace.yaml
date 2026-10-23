@@ -6,12 +6,13 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
-# SEC — Next tire `sharp` en dépendance optionnelle (optimiseur d'images) et
-# reste sur une 0.34.x vulnérable (GHSA-f88m-g3jw-g9cj, décodeurs GIF/TIFF/VIPS).
-# Notre dépendance directe est déjà en 0.35.x : cet override aligne aussi la
-# copie transitive, sinon deux versions coexistent et la faille reste servie.
+# SEC — Next tire `sharp` en dépendance optionnelle (optimiseur d'images). À
+# l'origine, il restait sur une 0.34.x vulnérable (GHSA-f88m-g3jw-g9cj) et cet
+# override alignait la copie transitive sur notre dépendance directe. Depuis
+# next 16.4.2 (`^0.35.5`), ce n'est plus nécessaire : l'override reste comme
+# plancher défensif, relevé à 0.35.5 pour GHSA-wq5f-xc86-pv6w (librsvg).
 overrides:
-  sharp: '>=0.35.0'
+  sharp: '>=0.35.5'
   # Avis `pnpm audit` restants, tous transitifs (chaîne ESLint, outillage de
   # build, serveur de dev Prisma). Aucun n'est atteignable depuis l'application
   # déployée, mais on aligne quand même pour garder l'audit lisible : un rapport
@@ -20,8 +21,8 @@ overrides:
   # `brace-expansion` vit en deux lignes majeures incompatibles (1.x et 5.x)
   # selon le consommateur — d'où deux clés ciblées plutôt qu'un `>=` global qui
   # basculerait les consommateurs de la 1.x vers une API différente.
-  'brace-expansion@1': '^1.1.18'
-  'brace-expansion@5': '^5.0.9'
+  'brace-expansion@1': '^1.1.21'
+  'brace-expansion@5': '^5.0.12'
   js-yaml: '^4.3.1'
   nanoid: '^3.3.18'
   postcss: '^8.5.18'

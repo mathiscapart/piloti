@@ -117,13 +117,6 @@ jobs:
       - name: Installation des dépendances
         run: pnpm install --frozen-lockfile
 
-      # Politique : bloquant uniquement sur "critical". Au moment d'écrire ce
-      # workflow, un `pnpm audit` complet remonte 18 vulnérabilités (2 low /
-      # 11 moderate / 5 high), toutes dans des dépendances transitives d'outils
-      # de build (chaîne ESLint, `@prisma/dev` embarqué par `prisma`) sans
-      # correctif amont disponible aujourd'hui et sans exposition en
-      # production (dev/build only). Faire échouer la CI dessus serait rouge
-      # en permanence pour un risque non actionnable — contre-productif.
       - name: "Audit des dépendances — bloquant (critical)"
         run: pnpm audit --audit-level=critical
 

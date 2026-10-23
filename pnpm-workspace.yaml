@@ -6,11 +6,11 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
 
-# SEC — Next tire `sharp` en dépendance optionnelle (optimiseur d'images) et
-# reste sur une 0.34.x vulnérable (GHSA-f88m-g3jw-g9cj, décodeurs GIF/TIFF/VIPS).
-# Notre dépendance directe est déjà en 0.35.x : cet override aligne aussi la
-# copie transitive, sinon deux versions coexistent et la faille reste servie.
-# Plancher relevé à 0.35.5 pour GHSA-wq5f-xc86-pv6w (librsvg).
+# SEC — Next tire `sharp` en dépendance optionnelle (optimiseur d'images). À
+# l'origine, il restait sur une 0.34.x vulnérable (GHSA-f88m-g3jw-g9cj) et cet
+# override alignait la copie transitive sur notre dépendance directe. Depuis
+# next 16.4.2 (`^0.35.5`), ce n'est plus nécessaire : l'override reste comme
+# plancher défensif, relevé à 0.35.5 pour GHSA-wq5f-xc86-pv6w (librsvg).
 overrides:
   sharp: '>=0.35.5'
   # Avis `pnpm audit` restants, tous transitifs (chaîne ESLint, outillage de

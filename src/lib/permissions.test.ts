@@ -578,6 +578,7 @@ describe("RESPONSABLE_GROUPE — écriture sur tout le groupe (#173)", () => {
     "user.email.set",
     "user.delete",
     "message.edit_any",
+    "equipment.archived.view",
   ];
 
   it.each(ACTIONS.filter((a) => !FERMEES.includes(a)))("autorise %s", (action) => {
@@ -752,6 +753,27 @@ describe("can — user.password.set / user.email.set / user.delete (ADMIN seul)"
     for (const role of ["RESPONSABLE_GROUPE", "SECRETAIRE"]) {
       expect(can({ role, roles: [role], status: "ACTIVE" }, "user.manage")).toBe(true);
     }
+  });
+});
+
+// #110 — lister les articles archivés (filtre « Archivés » de /stock) : ADMIN
+// seul, ni le RG ni le responsable matériel.
+describe("can — equipment.archived.view (ADMIN seul)", () => {
+  it("est une action déclarée de la matrice", () => {
+    expect(ACTIONS).toContain("equipment.archived.view");
+  });
+
+  it("ADMIN seul, y compris face au cumul de rôles inventaire", () => {
+    expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "equipment.archived.view")).toBe(true);
+    for (const role of ["RESPONSABLE_GROUPE", "RESPONSABLE_MATERIEL", "CHEF", "TRESORIER", "SECRETAIRE", "PARENT", "SCOUT"]) {
+      expect(can({ role, roles: [role], status: "ACTIVE" }, "equipment.archived.view")).toBe(false);
+    }
+    expect(
+      can(
+        { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE", "RESPONSABLE_MATERIEL", "CHEF"], status: "ACTIVE" },
+        "equipment.archived.view",
+      ),
+    ).toBe(false);
   });
 });
 

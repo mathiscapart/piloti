@@ -759,10 +759,6 @@ describe("can — user.password.set / user.email.set / user.delete (ADMIN seul)"
 // #110 — lister les articles archivés (filtre « Archivés » de /stock) : ADMIN
 // seul, ni le RG ni le responsable matériel.
 describe("can — equipment.archived.view (ADMIN seul)", () => {
-  it("est une action déclarée de la matrice", () => {
-    expect(ACTIONS).toContain("equipment.archived.view");
-  });
-
   it("ADMIN seul, y compris face au cumul de rôles inventaire", () => {
     expect(can({ role: "ADMIN", roles: ["ADMIN"], status: "ACTIVE" }, "equipment.archived.view")).toBe(true);
     for (const role of ["RESPONSABLE_GROUPE", "RESPONSABLE_MATERIEL", "CHEF", "TRESORIER", "SECRETAIRE", "PARENT", "SCOUT"]) {

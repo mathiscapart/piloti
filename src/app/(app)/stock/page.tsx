@@ -120,12 +120,16 @@ export default async function StockPage({ searchParams }: PageProps) {
             hasChildren={root.children.length > 0}
           />
         ))}
+        {/* Filtre à part (se cumule avec la catégorie), d'où le séparateur. */}
         {can(user, "equipment.archived.view") ? (
-          <CategoryChip
-            href={buildHref(cat ?? null, !archived)}
-            active={archived}
-            label="Archivés"
-          />
+          <>
+            <span aria-hidden className="w-px shrink-0 self-stretch bg-stone" />
+            <CategoryChip
+              href={buildHref(cat ?? null, !archived)}
+              active={archived}
+              label="Archivés"
+            />
+          </>
         ) : null}
       </nav>
 

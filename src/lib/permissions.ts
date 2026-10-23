@@ -152,7 +152,7 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "equipment.create": [CHEF, RG, MAT],
   "equipment.update": [CHEF, RG, MAT],
   "equipment.archive": [CHEF, RG, MAT],
-  "equipment.archived.view": [], // ADMIN only, RG et MAT compris (#110)
+  "equipment.archived.view": [],
   "equipment.status.change": [CHEF, RG, MAT],
   "category.manage": [CHEF, RG, MAT],
   // Prêts — TRESORIER voit les prêts ; CHEF/RG/MAT gèrent.

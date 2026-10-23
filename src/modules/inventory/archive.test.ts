@@ -74,16 +74,10 @@ describe("showArchived", () => {
     expect(showArchived(user("ADMIN"), value)).toBe(false);
   });
 
-  it.each(["RESPONSABLE_GROUPE", "RESPONSABLE_MATERIEL", "CHEF", "TRESORIER", "SECRETAIRE", "PARENT", "SCOUT"])(
-    "%s + archived=1 → paramètre ignoré",
-    (role) => {
-      expect(showArchived(user(role), "1")).toBe(false);
-    },
-  );
-
-  it("cumul de rôles non-admin (RG + MAT + CHEF) → ignoré", () => {
-    const u = { role: "RESPONSABLE_GROUPE", roles: ["RESPONSABLE_GROUPE", "RESPONSABLE_MATERIEL", "CHEF"], status: "ACTIVE" };
-    expect(showArchived(u, "1")).toBe(false);
+  // La matrice (permissions.test.ts) couvre chaque rôle ; ici, le paramètre
+  // ne doit rien ouvrir à elle seule.
+  it("non-admin (RG) + archived=1 → paramètre ignoré", () => {
+    expect(showArchived(user("RESPONSABLE_GROUPE"), "1")).toBe(false);
   });
 
   it("ADMIN suspendu → ignoré", () => {

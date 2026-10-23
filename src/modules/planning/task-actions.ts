@@ -106,6 +106,7 @@ export async function toggleTask(taskId: string): Promise<ActionResult> {
       id: true,
       done: true,
       assigneeId: true,
+      assignee: { select: { status: true } },
       title: true,
       recurrence: true,
       recurrenceEvery: true,

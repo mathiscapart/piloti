@@ -26,7 +26,10 @@ export function advanceDate(
 }
 
 // Données de l'occurrence suivante d'une tâche récurrente (échéance avancée,
-// statut/inscriptions remis à zéro). Partagé par la coche et le scheduler.
+// statut/inscriptions remis à zéro). Le responsable n'est conservé que s'il est
+// ACTIVE (#113) : suspendu, anonymisé ou tout autre statut, il n'est pas
+// reconduit (décision PR #191).
+// Partagé par la coche et le scheduler.
 export function nextOccurrenceData(task: {
   title: string;
   recurrence: string;
@@ -34,6 +37,8 @@ export function nextOccurrenceData(task: {
   groupTask: boolean;
   minRequired: number;
   createdById: string | null;
+  assigneeId: string | null;
+  assignee: { status: string } | null;
   dueDate: Date | null;
 }) {
   return {
@@ -43,6 +48,7 @@ export function nextOccurrenceData(task: {
     groupTask: task.groupTask,
     minRequired: task.minRequired,
     createdById: task.createdById,
+    assigneeId: task.assignee?.status === "ACTIVE" ? task.assigneeId : null,
     dueDate: task.dueDate
       ? advanceDate(task.dueDate, task.recurrence as Recurrence, task.recurrenceEvery)
       : null,

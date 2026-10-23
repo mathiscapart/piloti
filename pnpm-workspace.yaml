@@ -10,8 +10,9 @@ allowBuilds:
 # reste sur une 0.34.x vulnérable (GHSA-f88m-g3jw-g9cj, décodeurs GIF/TIFF/VIPS).
 # Notre dépendance directe est déjà en 0.35.x : cet override aligne aussi la
 # copie transitive, sinon deux versions coexistent et la faille reste servie.
+# Plancher relevé à 0.35.5 pour GHSA-wq5f-xc86-pv6w (librsvg).
 overrides:
-  sharp: '>=0.35.0'
+  sharp: '>=0.35.5'
   # Avis `pnpm audit` restants, tous transitifs (chaîne ESLint, outillage de
   # build, serveur de dev Prisma). Aucun n'est atteignable depuis l'application
   # déployée, mais on aligne quand même pour garder l'audit lisible : un rapport

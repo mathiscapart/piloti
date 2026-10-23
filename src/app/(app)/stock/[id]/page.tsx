@@ -23,9 +23,12 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { formatInstant, formatWall } from "@/lib/datetime";
+import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { getEquipmentDetail, listCategories } from "@/modules/inventory/queries";
 import { CONDITION_LABEL } from "@/modules/inventory/types";
+
+import { RestoreButton } from "./restore-button";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -36,7 +39,7 @@ export default async function EquipmentDetailPage({
   params,
   searchParams,
 }: PageProps) {
-  await requireCan("equipment.view");
+  const user = await requireCan("equipment.view");
   const { id } = await params;
   // Issue #107 — le lien « Voir l'incident » du wizard de prêt ouvre cet onglet.
   const { tab } = await searchParams;
@@ -190,12 +193,14 @@ export default async function EquipmentDetailPage({
         </section>
       ) : null}
 
-      {/* US-15 — identification NFC */}
-      <NfcSection
-        equipmentId={eq.id}
-        nfcUid={eq.nfcUid}
-        resolverBaseUrl={process.env.BETTER_AUTH_URL ?? ""}
-      />
+      {/* US-15 — identification NFC (masquée si archivé : lecture seule, #110) */}
+      {!eq.archived ? (
+        <NfcSection
+          equipmentId={eq.id}
+          nfcUid={eq.nfcUid}
+          resolverBaseUrl={process.env.BETTER_AUTH_URL ?? ""}
+        />
+      ) : null}
 
       {/* Tabs */}
       <section>
@@ -337,24 +342,31 @@ export default async function EquipmentDetailPage({
           que calc() reste un CSS valide (sans espaces, le browser ignore). */}
       <div className="fixed inset-x-0 bottom-[calc(4rem_+_env(safe-area-inset-bottom))] z-20 border-t border-stone/60 bg-snow p-3 md:bottom-0 md:left-64">
         <div className="mx-auto flex max-w-4xl gap-2">
-          <Button asChild className="flex-1">
-            <Link href={`/prets/nouveau?equipmentId=${eq.id}`}>
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Enregistrer un </span>prêt
-            </Link>
-          </Button>
-          <Button asChild variant="destructive" className="flex-1">
-            <Link href={`/incidents/nouveau?equipmentId=${eq.id}`}>
-              <AlertTriangle className="size-4" />
-              <span className="hidden sm:inline">Signaler </span>incident
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="flex-1">
-            <Link href={`/stock/${eq.id}/modifier`}>
-              <Pencil className="size-4" />
-              Modifier
-            </Link>
-          </Button>
+          {/* Issue #110 — article archivé : fiche en lecture seule. */}
+          {eq.archived ? (
+            <ArchivedFooter id={eq.id} canRestore={can(user, "equipment.archive")} />
+          ) : (
+            <>
+              <Button asChild className="flex-1">
+                <Link href={`/prets/nouveau?equipmentId=${eq.id}`}>
+                  <Plus className="size-4" />
+                  <span className="hidden sm:inline">Enregistrer un </span>prêt
+                </Link>
+              </Button>
+              <Button asChild variant="destructive" className="flex-1">
+                <Link href={`/incidents/nouveau?equipmentId=${eq.id}`}>
+                  <AlertTriangle className="size-4" />
+                  <span className="hidden sm:inline">Signaler </span>incident
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="flex-1">
+                <Link href={`/stock/${eq.id}/modifier`}>
+                  <Pencil className="size-4" />
+                  Modifier
+                </Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -402,5 +414,14 @@ function LoanStatusBadge({ status }: { status: string }) {
     >
       {c.label}
     </span>
+  );
+}
+
+function ArchivedFooter({ id, canRestore }: { id: string; canRestore: boolean }) {
+  if (canRestore) return <RestoreButton id={id} />;
+  return (
+    <p className="flex-1 text-center text-sm text-trail">
+      Article archivé : consultation seule.
+    </p>
   );
 }

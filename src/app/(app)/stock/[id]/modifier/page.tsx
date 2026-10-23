@@ -1,6 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { EquipmentForm } from "@/components/equipment/EquipmentForm";
 import { can } from "@/lib/permissions";
@@ -23,6 +23,8 @@ export default async function EditEquipmentPage({ params }: PageProps) {
     listCategories(),
   ]);
   if (!eq) notFound();
+  // Issue #110 — un article archivé n'est pas modifiable : retour à la fiche.
+  if (eq.archived) redirect(`/stock/${id}`);
 
   // Server Action curryfiée avec l'id (Next.js Server Actions bind-friendly)
   const action = updateEquipment.bind(null, id);
@@ -60,7 +62,7 @@ export default async function EditEquipmentPage({ params }: PageProps) {
         pendingLabel="Enregistrement…"
       />
 
-      {can(user, "equipment.archive") && !eq.archived ? (
+      {can(user, "equipment.archive") ? (
         <section className="space-y-2 rounded-2xl border border-brick/30 bg-brick-soft/30 p-5">
           <h2 className="font-bold text-brick-ink">Zone administrateur</h2>
           <p className="text-sm text-earth">

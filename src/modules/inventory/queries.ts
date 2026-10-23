@@ -78,11 +78,13 @@ export interface ListEquipmentOpts {
   search?: string;
   category?: string;
   includeArchived?: boolean;
+  archivedOnly?: boolean; // #110 — filtre « Archivés » (gardé par l'appelant)
 }
 
 export async function listEquipment(opts: ListEquipmentOpts = {}) {
   const where: Prisma.EquipmentWhereInput = {};
-  if (!opts.includeArchived) where.archived = false;
+  if (opts.archivedOnly) where.archived = true;
+  else if (!opts.includeArchived) where.archived = false;
   if (opts.search && opts.search.trim().length > 0) {
     where.name = { contains: opts.search.trim() };
   }

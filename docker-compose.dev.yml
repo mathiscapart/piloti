@@ -60,6 +60,29 @@ services:
     # règle Host) → traefik invalide tout et renvoie 404 sur la prod.
     labels: !reset null
 
+  # Jeu de données de démo dans ./dev.db. Le seed EFFACE la base avant de la
+  # remplir : il ne démarre donc jamais avec `up` (profil), on le lance à la
+  # demande, au premier plan pour lire le mot de passe affiché en fin de seed :
+  #   docker compose -f docker-compose.dev.yml --env-file .env.dev run --rm seed
+  seed:
+    profiles: ["seed"]
+    image: piloti:dev
+    build:
+      target: dev
+      args:
+        NODE_IMAGE_TAG: ${NODE_IMAGE_TAG:?NODE_IMAGE_TAG manquant (voir .env.example)}
+    environment:
+      DATABASE_URL: file:/app/dev.db
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-dev-secret-32-chars-minimum-aaaaaa}
+      # Sans valeur : transmis seulement s'il est défini (.env.dev ou shell),
+      # sinon le seed génère un mot de passe aléatoire et l'affiche.
+      SEED_PASSWORD:
+    volumes:
+      - ./:/app
+      - /app/node_modules
+    # Migrations d'abord : sur un ./dev.db neuf, les tables n'existent pas encore.
+    command: ["sh", "-c", "pnpm prisma generate && pnpm prisma migrate deploy && pnpm db:seed"]
+
   traefik:
     profiles: ["never"]
 

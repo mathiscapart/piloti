@@ -37,6 +37,7 @@ export const ACTIONS = [
   "equipment.create",
   "equipment.update",
   "equipment.archive",
+  "equipment.archived.view", // #110 — filtre « Archivés » de /stock (ADMIN seul)
   "equipment.status.change",
   "category.manage",
   // Prêts
@@ -136,8 +137,8 @@ const ANY_ACTIVE = new Set<Action>([
 // Pour chaque action, les rôles (hors ADMIN, superutilisateur) qui l'autorisent.
 // Une action absente / à liste vide = réservée à l'ADMIN.
 // RG (#173) : présent sur toutes les actions sauf `admin.access`,
-// `user.password.set`, `user.delete`, `message.edit_any`, `pedago.manage` et
-// `pedago.referential`.
+// `user.password.set`, `user.delete`, `message.edit_any`, `pedago.manage`,
+// `pedago.referential` et `equipment.archived.view`.
 const CHEF = "CHEF";
 const RG = "RESPONSABLE_GROUPE";
 const MAT = "RESPONSABLE_MATERIEL";
@@ -151,6 +152,7 @@ const PERMISSIONS: Record<Action, Role[]> = {
   "equipment.create": [CHEF, RG, MAT],
   "equipment.update": [CHEF, RG, MAT],
   "equipment.archive": [CHEF, RG, MAT],
+  "equipment.archived.view": [],
   "equipment.status.change": [CHEF, RG, MAT],
   "category.manage": [CHEF, RG, MAT],
   // Prêts — TRESORIER voit les prêts ; CHEF/RG/MAT gèrent.

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { instantToWall, wallNow, wallToInstant } from "@/lib/datetime";
 import { db } from "@/lib/db";
 
 // US-F08 — tableau de bord financier (année civile).
@@ -8,6 +9,8 @@ import { db } from "@/lib/db";
 // PAS d'un solde bancaire réel — cf. US-F10 caisses).
 
 export async function getFinancialDashboard(year: number) {
+  // paidAt est une date murale (saisie) : bornes murales. reimbursedAt est un
+  // instant réel : l'année commence le 1er janvier 00:00 à Paris.
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
 
@@ -17,7 +20,7 @@ export async function getFinancialDashboard(year: number) {
       select: { amountCents: true, paidAt: true },
     }),
     db.expense.findMany({
-      where: { status: "REIMBURSED", reimbursedAt: { gte: start, lt: end } },
+      where: { status: "REIMBURSED", reimbursedAt: { gte: wallToInstant(start), lt: wallToInstant(end) } },
       select: { amountCents: true, reimbursedAt: true, category: true },
     }),
   ]);
@@ -42,7 +45,9 @@ export async function getFinancialDashboard(year: number) {
   }));
   for (const p of payments) byMonth[p.paidAt.getUTCMonth()].inCents += p.amountCents;
   for (const e of reimbursed) {
-    if (e.reimbursedAt) byMonth[e.reimbursedAt.getUTCMonth()].outCents += e.amountCents;
+    if (e.reimbursedAt) {
+      byMonth[instantToWall(e.reimbursedAt).getUTCMonth()].outCents += e.amountCents;
+    }
   }
 
   return {
@@ -69,10 +74,11 @@ export async function getFinancialYears(): Promise<number[]> {
       select: { reimbursedAt: true },
     }),
   ]);
-  const now = new Date().getUTCFullYear();
-  const candidates = [firstPayment?.paidAt, firstExpense?.reimbursedAt]
-    .filter((d): d is Date => d != null)
-    .map((d) => d.getUTCFullYear());
+  const now = wallNow().getUTCFullYear(); // année en cours à Paris
+  const candidates = [
+    firstPayment?.paidAt.getUTCFullYear(),
+    firstExpense?.reimbursedAt && instantToWall(firstExpense.reimbursedAt).getUTCFullYear(),
+  ].filter((y): y is number => y != null);
   const earliest = candidates.length > 0 ? Math.min(...candidates) : now;
   const years: number[] = [];
   for (let y = now; y >= earliest; y--) years.push(y);

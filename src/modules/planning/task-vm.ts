@@ -1,3 +1,4 @@
+import { formatWall, wallNow } from "@/lib/datetime";
 import { RECURRENCE_LABEL, type Recurrence } from "@/lib/enums";
 
 import type { TaskListItem } from "./tasks";
@@ -23,17 +24,12 @@ export interface TaskVM {
   covered: boolean;
 }
 
-const DUE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  timeZone: "UTC",
-});
-
 export function buildTaskVMs(
   tasks: TaskListItem[],
   opts: { userId: string; canManage: boolean },
 ): TaskVM[] {
-  const now = new Date();
+  // Échéance murale : « aujourd'hui » est le jour de Paris, pas celui d'UTC.
+  const now = wallNow();
   const todayUtc = Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
@@ -50,7 +46,7 @@ export function buildTaskVMs(
       assigneeFirst: t.assignee?.firstName ?? null,
       assigneeLast: t.assignee?.lastName ?? null,
       assigneeImage: t.assignee?.image ?? null,
-      dueLabel: t.dueDate ? DUE_FMT.format(t.dueDate) : null,
+      dueLabel: t.dueDate ? formatWall(t.dueDate, "dayMonth") : null,
       overdue: !t.done && t.dueDate ? t.dueDate.getTime() < todayUtc : false,
       canToggle:
         opts.canManage ||

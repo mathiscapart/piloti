@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 
+import { formatWall, wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
@@ -90,7 +91,7 @@ export async function createLoan(
   });
   const byId = new Map(equipments.map((eq) => [eq.id, eq]));
   const start = parsed.data.startDate;
-  const now = new Date();
+  const now = wallNow(); // dates de prêt murales (saisies, minuit UTC)
 
   for (const item of parsed.data.items) {
     const eq = byId.get(item.equipmentId);
@@ -191,8 +192,7 @@ export async function createLoan(
         .map((i) => byId.get(i.equipmentId)?.name)
         .filter(Boolean)
         .join(", ");
-      const fmt = (d: Date) =>
-        d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+      const fmt = (d: Date) => formatWall(d, "dayMonthNumeric");
       const context = `${names} · du ${fmt(parsed.data.startDate)} au ${fmt(parsed.data.expectedReturn)}`;
       const options = [
         "Amener le matériel",

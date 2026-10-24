@@ -6,6 +6,7 @@ import { after } from "next/server";
 import type { ZodError } from "zod";
 
 import { withAudit } from "@/lib/audit";
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { notificationEmailHtml, sendEmail } from "@/lib/email";
 import { RSVP_LABEL, RSVP_RESPONSES, type RsvpResponse } from "@/lib/enums";
@@ -363,7 +364,7 @@ export async function rsvpEvent(
   if (!event.registrationOpen) {
     return { error: "Les inscriptions ne sont pas ouvertes pour cet événement." };
   }
-  if (event.registrationDeadline && event.registrationDeadline < new Date()) {
+  if (event.registrationDeadline && event.registrationDeadline < wallNow()) {
     return { error: "La date limite d'inscription est dépassée." };
   }
 

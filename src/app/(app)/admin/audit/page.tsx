@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Archive,
+  ArchiveRestore,
   CheckCircle2,
   Clock,
   Droplets,
@@ -19,6 +20,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatInstant } from "@/lib/datetime";
 import { requireCan } from "@/lib/require-can";
 import { cn } from "@/lib/utils";
 import {
@@ -26,15 +28,6 @@ import {
   listAuditLog,
   listAuditUsers,
 } from "@/modules/admin/queries";
-
-const DATETIME_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
 
 const ACTION_LABEL: Record<string, string> = {
   USER_REGISTERED: "Inscription",
@@ -49,6 +42,7 @@ const ACTION_LABEL: Record<string, string> = {
   EQUIPMENT_CREATED: "Article créé",
   EQUIPMENT_UPDATED: "Article modifié",
   EQUIPMENT_ARCHIVED: "Article archivé",
+  EQUIPMENT_RESTORED: "Article restauré",
   EQUIPMENT_STATUS_CHANGED: "État article changé",
   LOAN_CREATED: "Prêt créé",
   LOAN_RETURNED: "Prêt retourné",
@@ -77,6 +71,7 @@ const ACTION_ICON: Record<string, LucideIcon> = {
   EQUIPMENT_CREATED: Package,
   EQUIPMENT_UPDATED: Pencil,
   EQUIPMENT_ARCHIVED: Archive,
+  EQUIPMENT_RESTORED: ArchiveRestore,
   EQUIPMENT_STATUS_CHANGED: Pencil,
   LOAN_CREATED: Truck,
   LOAN_RETURNED: Truck,
@@ -97,6 +92,7 @@ const ACTION_TONE: Record<string, string> = {
   EQUIPMENT_CREATED: "bg-forest-soft text-forest-ink",
   EQUIPMENT_UPDATED: "bg-sand text-earth",
   EQUIPMENT_ARCHIVED: "bg-stone text-earth",
+  EQUIPMENT_RESTORED: "bg-forest-soft text-forest-ink",
   EQUIPMENT_STATUS_CHANGED: "bg-fire-soft text-fire-ink",
   LOAN_CREATED: "bg-sky-soft text-sky-ink",
   LOAN_RETURNED: "bg-forest-soft text-forest-ink",
@@ -235,7 +231,7 @@ export default async function AdminAuditPage({ searchParams }: PageProps) {
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
                     <p className="font-bold text-earth">{label}</p>
                     <time className="text-xs text-trail">
-                      {DATETIME_FMT.format(it.createdAt)}
+                      {formatInstant(it.createdAt, "dateTime")}
                     </time>
                   </div>
                   <p className="text-sm text-trail">

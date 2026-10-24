@@ -16,6 +16,7 @@ import { MyChildren } from "@/components/dashboard/MyChildren";
 import { NextEventCard } from "@/components/dashboard/NextEventCard";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { formatWall, wallNow } from "@/lib/datetime";
 import { ROLE_LABEL, type Role } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
@@ -30,13 +31,9 @@ import { buildTaskVMs } from "@/modules/planning/task-vm";
 
 import { TaskList } from "../planning/taches/TaskList";
 
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "long",
-});
-
 function daysOverdue(expectedReturn: Date): number {
-  const ms = Date.now() - expectedReturn.getTime();
+  // Date de retour murale (saisie, minuit UTC) : comparée à wallNow().
+  const ms = wallNow().getTime() - expectedReturn.getTime();
   return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
 }
 
@@ -245,7 +242,7 @@ export default async function DashboardPage() {
                         {loan.eventName ? ` · ${loan.eventName}` : ""}
                       </p>
                       <p className="mt-1 text-sm font-bold text-brick">
-                        Retour prévu le {DATE_FMT.format(loan.expectedReturn)}
+                        Retour prévu le {formatWall(loan.expectedReturn, "dayMonthLong")}
                         {days > 0 ? ` · ${days} j de retard` : ""}
                       </p>
                     </div>

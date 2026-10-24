@@ -1,5 +1,6 @@
 import "server-only";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import type { PaymentStatus } from "@/lib/enums";
 
@@ -116,7 +117,7 @@ export async function getCampaignDetail(id: string) {
   // US-F01 — montant attendu par jeune (tarif différencié × tranche QF).
   const tiers = computeTiers(campaign, jeuneIds, links, socialSet, permilleByUser);
 
-  const late = campaign.deadline != null && campaign.deadline < new Date();
+  const late = campaign.deadline != null && campaign.deadline < wallNow(); // échéance murale (saisie)
 
   const rows = jeunes.map((j) => {
     const paid = paidByUser.get(j.id) ?? 0;

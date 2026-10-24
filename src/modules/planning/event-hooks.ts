@@ -1,11 +1,11 @@
 import "server-only";
 
+import { formatEventRange } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { publishChannelEvent } from "@/lib/realtime";
 import { resolveUnitAudience } from "@/modules/audience/unit-audience";
 import { notifyMany } from "@/modules/notifications/notify";
 
-import { formatEventRange } from "./format";
 import {
   CONSECUTIVE_ABSENCE_THRESHOLD,
   getMemberAttendanceStats,

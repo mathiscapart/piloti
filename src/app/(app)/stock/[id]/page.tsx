@@ -22,23 +22,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { formatInstant, formatWall } from "@/lib/datetime";
+import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
 import { getEquipmentDetail, listCategories } from "@/modules/inventory/queries";
 import { CONDITION_LABEL } from "@/modules/inventory/types";
 
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
-
-const DATETIME_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
+import { RestoreButton } from "./restore-button";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -49,7 +39,7 @@ export default async function EquipmentDetailPage({
   params,
   searchParams,
 }: PageProps) {
-  await requireCan("equipment.view");
+  const user = await requireCan("equipment.view");
   const { id } = await params;
   // Issue #107 — le lien « Voir l'incident » du wizard de prêt ouvre cet onglet.
   const { tab } = await searchParams;
@@ -122,7 +112,7 @@ export default async function EquipmentDetailPage({
           <h1 className="text-2xl font-black text-earth md:text-3xl">{eq.name}</h1>
           <p className="text-xs text-trail">
             ID <code className="font-mono text-earth">{eq.id.slice(-8)}</code>
-            {" · "}créé le {DATE_FMT.format(eq.createdAt)}
+            {" · "}créé le {formatInstant(eq.createdAt, "date")}
             {eq.location ? ` · ${eq.location}` : ""}
           </p>
           {eq.notes ? (
@@ -194,7 +184,7 @@ export default async function EquipmentDetailPage({
                     </p>
                   </div>
                   <time className="text-xs text-trail">
-                    {loan.returnedAt ? DATE_FMT.format(loan.returnedAt) : ""}
+                    {loan.returnedAt ? formatInstant(loan.returnedAt, "date") : ""}
                   </time>
                 </li>
               ))}
@@ -203,12 +193,14 @@ export default async function EquipmentDetailPage({
         </section>
       ) : null}
 
-      {/* US-15 — identification NFC */}
-      <NfcSection
-        equipmentId={eq.id}
-        nfcUid={eq.nfcUid}
-        resolverBaseUrl={process.env.BETTER_AUTH_URL ?? ""}
-      />
+      {/* US-15 — identification NFC (masquée si archivé : lecture seule, #110) */}
+      {!eq.archived ? (
+        <NfcSection
+          equipmentId={eq.id}
+          nfcUid={eq.nfcUid}
+          resolverBaseUrl={process.env.BETTER_AUTH_URL ?? ""}
+        />
+      ) : null}
 
       {/* Tabs */}
       <section>
@@ -244,7 +236,7 @@ export default async function EquipmentDetailPage({
                       </p>
                     </div>
                     <time className="text-xs text-trail">
-                      {DATETIME_FMT.format(log.createdAt)}
+                      {formatInstant(log.createdAt, "dayMonthTime")}
                     </time>
                   </li>
                 ))}
@@ -273,10 +265,10 @@ export default async function EquipmentDetailPage({
                           {loan.eventName ? ` · ${loan.eventName}` : ""}
                         </p>
                         <p className="text-xs text-trail">
-                          {DATE_FMT.format(loan.startDate)} →{" "}
-                          {DATE_FMT.format(loan.expectedReturn)}
+                          {formatWall(loan.startDate, "date")} →{" "}
+                          {formatWall(loan.expectedReturn, "date")}
                           {loan.returnedAt
-                            ? ` · rendu le ${DATE_FMT.format(loan.returnedAt)}`
+                            ? ` · rendu le ${formatInstant(loan.returnedAt, "date")}`
                             : ""}
                         </p>
                       </div>
@@ -296,7 +288,7 @@ export default async function EquipmentDetailPage({
               </div>
               <p className="text-xs text-trail">
                 {CONDITION_LABEL[eq.condition as keyof typeof CONDITION_LABEL] ?? eq.condition} ·
-                dernière mise à jour le {DATE_FMT.format(eq.updatedAt)}
+                dernière mise à jour le {formatInstant(eq.updatedAt, "date")}
               </p>
               <p className="text-xs text-trail">
                 L&apos;historique des changements d&apos;état détaillé arrive en
@@ -332,7 +324,7 @@ export default async function EquipmentDetailPage({
                         ) : null}
                         <p className="text-xs text-trail">
                           Par {inc.reporter.firstName} {inc.reporter.lastName} ·{" "}
-                          {DATETIME_FMT.format(inc.createdAt)}
+                          {formatInstant(inc.createdAt, "dayMonthTime")}
                         </p>
                       </div>
                     </div>
@@ -350,24 +342,31 @@ export default async function EquipmentDetailPage({
           que calc() reste un CSS valide (sans espaces, le browser ignore). */}
       <div className="fixed inset-x-0 bottom-[calc(4rem_+_env(safe-area-inset-bottom))] z-20 border-t border-stone/60 bg-snow p-3 md:bottom-0 md:left-64">
         <div className="mx-auto flex max-w-4xl gap-2">
-          <Button asChild className="flex-1">
-            <Link href={`/prets/nouveau?equipmentId=${eq.id}`}>
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Enregistrer un </span>prêt
-            </Link>
-          </Button>
-          <Button asChild variant="destructive" className="flex-1">
-            <Link href={`/incidents/nouveau?equipmentId=${eq.id}`}>
-              <AlertTriangle className="size-4" />
-              <span className="hidden sm:inline">Signaler </span>incident
-            </Link>
-          </Button>
-          <Button asChild variant="outline" className="flex-1">
-            <Link href={`/stock/${eq.id}/modifier`}>
-              <Pencil className="size-4" />
-              Modifier
-            </Link>
-          </Button>
+          {/* Issue #110 — article archivé : fiche en lecture seule. */}
+          {eq.archived ? (
+            <ArchivedFooter id={eq.id} canRestore={can(user, "equipment.archive")} />
+          ) : (
+            <>
+              <Button asChild className="flex-1">
+                <Link href={`/prets/nouveau?equipmentId=${eq.id}`}>
+                  <Plus className="size-4" />
+                  <span className="hidden sm:inline">Enregistrer un </span>prêt
+                </Link>
+              </Button>
+              <Button asChild variant="destructive" className="flex-1">
+                <Link href={`/incidents/nouveau?equipmentId=${eq.id}`}>
+                  <AlertTriangle className="size-4" />
+                  <span className="hidden sm:inline">Signaler </span>incident
+                </Link>
+              </Button>
+              <Button asChild variant="outline" className="flex-1">
+                <Link href={`/stock/${eq.id}/modifier`}>
+                  <Pencil className="size-4" />
+                  Modifier
+                </Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -415,5 +414,14 @@ function LoanStatusBadge({ status }: { status: string }) {
     >
       {c.label}
     </span>
+  );
+}
+
+function ArchivedFooter({ id, canRestore }: { id: string; canRestore: boolean }) {
+  if (canRestore) return <RestoreButton id={id} />;
+  return (
+    <p className="flex-1 text-center text-sm text-trail">
+      Article archivé : consultation seule.
+    </p>
   );
 }

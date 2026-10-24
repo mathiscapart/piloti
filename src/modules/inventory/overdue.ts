@@ -1,5 +1,6 @@
 import "server-only";
 
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { notify } from "@/modules/notifications/notify";
@@ -22,7 +23,7 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
  * Ne jette jamais sur un prêt isolé : c'est `notify()` qui encaisse les échecs.
  */
 export async function checkOverdueLoans(): Promise<number> {
-  const now = new Date();
+  const now = wallNow(); // expectedReturn est une date murale (saisie)
 
   // Prêts en retard : statut RETARD, ou ACTIF dont la date de retour est passée.
   // (Le retard est calculé par article — US-32 : chaque ligne de prêt est

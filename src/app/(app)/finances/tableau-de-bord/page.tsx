@@ -6,6 +6,7 @@ import {
   EXPENSE_CATEGORY_LABEL,
   type ExpenseCategory,
 } from "@/lib/enums";
+import { wallNow } from "@/lib/datetime";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -39,7 +40,7 @@ export default async function FinancialDashboardPage({ searchParams }: PageProps
   if (!can(user, "campaign.view")) redirect("/dashboard");
 
   const { year } = await searchParams;
-  const now = new Date().getUTCFullYear();
+  const now = wallNow().getUTCFullYear(); // année en cours à Paris
   const selectedYear = year && /^\d{4}$/.test(year) ? Number(year) : now;
 
   const [data, years] = await Promise.all([

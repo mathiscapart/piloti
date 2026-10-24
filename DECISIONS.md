@@ -848,3 +848,20 @@ Deux défauts laissés par #97.
 - Tableau de bord : inchangé. Tout CHEF a `event.manage`, pour qui le prochain événement n'est pas filtré par unité.
 - Bilan des présences : l'unité présélectionnée est la première unité encadrée visible, sinon l'unité d'appartenance.
 - Écran : `/admin/utilisateurs/[id]/modifier` propose « Unités encadrées » (`setUserLeadUnits`). L'audit `USER_LEAD_UNITS_CHANGED` porte l'avant (`previousUnits`) et l'après (`units`). Pour un compte non Chef, l'éditeur explique qu'il faut d'abord le rôle Chef.
+
+## D-046 — #115 : heure murale en UTC, instant à Paris, une seule base `src/lib/datetime.ts`
+
+**Contexte** : les dates d'événement, d'échéance et de formulaire sont stockées en « heure murale » (composantes UTC = heure saisie), mais une trentaine d'endroits les formataient dans le fuseau du serveur ou les comparaient à `new Date()`. À l'inverse, les instants réels (messages, journal d'audit…) s'affichaient en UTC. En production (conteneur en UTC), le premier défaut restait latent et le second décalait de 1 ou 2 h ; dès que `TZ` changeait (recette Windows), tout se décalait de 2 h.
+
+**Choix** (règle validée par Mathis dans #115) :
+- Deux catégories, sans troisième voie. **Heure murale** (événements, tâches, échéances, toute date saisie dans un formulaire : prêts, notes de frais, tickets, paiements, caisses, dons) : formatée en UTC, comparée à `wallNow()` (« maintenant » exprimé en heure murale de Paris), jamais à `new Date()`. **Instant réel** (création, messages, retours de prêt, incidents, signalements, journal d'audit) : stocké avec `new Date()`, affiché à l'heure de Paris.
+- « Aujourd'hui » est le jour de Paris : `todayInput()`. Une colonne murale sans heure reçoit `new Date(todayInput())`, jamais un instant (ticket de budget saisi en direct, replis de date des paiements et caisses). Le ticket n'affiche donc plus d'heure, seulement le jour.
+- **Seul** `src/lib/datetime.ts` formate une date ou lit ses composantes dans un fuseau : `formatWall`, `formatInstant` (styles nommés), `formatEventRange`, `toDateInput`, `toDatetimeLocal`, `monthKey`, `monthLabel`, `wallNow`, `todayInput`, `instantToWall` / `wallToInstant`. `src/modules/planning/format.ts` est absorbé.
+- Verrou statique `src/lib/datetime-usage.test.ts`, sur le modèle de `unit-lead-writes.test.ts`. Il analyse chaque fichier en entier (hors fichiers `*.test.ts(x)`) de `src/`, `prisma/`, `scripts/` et `public/` (`.ts`, `.tsx`, `.js`, `.mjs`) et interdit hors de la base : `Intl.DateTimeFormat`, `toLocale*String`, `toDateString`/`toTimeString`, getters et setters locaux, `getTimezoneOffset`, `new Date(a, m, j)`, `toISOString().slice/substring/substr/split` et les chaînes date-heure sans fuseau **écrites dans l'appel** (littéral, gabarit, concaténation tenant sur une ligne). Chaque exception est justifiée et comptée au nombre exact d'occurrences. C'est une analyse textuelle : une valeur venue d'ailleurs (champ `datetime-local` passé tel quel à `new Date`), `String(d)`, `` `${d}` ``, `d.toString()` ou `d.toJSON().slice(0, 10)` lui échappent, et un motif cité dans un commentaire le fait échouer.
+
+**Conséquences** :
+- L'affichage ne dépend plus du fuseau du serveur : une recette sous `TZ=Europe/Paris` montre ce que la production montre.
+- Une nouvelle date passe par la base ou fait échouer `pnpm test` ; ajouter une exception impose de la justifier dans le test.
+- Exceptions connues : `toLocaleString` sur des nombres (montants, kWh, pourcentages) ; `lib/legal/age.ts` (âge révolu en heure locale, verrouillé par `age.test.ts`, à traiter dans une issue dédiée) ; `lib/upload.ts` (dossier `AAAA/MM` d'un fichier déposé).
+- Le flux iCal garde ses propres `getUTC*` (heure flottante) : il est correct sans passer par la base, et le verrou ne l'interdit pas.
+- Hors de cette décision, signalés à part : `admin/actions.ts` (date d'attestation comparée à un `new Date()` figé au chargement) et les deux règles de retard d'un prêt.

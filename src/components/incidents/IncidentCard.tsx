@@ -3,20 +3,13 @@ import Link from "next/link";
 
 import { IncidentPhotos } from "@/components/incidents/IncidentPhotos";
 import { ResolveDialog } from "@/components/incidents/ResolveDialog";
+import { formatInstant } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
 import {
   INCIDENT_TYPE_LABEL,
 } from "@/lib/incident-categories";
 import type { IncidentListItem } from "@/modules/inventory/queries";
 import { SEVERITY_LABEL } from "@/modules/inventory/types";
-
-const DATE_FMT = new Intl.DateTimeFormat("fr-FR", {
-  day: "2-digit",
-  month: "short",
-  hour: "2-digit",
-  minute: "2-digit",
-  timeZone: "Europe/Paris",
-});
 
 const SEVERITY_TONE: Record<string, string> = {
   BLOQUANT: "bg-brick-soft text-brick-ink",
@@ -95,13 +88,13 @@ export function IncidentCard({
 
           <p className="text-xs text-trail">
             Signalé par {incident.reporter.firstName}{" "}
-            {incident.reporter.lastName} · {DATE_FMT.format(incident.createdAt)}
+            {incident.reporter.lastName} · {formatInstant(incident.createdAt, "dayMonthTime")}
             {resolved && incident.resolvedBy && incident.resolvedAt ? (
               <>
                 {" · "}
                 résolu par {incident.resolvedBy.firstName}{" "}
                 {incident.resolvedBy.lastName} le{" "}
-                {DATE_FMT.format(incident.resolvedAt)}
+                {formatInstant(incident.resolvedAt, "dayMonthTime")}
                 {incident.resolvedNote ? ` — ${incident.resolvedNote}` : ""}
               </>
             ) : null}

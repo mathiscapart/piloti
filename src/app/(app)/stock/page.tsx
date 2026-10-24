@@ -4,22 +4,30 @@ import Link from "next/link";
 import { EquipmentCard } from "@/components/equipment/EquipmentCard";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
+import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { requireCan } from "@/lib/require-can";
+import { showArchived } from "@/modules/inventory/archive";
 import { listEquipment, listCategoryTree } from "@/modules/inventory/queries";
 
 interface PageProps {
-  searchParams: Promise<{ q?: string; cat?: string }>;
+  searchParams: Promise<{ q?: string; cat?: string; archived?: string }>;
 }
 
 export default async function StockPage({ searchParams }: PageProps) {
-  await requireCan("equipment.view");
+  const user = await requireCan("equipment.view");
   const params = await searchParams;
   const q = params.q?.trim();
+  // #110 — `?archived=1` n'a d'effet que pour l'ADMIN ; ignoré sinon.
+  const archived = showArchived(user, params.archived);
 
   const [tree, items] = await Promise.all([
     listCategoryTree(),
-    listEquipment({ search: q, category: params.cat || undefined }),
+    listEquipment({
+      search: q,
+      category: params.cat || undefined,
+      archivedOnly: archived,
+    }),
   ]);
 
   // US-24 — résout la catégorie active : racine sélectionnée, ou sous-catégorie
@@ -41,10 +49,11 @@ export default async function StockPage({ searchParams }: PageProps) {
     ? activeRoot?.children.find((c) => c.slug === activeChildSlug)?.label
     : activeRoot?.label;
 
-  const buildHref = (catSlug: string | null) => {
+  const buildHref = (catSlug: string | null, withArchived = archived) => {
     const sp = new URLSearchParams();
     if (q) sp.set("q", q);
     if (catSlug) sp.set("cat", catSlug);
+    if (withArchived) sp.set("archived", "1");
     return sp.toString() ? `/stock?${sp.toString()}` : "/stock";
   };
 
@@ -57,6 +66,7 @@ export default async function StockPage({ searchParams }: PageProps) {
             {items.length} article{items.length > 1 ? "s" : ""}
             {q ? ` correspondant à "${q}"` : ""}
             {catLabel ? ` · ${catLabel}` : ""}
+            {archived ? " · archivés" : ""}
           </p>
         </div>
         <div className="flex items-center gap-4">
@@ -92,6 +102,7 @@ export default async function StockPage({ searchParams }: PageProps) {
           className="pl-9"
         />
         {cat ? <input type="hidden" name="cat" value={cat} /> : null}
+        {archived ? <input type="hidden" name="archived" value="1" /> : null}
       </form>
 
       {/* Niveau 1 : catégories racines */}
@@ -109,6 +120,17 @@ export default async function StockPage({ searchParams }: PageProps) {
             hasChildren={root.children.length > 0}
           />
         ))}
+        {/* Filtre à part (se cumule avec la catégorie), d'où le séparateur. */}
+        {can(user, "equipment.archived.view") ? (
+          <>
+            <span aria-hidden className="w-px shrink-0 self-stretch bg-stone" />
+            <CategoryChip
+              href={buildHref(cat ?? null, !archived)}
+              active={archived}
+              label="Archivés"
+            />
+          </>
+        ) : null}
       </nav>
 
       {/* Niveau 2 : sous-catégories (fil d'Ariane) si la racine active en a */}
@@ -140,11 +162,15 @@ export default async function StockPage({ searchParams }: PageProps) {
       {items.length === 0 ? (
         <EmptyState
           icon={Package}
-          title={q || cat ? "Aucun résultat" : "Catalogue vide"}
+          title={
+            q || cat ? "Aucun résultat" : archived ? "Aucun article archivé" : "Catalogue vide"
+          }
           description={
             q || cat
               ? "Essaie une autre recherche ou catégorie."
-              : "Commence par ajouter un premier article."
+              : archived
+                ? "Les articles archivés apparaîtront ici."
+                : "Commence par ajouter un premier article."
           }
         />
       ) : (

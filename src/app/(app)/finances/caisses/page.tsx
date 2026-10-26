@@ -65,7 +65,7 @@ export default async function CashBoxesPage() {
         </section>
       )}
 
-      {canManage ? <CashBoxAdmin boxes={boxes.map((b) => ({ id: b.id, name: b.name }))} /> : null}
+      {canManage ? <CashBoxAdmin boxes={boxes} /> : null}
     </div>
   );
 }

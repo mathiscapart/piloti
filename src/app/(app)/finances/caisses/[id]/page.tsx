@@ -48,7 +48,9 @@ export default async function CashBoxDetailPage({ params }: PageProps) {
         </span>
       </header>
 
-      {canManage ? <AddMovementForm cashBoxId={data.box.id} /> : null}
+      {canManage ? (
+        <AddMovementForm cashBoxId={data.box.id} balanceCents={data.balanceCents} />
+      ) : null}
 
       <section className="space-y-2">
         <h2 className="text-lg font-bold text-earth">Grand livre</h2>

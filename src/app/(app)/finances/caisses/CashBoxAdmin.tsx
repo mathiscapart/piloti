@@ -9,18 +9,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { todayInput } from "@/lib/datetime";
 import type { ActionResult } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import {
   createCashBox,
   transferCash,
 } from "@/modules/finance/cashbox-actions";
+import { formatEuros } from "@/modules/finance/format";
+
+type BoxOption = { id: string; name: string; balanceCents: number };
 
 const emptyState: ActionResult = { error: null };
 
-export function CashBoxAdmin({
-  boxes,
-}: {
-  boxes: { id: string; name: string }[];
-}) {
+export function CashBoxAdmin({ boxes }: { boxes: BoxOption[] }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
     createCashBox,
@@ -61,7 +61,7 @@ export function CashBoxAdmin({
   );
 }
 
-function TransferForm({ boxes }: { boxes: { id: string; name: string }[] }) {
+function TransferForm({ boxes }: { boxes: BoxOption[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [from, setFrom] = useState(boxes[0]?.id ?? "");
@@ -70,6 +70,7 @@ function TransferForm({ boxes }: { boxes: { id: string; name: string }[] }) {
   const [label, setLabel] = useState("");
   const today = todayInput();
   const [date, setDate] = useState(today);
+  const fromBalanceCents = boxes.find((b) => b.id === from)?.balanceCents ?? 0;
 
   function submit() {
     start(async () => {
@@ -113,6 +114,14 @@ function TransferForm({ boxes }: { boxes: { id: string; name: string }[] }) {
           placeholder="Montant €"
           className="h-9 w-24"
         />
+        <span
+          className={cn(
+            "pb-2 text-xs tabular-nums",
+            fromBalanceCents < 0 ? "text-brick" : "text-trail",
+          )}
+        >
+          Disponible : {formatEuros(fromBalanceCents)}
+        </span>
         <Input
           value={date}
           onChange={(e) => setDate(e.target.value)}

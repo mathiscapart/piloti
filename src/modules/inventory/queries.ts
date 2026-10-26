@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 
 import { blockingLoans, incidentAvailability } from "./availability";
-import { isLoanLate, lateLoanWhere, overdueCutoff } from "./loan-overdue";
+import { isPastDue, lateLoanWhere, overdueCutoff } from "./loan-overdue";
 
 // Days ahead used to flag loans as "coming due soon" on the dashboard.
 const UPCOMING_DUE_DAYS = 3;
@@ -390,7 +390,11 @@ export async function listBorrowableEquipment(
     const loanedQty = loans.reduce((sum, loan) => sum + loan.quantity, 0);
     const availableQty = Math.max(0, eq.totalQty - loanedQty);
     const isDrying = loans.some((loan) => loan.status === "SECHAGE");
-    const lateLoan = loans.find((loan) => isLoanLate(loan, now));
+    // Même lecture que `blocks` (date seule, cf. ./availability) : c'est ce
+    // retard-là qui rend l'article indisponible.
+    const lateLoan = loans.find(
+      (loan) => loan.status !== "SECHAGE" && isPastDue(loan.expectedReturn, now),
+    );
     const isBroken =
       eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE";
     // Issue #107 — règle partagée avec `createLoan` (cf. ./availability).

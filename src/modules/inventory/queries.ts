@@ -4,11 +4,8 @@ import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 
-import {
-  blockingLoans,
-  incidentAvailability,
-  isOverdue,
-} from "./availability";
+import { blockingLoans, incidentAvailability } from "./availability";
+import { isPastDue, lateLoanWhere, overdueCutoff } from "./loan-overdue";
 
 // Days ahead used to flag loans as "coming due soon" on the dashboard.
 const UPCOMING_DUE_DAYS = 3;
@@ -38,12 +35,7 @@ export async function getDashboardData() {
         where: { resolvedAt: null },
       }),
       db.loan.findMany({
-        where: {
-          OR: [
-            { status: "RETARD" },
-            { AND: [{ status: "ACTIF" }, { expectedReturn: { lt: wallNow() } }] },
-          ],
-        },
+        where: lateLoanWhere(wallNow()),
         orderBy: { expectedReturn: "asc" },
         select: {
           id: true,
@@ -256,14 +248,12 @@ export async function listLoans(filter: LoanFilter = "all") {
 
   switch (filter) {
     case "retard":
-      where.OR = [
-        { status: "RETARD" },
-        { AND: [{ status: "ACTIF" }, { expectedReturn: { lt: now } }] },
-      ];
+      Object.assign(where, lateLoanWhere(now));
       break;
     case "bientot":
       where.status = "ACTIF";
-      where.expectedReturn = { gte: now, lte: inNDays };
+      // À rendre aujourd'hui = pas encore en retard (#189) : reste ici.
+      where.expectedReturn = { gte: overdueCutoff(now), lte: inNDays };
       break;
     case "sechage":
       where.status = "SECHAGE";
@@ -400,8 +390,10 @@ export async function listBorrowableEquipment(
     const loanedQty = loans.reduce((sum, loan) => sum + loan.quantity, 0);
     const availableQty = Math.max(0, eq.totalQty - loanedQty);
     const isDrying = loans.some((loan) => loan.status === "SECHAGE");
+    // Même lecture que `blocks` (date seule, cf. ./availability) : c'est ce
+    // retard-là qui rend l'article indisponible.
     const lateLoan = loans.find(
-      (loan) => loan.status !== "SECHAGE" && isOverdue(loan, now),
+      (loan) => loan.status !== "SECHAGE" && isPastDue(loan.expectedReturn, now),
     );
     const isBroken =
       eq.condition === "A_REPARER" || eq.condition === "HORS_SERVICE";

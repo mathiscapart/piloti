@@ -7,7 +7,6 @@ import {
   availableQtyForPeriod,
   blockingLoans,
   incidentAvailability,
-  isOverdue,
 } from "./availability";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -87,10 +86,16 @@ describe("availableQtyForPeriod", () => {
   });
 });
 
-describe("isOverdue", () => {
-  it("en retard seulement une fois la journée de retour prévue écoulée", () => {
-    expect(isOverdue(loan("2026-09-05", "2026-09-11"), NOW)).toBe(false);
-    expect(isOverdue(loan("2026-09-05", "2026-09-10"), NOW)).toBe(true);
+// La règle de retard elle-même est testée dans loan-overdue.test.ts (#189).
+describe("prêt en retard — bloque toute période", () => {
+  it("à rendre aujourd'hui : pas en retard, ne bloque pas une période qui commence demain", () => {
+    const period = { start: d("2026-09-12"), end: d("2026-09-14") };
+    expect(availableQtyForPeriod(1, [loan("2026-09-05", "2026-09-11")], period, NOW)).toBe(1);
+  });
+
+  it("journée de retour écoulée : bloque une période future", () => {
+    const period = { start: d("2026-09-20"), end: d("2026-09-22") };
+    expect(availableQtyForPeriod(1, [loan("2026-09-05", "2026-09-10")], period, NOW)).toBe(0);
   });
 });
 

@@ -7,9 +7,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { addMovement } from "@/modules/finance/cashbox-actions";
+import { formatEuros } from "@/modules/finance/format";
 import { todayInput } from "@/lib/datetime";
+import { cn } from "@/lib/utils";
 
-export function AddMovementForm({ cashBoxId }: { cashBoxId: string }) {
+export function AddMovementForm({
+  cashBoxId,
+  balanceCents,
+}: {
+  cashBoxId: string;
+  balanceCents: number;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [kind, setKind] = useState<"DEPOSIT" | "WITHDRAWAL">("DEPOSIT");
@@ -49,6 +57,14 @@ export function AddMovementForm({ cashBoxId }: { cashBoxId: string }) {
           placeholder="Montant €"
           className="h-9 w-24"
         />
+        <span
+          className={cn(
+            "pb-2 text-xs tabular-nums",
+            balanceCents < 0 ? "text-brick" : "text-trail",
+          )}
+        >
+          Disponible : {formatEuros(balanceCents)}
+        </span>
         <Input
           value={date}
           onChange={(e) => setDate(e.target.value)}

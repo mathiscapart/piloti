@@ -1,5 +1,6 @@
 "use server";
 
+import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 import { withAudit } from "@/lib/audit";
@@ -9,6 +10,7 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
+import { canWithdraw, insufficientBalanceMessage } from "./cashbox-balance";
 import { parseAmountToCents } from "./format";
 
 function parseDate(raw: string): Date {
@@ -16,6 +18,30 @@ function parseDate(raw: string): Date {
   if (!m) return new Date(todayInput());
   const [, y, mo, d] = m.map(Number);
   return new Date(Date.UTC(y, mo - 1, d));
+}
+
+// #105 — le solde de la caisse source est relu DANS la transaction de
+// l'écriture : un retrait ou un transfert qui le dépasse annule tout, AuditLog
+// compris.
+class InsufficientBalanceError extends Error {
+  constructor(readonly balanceCents: number) {
+    super("Solde insuffisant");
+  }
+}
+
+async function assertCanWithdraw(
+  tx: Prisma.TransactionClient,
+  cashBoxId: string,
+  amountCents: number,
+): Promise<void> {
+  const sum = await tx.cashTransaction.aggregate({
+    where: { cashBoxId },
+    _sum: { amountCents: true },
+  });
+  const balanceCents = sum._sum.amountCents ?? 0;
+  if (!canWithdraw(balanceCents, amountCents)) {
+    throw new InsufficientBalanceError(balanceCents);
+  }
 }
 
 export async function createCashBox(
@@ -63,24 +89,33 @@ export async function addMovement(
   if (!box) return { error: "Caisse introuvable." };
 
   const signed = kind === "DEPOSIT" ? cents : -cents;
-  await withAudit(
-    (tx) =>
-      tx.cashTransaction.create({
-        data: {
-          cashBoxId,
-          amountCents: signed,
-          label: lbl,
-          kind,
-          date: parseDate(dateStr),
-          createdById: user.id,
-        },
-      }),
-    {
-      action: "CASH_MOVEMENT",
-      userId: user.id,
-      metadata: { cashBoxId, amountCents: signed, kind },
-    },
-  );
+  try {
+    await withAudit(
+      async (tx) => {
+        if (kind === "WITHDRAWAL") await assertCanWithdraw(tx, cashBoxId, cents);
+        return tx.cashTransaction.create({
+          data: {
+            cashBoxId,
+            amountCents: signed,
+            label: lbl,
+            kind,
+            date: parseDate(dateStr),
+            createdById: user.id,
+          },
+        });
+      },
+      {
+        action: "CASH_MOVEMENT",
+        userId: user.id,
+        metadata: { cashBoxId, amountCents: signed, kind },
+      },
+    );
+  } catch (err) {
+    if (err instanceof InsufficientBalanceError) {
+      return { error: insufficientBalanceMessage(err.balanceCents) };
+    }
+    throw err;
+  }
 
   revalidatePath(`/finances/caisses/${cashBoxId}`);
   revalidatePath("/finances/caisses");
@@ -113,36 +148,45 @@ export async function transferCash(
   const lbl = label.trim();
   const group = crypto.randomUUID();
 
-  await withAudit(
-    (tx) =>
-      tx.cashTransaction.createMany({
-        data: [
-          {
-            cashBoxId: fromId,
-            amountCents: -cents,
-            label: lbl || `Transfert vers ${toName}`,
-            kind: "TRANSFER",
-            date,
-            transferGroupId: group,
-            createdById: user.id,
-          },
-          {
-            cashBoxId: toId,
-            amountCents: cents,
-            label: lbl || `Transfert depuis ${fromName}`,
-            kind: "TRANSFER",
-            date,
-            transferGroupId: group,
-            createdById: user.id,
-          },
-        ],
-      }),
-    {
-      action: "CASH_TRANSFER",
-      userId: user.id,
-      metadata: { fromId, toId, amountCents: cents },
-    },
-  );
+  try {
+    await withAudit(
+      async (tx) => {
+        await assertCanWithdraw(tx, fromId, cents);
+        return tx.cashTransaction.createMany({
+            data: [
+              {
+                cashBoxId: fromId,
+                amountCents: -cents,
+                label: lbl || `Transfert vers ${toName}`,
+                kind: "TRANSFER",
+                date,
+                transferGroupId: group,
+                createdById: user.id,
+              },
+              {
+                cashBoxId: toId,
+                amountCents: cents,
+                label: lbl || `Transfert depuis ${fromName}`,
+                kind: "TRANSFER",
+                date,
+                transferGroupId: group,
+                createdById: user.id,
+              },
+            ],
+        });
+      },
+      {
+        action: "CASH_TRANSFER",
+        userId: user.id,
+        metadata: { fromId, toId, amountCents: cents },
+      },
+    );
+  } catch (err) {
+    if (err instanceof InsufficientBalanceError) {
+      return { error: insufficientBalanceMessage(err.balanceCents) };
+    }
+    throw err;
+  }
 
   revalidatePath("/finances/caisses");
   return { error: null };

@@ -4,9 +4,10 @@ import { notFound } from "next/navigation";
 
 import { LoanStatusBadge } from "@/components/loans/LoanStatusBadge";
 import { ReturnForm } from "@/components/loans/ReturnForm";
-import { formatWall } from "@/lib/datetime";
+import { formatWall, wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { requireCan } from "@/lib/require-can";
+import { isLoanLate } from "@/modules/inventory/loan-overdue";
 import { getLoanDetail } from "@/modules/inventory/queries";
 
 interface PageProps {
@@ -94,7 +95,10 @@ export default async function ReturnLoanPage({ params }: PageProps) {
               {formatWall(loan.expectedReturn, "dateLong")}
             </p>
           </div>
-          <LoanStatusBadge status={loan.status} />
+          {/* #189 — même règle de retard que la page Prêts. */}
+          <LoanStatusBadge
+            status={isLoanLate(loan, wallNow()) ? "RETARD" : loan.status}
+          />
         </div>
       </section>
 

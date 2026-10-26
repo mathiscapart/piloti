@@ -25,17 +25,12 @@ import {
   getMyChildren,
   getNextEvent,
 } from "@/modules/dashboard/queries";
+import { daysLate } from "@/modules/inventory/loan-overdue";
 import { getDashboardData } from "@/modules/inventory/queries";
 import { listOpenGroupTasks } from "@/modules/planning/tasks";
 import { buildTaskVMs } from "@/modules/planning/task-vm";
 
 import { TaskList } from "../planning/taches/TaskList";
-
-function daysOverdue(expectedReturn: Date): number {
-  // Date de retour murale (saisie, minuit UTC) : comparée à wallNow().
-  const ms = wallNow().getTime() - expectedReturn.getTime();
-  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
-}
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -226,7 +221,7 @@ export default async function DashboardPage() {
         ) : (
           <ul className="space-y-3">
             {lateLoans.map((loan) => {
-              const days = daysOverdue(loan.expectedReturn);
+              const days = daysLate(loan.expectedReturn, wallNow());
               return (
                 <li
                   key={loan.id}

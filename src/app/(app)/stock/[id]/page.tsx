@@ -22,9 +22,10 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-import { formatInstant, formatWall } from "@/lib/datetime";
+import { formatInstant, formatWall, wallNow } from "@/lib/datetime";
 import { can } from "@/lib/permissions";
 import { requireCan } from "@/lib/require-can";
+import { isLoanLate } from "@/modules/inventory/loan-overdue";
 import { getEquipmentDetail, listCategories } from "@/modules/inventory/queries";
 import { CONDITION_LABEL } from "@/modules/inventory/types";
 
@@ -49,6 +50,7 @@ export default async function EquipmentDetailPage({
   ]);
   const categoryLabel = categories.find((c) => c.slug === eq?.category)?.label;
   if (!eq) notFound();
+  const now = wallNow(); // dates de prêt murales (saisies)
 
   // US-17/US-18 — la catégorie impose-t-elle une pesée au retour ?
   const isWeighable =
@@ -272,7 +274,10 @@ export default async function EquipmentDetailPage({
                             : ""}
                         </p>
                       </div>
-                      <LoanStatusBadge status={loan.status} />
+                      {/* #189 — même règle de retard que la page Prêts. */}
+                      <LoanStatusBadge
+                        status={isLoanLate(loan, now) ? "RETARD" : loan.status}
+                      />
                     </div>
                   </li>
                 ))}

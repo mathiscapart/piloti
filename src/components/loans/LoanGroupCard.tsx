@@ -4,23 +4,11 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { formatWall, wallNow } from "@/lib/datetime";
 import { cn } from "@/lib/utils";
+import { daysLate, isLoanLate } from "@/modules/inventory/loan-overdue";
 import type { LoanListItem } from "@/modules/inventory/queries";
 
 import { DryingDialog, type DryingContactOption } from "./DryingDialog";
 import { LoanStatusBadge } from "./LoanStatusBadge";
-
-function daysOverdue(expectedReturn: Date): number {
-  // Date de retour murale (saisie, minuit UTC) : comparée à wallNow().
-  const ms = wallNow().getTime() - expectedReturn.getTime();
-  return Math.max(0, Math.floor(ms / (1000 * 60 * 60 * 24)));
-}
-
-function isLoanLate(loan: LoanListItem): boolean {
-  return (
-    loan.status === "RETARD" ||
-    (loan.status === "ACTIF" && loan.expectedReturn < wallNow())
-  );
-}
 
 /**
  * US-32 — affiche un prêt groupé : l'emprunteur et l'événement une seule fois,
@@ -38,7 +26,8 @@ export function LoanGroupCard({
   dryingContacts: DryingContactOption[];
 }) {
   const head = loans[0];
-  const anyLate = loans.some(isLoanLate);
+  const now = wallNow(); // date de retour murale (saisie)
+  const anyLate = loans.some((loan) => isLoanLate(loan, now));
   const allReturned = loans.every((l) => l.status === "RETOURNE");
 
   return (
@@ -84,8 +73,8 @@ export function LoanGroupCard({
       {/* Une ligne par article du prêt */}
       <ul className="mt-3 space-y-2 border-t border-stone/50 pt-3">
         {loans.map((loan) => {
-          const late = isLoanLate(loan);
-          const overdue = late ? daysOverdue(loan.expectedReturn) : 0;
+          const late = isLoanLate(loan, now);
+          const overdue = late ? daysLate(loan.expectedReturn, now) : 0;
           const canAct = loan.status === "ACTIF" || loan.status === "RETARD";
           const canDry =
             canAct && dryableCategories.has(loan.equipment.category);
@@ -107,7 +96,8 @@ export function LoanGroupCard({
                       ×{loan.quantity}
                     </span>
                   ) : null}
-                  <LoanStatusBadge status={loan.status} />
+                  {/* #189 — un ACTIF dont la journée de retour est écoulée s'affiche « En retard ». */}
+                  <LoanStatusBadge status={late ? "RETARD" : loan.status} />
                 </div>
                 <p
                   className={cn(

@@ -5,14 +5,14 @@ import { db } from "@/lib/db";
 import { can } from "@/lib/permissions";
 import { notify } from "@/modules/notifications/notify";
 
+import { daysLate, lateLoanWhere } from "./loan-overdue";
+
 // US-07 — Alerte retard de retour.
 // Détecte les prêts dont la date de retour est dépassée et notifie les
 // gestionnaires de matériel (in-app + email selon préférences). Idempotent :
 // un (destinataire, prêt) déjà alerté ne l'est plus jamais — la clé de
 // déduplication est `Notification.messageId = loan.id`. L'alerte se résout au
 // retour (cf. `resolveOverdueNotifications`, appelé depuis `returnLoan`).
-
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 // Qui reçoit l'alerte : les comptes qui valident les retours de prêt
 // (`loan.return.validate` : chefs, RG depuis #173, responsable matériel, admin).
@@ -25,16 +25,11 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 export async function checkOverdueLoans(): Promise<number> {
   const now = wallNow(); // expectedReturn est une date murale (saisie)
 
-  // Prêts en retard : statut RETARD, ou ACTIF dont la date de retour est passée.
-  // (Le retard est calculé par article — US-32 : chaque ligne de prêt est
-  // évaluée indépendamment.)
+  // Prêts en retard : statut RETARD, ou ACTIF dont la journée de retour est
+  // écoulée (règle unique, ./loan-overdue — #189). Le retard est calculé par
+  // article — US-32 : chaque ligne de prêt est évaluée indépendamment.
   const overdue = await db.loan.findMany({
-    where: {
-      OR: [
-        { status: "RETARD" },
-        { AND: [{ status: "ACTIF" }, { expectedReturn: { lt: now } }] },
-      ],
-    },
+    where: lateLoanWhere(now),
     select: {
       id: true,
       expectedReturn: true,
@@ -65,12 +60,10 @@ export async function checkOverdueLoans(): Promise<number> {
 
   let sent = 0;
   for (const loan of overdue) {
-    const daysLate = Math.floor(
-      (now.getTime() - loan.expectedReturn.getTime()) / ONE_DAY_MS,
-    );
+    const days = daysLate(loan.expectedReturn, now);
     const lateLabel =
-      daysLate >= 1
-        ? `${daysLate} jour${daysLate > 1 ? "s" : ""} de retard`
+      days >= 1
+        ? `${days} jour${days > 1 ? "s" : ""} de retard`
         : "en retard depuis aujourd'hui";
     const borrower = `${loan.borrower.firstName} ${loan.borrower.lastName}`;
     const body = `${loan.equipment.name} — ${borrower} (${lateLabel}).`;

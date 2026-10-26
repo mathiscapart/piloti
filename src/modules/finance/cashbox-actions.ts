@@ -77,6 +77,11 @@ export async function addMovement(
 ): Promise<ActionResult> {
   const user = await getCurrentUser();
   if (!can(user, "campaign.manage")) return { error: "Réservé au trésorier." };
+  // Le type TS ne protège pas une Server Action : sans ce contrôle, un `kind`
+  // inconnu écrirait une sortie sans passer par la garde de solde (#105).
+  if (kind !== "DEPOSIT" && kind !== "WITHDRAWAL") {
+    return { error: "Type de mouvement invalide." };
+  }
 
   const cents = parseAmountToCents(amountStr);
   if (cents === null) return { error: "Montant invalide." };

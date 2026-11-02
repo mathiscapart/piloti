@@ -865,3 +865,19 @@ Deux défauts laissés par #97.
 - Exceptions connues : `toLocaleString` sur des nombres (montants, kWh, pourcentages) ; `lib/legal/age.ts` (âge révolu en heure locale, verrouillé par `age.test.ts`, à traiter dans une issue dédiée) ; `lib/upload.ts` (dossier `AAAA/MM` d'un fichier déposé).
 - Le flux iCal garde ses propres `getUTC*` (heure flottante) : il est correct sans passer par la base, et le verrou ne l'interdit pas.
 - Hors de cette décision, signalés à part : `admin/actions.ts` (date d'attestation comparée à un `new Date()` figé au chargement) et les deux règles de retard d'un prêt.
+
+## D-047 — #189 : un prêt est en retard une fois écoulée la journée de retour prévue
+
+**Contexte** : deux règles de retard coexistaient. Le badge, les compteurs, le filtre « En retard » et l'alerte US-07 comparaient `expectedReturn < wallNow()` ; la disponibilité (`availability.ts`) attendait `expectedReturn + 24 h`. La date de retour est saisie comme un jour (stockée à 00:00 en heure murale) : un prêt à rendre aujourd'hui était donc « en retard » dès minuit sur un écran et pas sur l'autre.
+
+**Choix** (règle validée par Mathis dans #189) :
+- Un prêt ACTIF est en retard **une fois écoulée la journée de retour prévue** : à rendre aujourd'hui, il l'est à partir de demain 00:00, heure de Paris (`wallNow()`, cf. D-046). Le statut RETARD saisi reste toujours en retard ; SECHAGE et RETOURNE ne le sont jamais.
+- La coupure est le **début du jour mural courant** (`overdueCutoff`), pas `expectedReturn + 24 h` : une date de retour portant une heure (seed, import) passe en retard à 00:00 le lendemain, comme une date saisie.
+- Source unique : `src/modules/inventory/loan-overdue.ts` (`overdueCutoff`, `isPastDue`, `isLoanLate`, `lateLoanWhere`, `daysLate`), verrouillée par `loan-overdue.test.ts`. Liste et filtres des prêts, tableau de bord, alerte, disponibilité, badges (fiche article, fiche membre, page de retour) passent tous par elle.
+- La disponibilité lit la date seule (`isPastDue`, séchage compris) : un article non rendu après sa journée de retour bloque toute période.
+
+**Conséquences** :
+- Un prêt à rendre aujourd'hui figure dans « Bientôt dus », jamais dans « En retard », et n'est pas compté au tableau de bord.
+- L'alerte de retard part au premier passage du scheduler après 00:00 le lendemain du retour prévu, un jour plus tard qu'avant.
+- Un article dû aujourd'hui reste réservable pour une période future le jour même.
+- Alternative écartée : « instant exact » (`expectedReturn < wallNow()`) ; avec des dates sans heure, le prêt serait en retard toute sa journée de retour et bloquerait toute réservation future dès minuit. Y revenir ne toucherait que `overdueCutoff`.

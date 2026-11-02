@@ -881,3 +881,14 @@ Deux défauts laissés par #97.
 - Un article à rendre aujourd'hui et pas encore rendu bloque toute réservation future, demain compris, jusqu'à son retour : le test #73 « prêt dû aujourd'hui → ne bloque pas demain » est inversé.
 - Un prêt d'une seule journée (départ = retour = aujourd'hui, accepté par `createLoan`) est en retard dès sa création : badge, tableau de bord, alerte au passage suivant du scheduler, blocage de l'article sur toute période future.
 - Alternative écartée : « fin du jour de retour prévu » (en retard le lendemain 00:00, ancienne règle de `availability.ts`). Y revenir ne toucherait que `loan-overdue.ts` et ses tests.
+
+## D-048 — #105 : une caisse peut avoir un solde négatif
+
+**Contexte** : en recette, une caisse est passée à −150 € par un retrait, et une autre à −69,50 € par un transfert. L'issue #105 proposait de refuser tout retrait ou transfert supérieur au solde, au motif qu'une caisse d'espèces ne peut pas être négative.
+
+**Choix** (décision de Mathis, 2026-11-02) : un solde négatif est un **comportement voulu**, pour toutes les caisses. Il couvre une avance, un découvert ou une régularisation à venir. Aucune garde de solde n'est appliquée sur `addMovement` ni sur `transferCash` (`src/modules/finance/cashbox-actions.ts`). La PR #203, qui ajoutait ce blocage, a été fermée sans fusion.
+
+**Conséquences** :
+- Le solde négatif reste affiché en rouge (liste et fiche), et le « Total » de `/finances/caisses` l'intègre.
+- Un solde négatif en recette n'est pas un bug à signaler.
+- Si un blocage devient nécessaire pour certaines caisses (espèces seulement), il passera par un type de caisse explicite, donc par une migration, et non par une règle appliquée à toutes.

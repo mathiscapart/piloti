@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { ACTIVE_LOAN_STATUSES } from "@/lib/enums";
 
 import { blockingLoans, incidentAvailability } from "./availability";
-import { isPastDue, lateLoanWhere, overdueCutoff } from "./loan-overdue";
+import { isPastDue, lateLoanWhere } from "./loan-overdue";
 
 // Days ahead used to flag loans as "coming due soon" on the dashboard.
 const UPCOMING_DUE_DAYS = 3;
@@ -252,8 +252,7 @@ export async function listLoans(filter: LoanFilter = "all") {
       break;
     case "bientot":
       where.status = "ACTIF";
-      // À rendre aujourd'hui = pas encore en retard (#189) : reste ici.
-      where.expectedReturn = { gte: overdueCutoff(now), lte: inNDays };
+      where.expectedReturn = { gte: now, lte: inNDays };
       break;
     case "sechage":
       where.status = "SECHAGE";

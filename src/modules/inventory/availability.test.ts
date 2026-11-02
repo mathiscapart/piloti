@@ -53,10 +53,12 @@ describe("availableQtyForPeriod", () => {
     expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(0);
   });
 
-  it("prêt dû aujourd'hui → pas encore en retard, ne bloque pas demain", () => {
+  // #189 (D-047) — en retard dès l'instant de retour prévu (00:00 pour une
+  // date saisie) : non rendu, il bloque aussi demain.
+  it("prêt dû aujourd'hui et non rendu → en retard, bloque demain", () => {
     const loans = [loan("2026-09-05", "2026-09-11")];
     const period = { start: d("2026-09-12"), end: d("2026-09-14") };
-    expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(1);
+    expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(0);
   });
 
   it("prêt dû hier et non rendu → en retard, bloque", () => {
@@ -83,19 +85,6 @@ describe("availableQtyForPeriod", () => {
     const loans = [loan("2026-09-12", "2026-09-20")];
     const period = { start: d("2026-09-20"), end: d("2026-09-22") };
     expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(0);
-  });
-});
-
-// La règle de retard elle-même est testée dans loan-overdue.test.ts (#189).
-describe("prêt en retard — bloque toute période", () => {
-  it("à rendre aujourd'hui : pas en retard, ne bloque pas une période qui commence demain", () => {
-    const period = { start: d("2026-09-12"), end: d("2026-09-14") };
-    expect(availableQtyForPeriod(1, [loan("2026-09-05", "2026-09-11")], period, NOW)).toBe(1);
-  });
-
-  it("journée de retour écoulée : bloque une période future", () => {
-    const period = { start: d("2026-09-20"), end: d("2026-09-22") };
-    expect(availableQtyForPeriod(1, [loan("2026-09-05", "2026-09-10")], period, NOW)).toBe(0);
   });
 });
 

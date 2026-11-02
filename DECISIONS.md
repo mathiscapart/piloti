@@ -879,4 +879,5 @@ Deux défauts laissés par #97.
 **Conséquences** :
 - Un prêt à rendre aujourd'hui est compté en retard toute la journée (tableau de bord, filtre, badge) et l'alerte part au premier passage du scheduler après minuit.
 - Un article à rendre aujourd'hui et pas encore rendu bloque toute réservation future, demain compris, jusqu'à son retour : le test #73 « prêt dû aujourd'hui → ne bloque pas demain » est inversé.
+- Un prêt d'une seule journée (départ = retour = aujourd'hui, accepté par `createLoan`) est en retard dès sa création : badge, tableau de bord, alerte au passage suivant du scheduler, blocage de l'article sur toute période future.
 - Alternative écartée : « fin du jour de retour prévu » (en retard le lendemain 00:00, ancienne règle de `availability.ts`). Y revenir ne toucherait que `loan-overdue.ts` et ses tests.

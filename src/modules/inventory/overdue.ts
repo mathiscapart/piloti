@@ -25,8 +25,8 @@ import { daysLate, lateLoanWhere } from "./loan-overdue";
 export async function checkOverdueLoans(): Promise<number> {
   const now = wallNow(); // expectedReturn est une date murale (saisie)
 
-  // Prêts en retard : statut RETARD, ou ACTIF dont la journée de retour est
-  // écoulée (règle unique, ./loan-overdue — #189). Le retard est calculé par
+  // Prêts en retard : statut RETARD, ou ACTIF dont l'instant de retour prévu est
+  // dépassé (règle unique, ./loan-overdue — #189). Le retard est calculé par
   // article — US-32 : chaque ligne de prêt est évaluée indépendamment.
   const overdue = await db.loan.findMany({
     where: lateLoanWhere(now),

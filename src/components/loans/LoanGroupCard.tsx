@@ -96,7 +96,7 @@ export function LoanGroupCard({
                       ×{loan.quantity}
                     </span>
                   ) : null}
-                  {/* #189 — un ACTIF dont la journée de retour est écoulée s'affiche « En retard ». */}
+                  {/* #189 — un ACTIF dont l'instant de retour prévu est dépassé s'affiche « En retard ». */}
                   <LoanStatusBadge status={late ? "RETARD" : loan.status} />
                 </div>
                 <p

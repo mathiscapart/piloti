@@ -7,7 +7,6 @@ import {
   availableQtyForPeriod,
   blockingLoans,
   incidentAvailability,
-  isOverdue,
 } from "./availability";
 
 const d = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -54,10 +53,12 @@ describe("availableQtyForPeriod", () => {
     expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(0);
   });
 
-  it("prêt dû aujourd'hui → pas encore en retard, ne bloque pas demain", () => {
+  // #189 (D-047) — en retard dès l'instant de retour prévu (00:00 pour une
+  // date saisie) : non rendu, il bloque aussi demain.
+  it("prêt dû aujourd'hui et non rendu → en retard, bloque demain", () => {
     const loans = [loan("2026-09-05", "2026-09-11")];
     const period = { start: d("2026-09-12"), end: d("2026-09-14") };
-    expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(1);
+    expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(0);
   });
 
   it("prêt dû hier et non rendu → en retard, bloque", () => {
@@ -84,13 +85,6 @@ describe("availableQtyForPeriod", () => {
     const loans = [loan("2026-09-12", "2026-09-20")];
     const period = { start: d("2026-09-20"), end: d("2026-09-22") };
     expect(availableQtyForPeriod(1, loans, period, NOW)).toBe(0);
-  });
-});
-
-describe("isOverdue", () => {
-  it("en retard seulement une fois la journée de retour prévue écoulée", () => {
-    expect(isOverdue(loan("2026-09-05", "2026-09-11"), NOW)).toBe(false);
-    expect(isOverdue(loan("2026-09-05", "2026-09-10"), NOW)).toBe(true);
   });
 });
 

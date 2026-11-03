@@ -18,6 +18,7 @@ import {
   listLinkableChildren,
   listLinkableParents,
 } from "@/modules/family/queries";
+import { isLoanLate } from "@/modules/inventory/loan-overdue";
 import { getMemberDetail } from "@/modules/inventory/queries";
 import {
   CONSECUTIVE_ABSENCE_THRESHOLD,
@@ -332,9 +333,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
         ) : (
           <ul className="space-y-2">
             {loans.map((loan) => {
-              const late =
-                loan.status === "RETARD" ||
-                (loan.status === "ACTIF" && loan.expectedReturn < now);
+              const late = isLoanLate(loan, now);
               return (
                 <li
                   key={loan.id}
@@ -362,7 +361,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
                           ×{loan.quantity}
                         </span>
                       ) : null}
-                      <LoanStatusBadge status={loan.status} />
+                      <LoanStatusBadge status={late ? "RETARD" : loan.status} />
                     </div>
                     <p
                       className={cn(

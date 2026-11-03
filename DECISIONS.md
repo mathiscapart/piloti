@@ -892,3 +892,18 @@ Deux défauts laissés par #97.
 - Le solde négatif reste affiché en rouge (liste et fiche), et le « Total » de `/finances/caisses` l'intègre.
 - Un solde négatif en recette n'est pas un bug à signaler.
 - Si un blocage devient nécessaire pour certaines caisses (espèces seulement), il passera par un type de caisse explicite, donc par une migration, et non par une règle appliquée à toutes.
+
+## D-049 — Dependabot : sécurité seule pour npm, versions groupées hebdo pour les GitHub Actions
+
+**Contexte** : aucune veille automatique des dépendances n'existait. Les montées majeures de Next, Prisma et React cassent des API (voir la stack, plus récente que les habitudes) et demandent une migration lue et testée à la main. Une PR de version par paquet npm noierait la relecture sans pouvoir être fusionnée telle quelle.
+
+**Choix** (`.github/dependabot.yml`) :
+- **npm** (couvre pnpm) : **mises à jour de sécurité uniquement**. `open-pull-requests-limit: 0` coupe toute PR de version. Les montées de version restent manuelles. Pas de `target-branch` : les security updates visent toujours la branche par défaut (`main`), et un `target-branch` désactiverait pour elles le label et le préfixe de commit.
+- **github-actions** : mises à jour de version **groupées** en une seule PR, chaque lundi (Europe/Paris), vers **`develop`**, au plus 5 PR ouvertes.
+- Label `dependencies` et commits `chore(deps): …` partout.
+- **Pas de Docker** (`docker`, `docker-compose`) : les tags d'images sont des variables (`FROM node:${NODE_IMAGE_TAG}`, `traefik:${TRAEFIK_IMAGE_TAG}`, valeurs dans `.env.example`) que Dependabot ne lit pas. Ces blocs n'ouvriraient aucune PR.
+
+**Conséquences** :
+- Les alertes et les security updates s'activent dans les réglages du dépôt, pas dans le fichier.
+- Une PR de sécurité npm arrive sur `main` : une fois fusionnée, elle se rapatrie dans `develop` à la main.
+- Les images Docker (Node, Traefik, cloudflared) et les images `docker://` des workflows (gitleaks, semgrep) restent à suivre à la main. Les ajouter à Dependabot impose d'écrire leurs tags en dur.

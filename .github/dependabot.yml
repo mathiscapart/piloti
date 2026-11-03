@@ -1,0 +1,32 @@
+# Dependabot — voir DECISIONS.md D-049.
+version: 2
+updates:
+  # npm (couvre pnpm) : sécurité uniquement. Les montées de version
+  # (Next, Prisma, React…) se font à la main : limite à 0 = aucune PR de version.
+  # Pas de target-branch : les security updates visent toujours la branche par
+  # défaut (main), et un target-branch y désactiverait labels et commit-message.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      timezone: "Europe/Paris"
+    target-branch: "develop"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns: ["*"]

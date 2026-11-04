@@ -41,9 +41,21 @@ describe("attestationDateSchema (#188)", () => {
     expect(schema.safeParse("2026-10-13").success).toBe(false);
   });
 
+  // Heure d'hiver (UTC+1) : 22:30 UTC = 23:30 à Paris, encore le 11 ; un
+  // décalage figé à +2 h (heure d'été) accepterait à tort le 12.
+  it("respecte le décalage d'hiver de Paris au bord de minuit", async () => {
+    const schema = await loadSchemaAt("2026-12-11T22:30:00Z");
+    expect(schema.safeParse("2026-12-11").success).toBe(true);
+    expect(schema.safeParse("2026-12-12").success).toBe(false);
+    vi.setSystemTime(new Date("2026-12-11T23:30:00Z"));
+    expect(schema.safeParse("2026-12-12").success).toBe(true);
+  });
+
   it("refuse une date invalide ou antérieure à 1900", async () => {
     const schema = await loadSchemaAt("2026-10-12T10:00:00Z");
     expect(schema.safeParse("pas-une-date").success).toBe(false);
-    expect(schema.safeParse("1899-12-31").success).toBe(false);
+    const tooOld = schema.safeParse("1899-12-31");
+    expect(tooOld.success).toBe(false);
+    expect(tooOld.error?.issues[0]?.message).toBe("Date de l'attestation invalide.");
   });
 });

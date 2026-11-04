@@ -56,14 +56,15 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
 
   const maintenant = wallNow(); // comparé à des heures murales (endDate)
 
-  const [
+  // #106 — le reste dû de la famille part en parallèle des comptages.
+  const [[
     expenses,
     incidentsBloquants,
     accounts,
     places,
     sansDroitImage,
     evenementsNonPointes,
-  ] = await db.$transaction([
+  ], dues] = await Promise.all([db.$transaction([
     veut.expenses
       ? db.expense.count({ where: { status: "PENDING" } })
       : db.expense.count({ where: { id: "" } }),
@@ -98,24 +99,12 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
           where: { endDate: { lt: maintenant }, attendances: { none: {} } },
         })
       : db.event.count({ where: { id: "" } }),
-  ]);
+  ]), getFamilyDues(user.id)]);
   // #150 — même filtrage que la file (unité, auteur visé, auteur
   // indéterminable) : un simple `count` révélait à l'auteur qu'il est signalé.
   const reports = veut.reports ? (await listReports("PENDING", user)).length : 0;
 
   const items: ActionItem[] = [];
-
-  // #106 — cotisations dues par le compte et ses enfants rattachés. Pas de
-  // permission : le périmètre EST la relation familiale (comme getMyChildren),
-  // filtrée côté serveur par familyDues. Aucune page famille à ouvrir, d'où
-  // l'absence de lien ; le montant tient dans le libellé.
-  for (const due of await getFamilyDues(user.id)) {
-    items.push({
-      key: `cotisation-${due.campaignId}-${due.userId}`,
-      label: dueLabel(due),
-      tone: due.exempt ? "info" : "attention",
-    });
-  }
 
   const pousser = (
     autorise: boolean,
@@ -155,6 +144,18 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
   pousser(veut.places, places, "lieux",
     pluriel(places, "propriétaire de lieu à solliciter", "propriétaires de lieux à solliciter"),
     "/lieux", "info");
+
+  // #106 — cotisations dues par le compte et ses enfants rattachés, après les
+  // urgences. Pas de permission : le périmètre EST la relation familiale
+  // (comme getMyChildren), filtrée côté serveur par familyDues. Aucune page
+  // famille à ouvrir, d'où l'absence de lien ; le montant tient dans le libellé.
+  for (const due of dues) {
+    items.push({
+      key: `cotisation-${due.campaignId}-${due.userId}`,
+      label: dueLabel(due),
+      tone: due.exempt ? "info" : "attention",
+    });
+  }
 
   return items;
 }

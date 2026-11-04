@@ -59,7 +59,7 @@ export function familyDues(
 // « Cotisation <campagne> : reste X € ». Les campagnes s'appellent souvent
 // déjà « Cotisation 2026-2027 » : on ne double pas le mot.
 export function dueLabel(due: FamilyDue): string {
-  const name = /^cotisation\b/i.test(due.campaignName)
+  const name = /^cotisations?\b/i.test(due.campaignName)
     ? due.campaignName
     : `Cotisation ${due.campaignName}`;
   const who = due.firstName ? ` (${due.firstName})` : "";

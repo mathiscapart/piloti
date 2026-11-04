@@ -104,6 +104,64 @@ describe("familyDues — montants", () => {
   });
 });
 
+describe("familyDues — cas limites", () => {
+  it("childIds en double : une seule ligne par enfant", () => {
+    const dues = familyDues("nadege", ["elise", "elise", "robin"], [groupe]);
+    expect(dues.map((d) => d.userId)).toEqual(["elise", "robin"]);
+  });
+
+  it("childIds contenant le viewer : pas de ligne en double, pas de prénom", () => {
+    expect(familyDues("leo", ["leo"], [groupe])).toEqual([
+      expect.objectContaining({ userId: "leo", firstName: null }),
+    ]);
+  });
+
+  it("parent inscrit lui-même à la campagne : sa ligne et celle de l'enfant, prénoms visibles", () => {
+    const c = campagne([row("nadege", "Nadège", 9500, 0), row("elise", "Élise", 9500, 0), row("leo", "Léo", 9500, 0)]);
+    const dues = familyDues("nadege", ["elise"], [c]);
+    expect(dues.map((d) => [d.userId, d.firstName])).toEqual([
+      ["nadege", "Nadège"],
+      ["elise", "Élise"],
+    ]);
+  });
+
+  it("une seule personne dans deux campagnes : prénom masqué", () => {
+    const autre = campagne([row("elise", "Élise", 2000, 0)], { id: "c2", name: "Week-end" });
+    const dues = familyDues("nadege", ["elise"], [groupe, autre]);
+    expect(dues).toHaveLength(2);
+    expect(dues.every((d) => d.firstName === null)).toBe(true);
+  });
+
+  it("deux enfants répartis sur deux campagnes : prénoms visibles partout", () => {
+    const c1 = campagne([row("elise", "Élise", 9500, 0)]);
+    const c2 = campagne([row("robin", "Robin", 2000, 0)], { id: "c2", name: "Week-end" });
+    const dues = familyDues("nadege", ["elise", "robin"], [c1, c2]);
+    expect(dues.map((d) => d.firstName)).toEqual(["Élise", "Robin"]);
+  });
+
+  it("reste d'un centime : ligne conservée", () => {
+    expect(familyDues("leo", [], [campagne([row("leo", "Léo", 9500, 9499)])])).toEqual([
+      expect.objectContaining({ remainingCents: 1 }),
+    ]);
+  });
+
+  it("campagne sans lignes, ou liste de campagnes vide : rien", () => {
+    expect(familyDues("leo", [], [campagne([])])).toEqual([]);
+    expect(familyDues("leo", ["elise"], [])).toEqual([]);
+  });
+
+  it("identifiant proche d'un autre : correspondance exacte seulement", () => {
+    const c = campagne([row("leo2", "Léo", 9500, 0), row("LEO", "Léo", 9500, 0)]);
+    expect(familyDues("leo", [], [c])).toEqual([]);
+  });
+
+  it("un enfant soldé dans une campagne mais pas dans l'autre : seule la dette reste", () => {
+    const soldee = campagne([row("leo", "Léo", 9500, 9500)]);
+    const due = campagne([row("leo", "Léo", 2000, 0)], { id: "c2", name: "Week-end" });
+    expect(familyDues("leo", [], [soldee, due]).map((d) => d.campaignId)).toEqual(["c2"]);
+  });
+});
+
 describe("dueLabel — libellé de la carte", () => {
   const e = formatEuros(4700);
   const due = {
@@ -131,5 +189,19 @@ describe("dueLabel — libellé de la carte", () => {
     expect(dueLabel({ ...due, exempt: true })).toBe(
       `Cotisation Week-end : reste ${e} — échelonnement convenu`,
     );
+  });
+
+  it("« cotisation » en minuscule : pas de doublon", () => {
+    expect(dueLabel({ ...due, campaignName: "cotisation 2026" })).toBe(`cotisation 2026 : reste ${e}`);
+  });
+
+  it("« Cotisationnel » n'est pas le mot « Cotisation » : préfixé", () => {
+    expect(dueLabel({ ...due, campaignName: "Cotisationnel" })).toBe(
+      `Cotisation Cotisationnel : reste ${e}`,
+    );
+  });
+
+  it("« Cotisations » (pluriel) : pas de « Cotisation Cotisations »", () => {
+    expect(dueLabel({ ...due, campaignName: "Cotisations 2026" })).toBe(`Cotisations 2026 : reste ${e}`);
   });
 });

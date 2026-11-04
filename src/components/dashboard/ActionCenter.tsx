@@ -33,22 +33,33 @@ export function ActionCenter({ items }: { items: ActionItem[] }) {
         Ce qui attend une action de ta part
       </h2>
       <ul className="grid gap-2 sm:grid-cols-2">
-        {items.map((item) => (
-          <li key={item.key}>
-            <Link
-              href={item.href}
-              className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-card transition-transform hover:-translate-y-0.5 ${TONS[item.tone]}`}
-            >
-              <span className="flex items-baseline gap-2">
+        {items.map((item) => {
+          const contenu = (
+            <span className="flex items-baseline gap-2">
+              {item.count !== undefined ? (
                 <span className="text-2xl font-black leading-none">{item.count}</span>
-                <span className="text-sm font-medium text-earth">
-                  {item.label.replace(/^\d+\s/, "")}
-                </span>
+              ) : null}
+              <span className="text-sm font-medium text-earth">
+                {item.count !== undefined ? item.label.replace(/^\d+\s/, "") : item.label}
               </span>
-              <ArrowRight className="size-4 shrink-0" />
-            </Link>
-          </li>
-        ))}
+            </span>
+          );
+          const box = `flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 shadow-card ${TONS[item.tone]}`;
+          return (
+            <li key={item.key}>
+              {/* #106 — sans destination (reste de cotisation d'une famille),
+                  l'élément s'affiche sans lien : rien à ouvrir. */}
+              {item.href ? (
+                <Link href={item.href} className={`${box} transition-transform hover:-translate-y-0.5`}>
+                  {contenu}
+                  <ArrowRight className="size-4 shrink-0" />
+                </Link>
+              ) : (
+                <div className={box}>{contenu}</div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

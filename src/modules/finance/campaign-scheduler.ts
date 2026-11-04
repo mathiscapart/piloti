@@ -5,20 +5,13 @@ import { db } from "@/lib/db";
 import { notifyMany } from "@/modules/notifications/notify";
 
 import { formatEuros } from "./format";
+import { campaignPopulationWhere, isInCampaignPopulation } from "./population";
 import { computeTiers } from "./tiers";
 
 // US-F03 — relances automatiques des cotisations en retard.
 // Pour chaque campagne dont l'échéance est passée, on relance (in-app + email)
 // les familles des jeunes non à jour, sauf ceux marqués « échelonnement
 // convenu ». Une relance par jeune et par campagne (dédup `CampaignReminder`).
-
-function hasRole(rolesJson: string, role: string): boolean {
-  try {
-    return (JSON.parse(rolesJson) as string[]).includes(role);
-  } catch {
-    return false;
-  }
-}
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_TEMPLATE =
@@ -69,18 +62,16 @@ export async function sendCampaignReminders(): Promise<number> {
     if (dueOffsets.length === 0) continue;
 
     const candidates = await db.user.findMany({
-      where: {
-        status: "ACTIVE",
-        roles: { contains: "SCOUT" },
-        ...(c.unit ? { unit: c.unit } : {}),
-      },
+      where: campaignPopulationWhere(c.unit),
       select: {
         id: true,
+        status: true,
         roles: true,
+        unit: true,
         socialBracket: { select: { coefficientPermille: true } },
       },
     });
-    const scouts = candidates.filter((u) => hasRole(u.roles, "SCOUT"));
+    const scouts = candidates.filter((u) => isInCampaignPopulation(c, u));
     const jeunes = scouts.map((u) => u.id);
     if (jeunes.length === 0) continue;
     const permilleByUser = new Map(
@@ -163,7 +154,11 @@ export async function sendCampaignReminders(): Promise<number> {
         type: "CAMPAIGN_REMINDER",
         title: `Cotisation en attente : ${c.name}`,
         body,
-        link: "/finances/cotisations",
+        // #106 — /finances/cotisations est réservée au trésorier et au RG :
+        // un parent ou un jeune y serait redirigé. Aucune vue « famille » du
+        // reste dû n'existe encore ; le montant est dans le message, le lien
+        // mène à la page d'accueil, ouverte à tous.
+        link: "/dashboard",
         messageId: c.id,
       }));
       sent++;

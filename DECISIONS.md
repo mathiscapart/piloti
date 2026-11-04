@@ -865,3 +865,45 @@ Deux défauts laissés par #97.
 - Exceptions connues : `toLocaleString` sur des nombres (montants, kWh, pourcentages) ; `lib/legal/age.ts` (âge révolu en heure locale, verrouillé par `age.test.ts`, à traiter dans une issue dédiée) ; `lib/upload.ts` (dossier `AAAA/MM` d'un fichier déposé).
 - Le flux iCal garde ses propres `getUTC*` (heure flottante) : il est correct sans passer par la base, et le verrou ne l'interdit pas.
 - Hors de cette décision, signalés à part : `admin/actions.ts` (date d'attestation comparée à un `new Date()` figé au chargement) et les deux règles de retard d'un prêt.
+
+## D-047 — #189 : un prêt est en retard dès l'instant de retour prévu dépassé
+
+**Contexte** : deux règles de retard coexistaient. Le badge, les compteurs, le filtre « En retard » et l'alerte US-07 comparaient `expectedReturn < wallNow()` ; la disponibilité (`availability.ts`, correctif #73) attendait `expectedReturn + 24 h`. La date de retour est saisie comme un jour (stockée à 00:00 en heure murale) : un prêt à rendre aujourd'hui était donc « en retard » dès minuit sur un écran et pas sur l'autre.
+
+**Choix** (règle tranchée par Mathis dans #189) :
+- Un prêt ACTIF est en retard **dès que l'instant de retour prévu est dépassé** : `expectedReturn < wallNow()` (heure murale de Paris, cf. D-046). Une date saisie sans heure vaut 00:00 : un prêt à rendre aujourd'hui est en retard dès minuit. Le statut RETARD saisi reste toujours en retard ; SECHAGE et RETOURNE ne le sont jamais.
+- Source unique : `src/modules/inventory/loan-overdue.ts` (`isPastDue`, `isLoanLate`, `lateLoanWhere`, `daysLate`), verrouillée par `loan-overdue.test.ts`. Liste et filtres des prêts, tableau de bord, alerte, disponibilité, badges (fiche article, fiche membre, page de retour) passent tous par elle.
+- La disponibilité lit la date seule (`isPastDue`, séchage compris) : un article non rendu après l'instant prévu bloque toute période.
+- `daysLate` compte les jours entiers écoulés depuis l'instant prévu (« 1 j de retard » au bout de 24 h).
+
+**Conséquences** :
+- Un prêt à rendre aujourd'hui est compté en retard toute la journée (tableau de bord, filtre, badge) et l'alerte part au premier passage du scheduler après minuit.
+- Un article à rendre aujourd'hui et pas encore rendu bloque toute réservation future, demain compris, jusqu'à son retour : le test #73 « prêt dû aujourd'hui → ne bloque pas demain » est inversé.
+- Un prêt d'une seule journée (départ = retour = aujourd'hui, accepté par `createLoan`) est en retard dès sa création : badge, tableau de bord, alerte au passage suivant du scheduler, blocage de l'article sur toute période future.
+- Alternative écartée : « fin du jour de retour prévu » (en retard le lendemain 00:00, ancienne règle de `availability.ts`). Y revenir ne toucherait que `loan-overdue.ts` et ses tests.
+
+## D-048 — #105 : une caisse peut avoir un solde négatif
+
+**Contexte** : en recette, une caisse est passée à −150 € par un retrait, et une autre à −69,50 € par un transfert. L'issue #105 proposait de refuser tout retrait ou transfert supérieur au solde, au motif qu'une caisse d'espèces ne peut pas être négative.
+
+**Choix** (décision de Mathis, 2026-11-02) : un solde négatif est un **comportement voulu**, pour toutes les caisses. Il couvre une avance, un découvert ou une régularisation à venir. Aucune garde de solde n'est appliquée sur `addMovement` ni sur `transferCash` (`src/modules/finance/cashbox-actions.ts`). La PR #203, qui ajoutait ce blocage, a été fermée sans fusion.
+
+**Conséquences** :
+- Le solde négatif reste affiché en rouge (liste et fiche), et le « Total » de `/finances/caisses` l'intègre.
+- Un solde négatif en recette n'est pas un bug à signaler.
+- Si un blocage devient nécessaire pour certaines caisses (espèces seulement), il passera par un type de caisse explicite, donc par une migration, et non par une règle appliquée à toutes.
+
+## D-049 — Dependabot : sécurité seule pour npm, versions groupées hebdo pour les GitHub Actions
+
+**Contexte** : aucune veille automatique des dépendances n'existait. Les montées majeures de Next, Prisma et React cassent des API (voir la stack, plus récente que les habitudes) et demandent une migration lue et testée à la main. Une PR de version par paquet npm noierait la relecture sans pouvoir être fusionnée telle quelle.
+
+**Choix** (`.github/dependabot.yml`) :
+- **npm** (couvre pnpm) : **mises à jour de sécurité uniquement**. `open-pull-requests-limit: 0` coupe toute PR de version. Les montées de version restent manuelles. Pas de `target-branch` : les security updates visent toujours la branche par défaut (`main`), et un `target-branch` désactiverait pour elles le label et le préfixe de commit.
+- **github-actions** : mises à jour de version **groupées** en une seule PR, chaque lundi (Europe/Paris), vers **`develop`**, au plus 5 PR ouvertes.
+- Label `dependencies` et commits `chore(deps): …` partout.
+- **Pas de Docker** (`docker`, `docker-compose`) : les tags d'images sont des variables (`FROM node:${NODE_IMAGE_TAG}`, `traefik:${TRAEFIK_IMAGE_TAG}`, valeurs dans `.env.example`) que Dependabot ne lit pas. Ces blocs n'ouvriraient aucune PR.
+
+**Conséquences** :
+- Les alertes et les security updates s'activent dans les réglages du dépôt, pas dans le fichier.
+- Une PR de sécurité npm arrive sur `main` : une fois fusionnée, elle se rapatrie dans `develop` à la main.
+- Les images Docker (Node, Traefik, cloudflared) et les images `docker://` des workflows (gitleaks, semgrep) restent à suivre à la main. Les ajouter à Dependabot impose d'écrire leurs tags en dur.

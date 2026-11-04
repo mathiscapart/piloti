@@ -5,17 +5,11 @@ import { db } from "@/lib/db";
 import type { PaymentStatus } from "@/lib/enums";
 
 import { summarizeCollection } from "./collection";
+import { familyDues, type FamilyDue } from "./family-dues";
+import { campaignPopulationWhere, isInCampaignPopulation } from "./population";
 import { computeTiers } from "./tiers";
 
 // US-F01/F02 — campagnes de cotisation & suivi des paiements.
-
-function hasRole(rolesJson: string, role: string): boolean {
-  try {
-    return (JSON.parse(rolesJson) as string[]).includes(role);
-  } catch {
-    return false;
-  }
-}
 
 export async function listCampaigns() {
   const campaigns = await db.campaign.findMany({
@@ -46,22 +40,20 @@ export async function getCampaignDetail(id: string) {
   if (!campaign) return null;
 
   const candidates = await db.user.findMany({
-    where: {
-      status: "ACTIVE",
-      roles: { contains: "SCOUT" },
-      ...(campaign.unit ? { unit: campaign.unit } : {}),
-    },
+    where: campaignPopulationWhere(campaign.unit),
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: {
       id: true,
       firstName: true,
       lastName: true,
       image: true,
+      status: true,
       roles: true,
+      unit: true,
       socialBracket: { select: { coefficientPermille: true } },
     },
   });
-  const jeunes = candidates.filter((u) => hasRole(u.roles, "SCOUT"));
+  const jeunes = candidates.filter((u) => isInCampaignPopulation(campaign, u));
 
   const jeuneIds = jeunes.map((j) => j.id);
   const [payments, exemptions, reminders, socialCases, links] = await Promise.all([
@@ -162,3 +154,38 @@ export async function getCampaignDetail(id: string) {
 export type CampaignDetail = NonNullable<
   Awaited<ReturnType<typeof getCampaignDetail>>
 >;
+
+// #106 — reste dû du compte connecté et des enfants qui lui sont rattachés,
+// pour son tableau de bord. Seules les campagnes dont la population (même
+// règle que le suivi) contient un membre de la famille sont chargées ; le
+// filtrage par famille est fait par `familyDues`.
+export async function getFamilyDues(viewerId: string): Promise<FamilyDue[]> {
+  const links = await db.familyLink.findMany({
+    where: { parentId: viewerId },
+    select: { childId: true },
+  });
+  const childIds = links.map((l) => l.childId);
+  const [family, campaigns] = await Promise.all([
+    db.user.findMany({
+      where: { id: { in: [viewerId, ...childIds] } },
+      select: { status: true, roles: true, unit: true },
+    }),
+    db.campaign.findMany({
+      orderBy: { createdAt: "asc" },
+      select: { id: true, unit: true },
+    }),
+  ]);
+  const relevant = campaigns.filter((c) =>
+    family.some((u) => isInCampaignPopulation(c, u)),
+  );
+  if (relevant.length === 0) return [];
+
+  const details = await Promise.all(relevant.map((c) => getCampaignDetail(c.id)));
+  return familyDues(
+    viewerId,
+    childIds,
+    details
+      .filter((d) => d !== null)
+      .map((d) => ({ id: d.campaign.id, name: d.campaign.name, rows: d.rows })),
+  );
+}

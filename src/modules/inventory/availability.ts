@@ -3,25 +3,17 @@
 // et le contrôle serveur (`createLoan`). Les prêts passés ici sont les prêts
 // ACTIFS de l'article (`ACTIVE_LOAN_STATUSES`, séchage compris).
 
+import { isPastDue } from "./loan-overdue";
+
 type LoanSpan = { startDate: Date; expectedReturn: Date; quantity: number };
 type Period = { start: Date; end: Date };
 
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-
-// Les dates de prêt sont des jours (00:00 UTC) : un prêt n'est en retard qu'une
-// fois sa journée de retour prévue écoulée — rendu le matin, il peut repartir.
-export function isOverdue(
-  loan: Pick<LoanSpan, "expectedReturn">,
-  now: Date,
-): boolean {
-  return loan.expectedReturn.getTime() + ONE_DAY_MS <= now.getTime();
-}
-
 // Un prêt en retard bloque l'article indéfiniment : il n'est physiquement pas
-// au local tant qu'il n'est pas rendu.
+// au local tant qu'il n'est pas rendu. Règle de retard : ./loan-overdue (#189) ;
+// séchage compris, d'où la date seule sans le statut.
 function blocks(loan: LoanSpan, period: Period, now: Date): boolean {
   if (loan.startDate > period.end) return false;
-  if (isOverdue(loan, now)) return true;
+  if (isPastDue(loan.expectedReturn, now)) return true;
   // Deux périodes se chevauchent ssi start1 <= end2 && start2 <= end1.
   return loan.expectedReturn >= period.start;
 }

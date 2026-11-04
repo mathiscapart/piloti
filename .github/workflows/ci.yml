@@ -1,8 +1,18 @@
 name: CI
 
+# `push` est limité aux branches de livraison, toute autre branche est vérifiée
+# par `pull_request` (PR internes, Dependabot, forks). Avant, un push sur une
+# branche de PR déclenchait `push` ET `pull_request`, deux runs identiques que
+# `concurrency` ne regroupait pas (groupes différents). Reste un doublon voulu :
+# un push sur `develop` pendant qu'une PR `develop` → `main` est ouverte
+# (le run `push` vérifie develop, le run `pull_request` vérifie la fusion).
+# Une branche sans PR n'est plus vérifiée automatiquement : `workflow_dispatch`
+# permet de lancer la CI à la main sur n'importe quelle branche.
 on:
   push:
+    branches: [develop, main]
   pull_request:
+  workflow_dispatch:
 
 # Annule les runs obsolètes d'une même branche/PR quand un nouveau push arrive.
 concurrency:

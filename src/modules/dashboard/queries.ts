@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import type { CurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { listReports } from "@/modules/communication/moderation-queries";
+import { getFamilyDues } from "@/modules/finance/campaigns";
+import { dueLabel } from "@/modules/finance/family-dues";
 
 // Agrégateur du tableau de bord.
 //
@@ -19,9 +21,11 @@ import { listReports } from "@/modules/communication/moderation-queries";
 /** Un point d'attention actionnable : un compte, un libellé, une destination. */
 export interface ActionItem {
   key: string;
-  count: number;
+  /** Absent : le libellé se suffit (ex. un reste de cotisation). */
+  count?: number;
   label: string;
-  href: string;
+  /** Absent : rien à ouvrir, l'information est sur le tableau de bord. */
+  href?: string;
   /** `urgent` = rouge ; `attention` = ambre ; `info` = neutre. */
   tone: "urgent" | "attention" | "info";
 }
@@ -100,6 +104,19 @@ export async function getActionItems(user: CurrentUser): Promise<ActionItem[]> {
   const reports = veut.reports ? (await listReports("PENDING", user)).length : 0;
 
   const items: ActionItem[] = [];
+
+  // #106 — cotisations dues par le compte et ses enfants rattachés. Pas de
+  // permission : le périmètre EST la relation familiale (comme getMyChildren),
+  // filtrée côté serveur par familyDues. Aucune page famille à ouvrir, d'où
+  // l'absence de lien ; le montant tient dans le libellé.
+  for (const due of await getFamilyDues(user.id)) {
+    items.push({
+      key: `cotisation-${due.campaignId}-${due.userId}`,
+      label: dueLabel(due),
+      tone: due.exempt ? "info" : "attention",
+    });
+  }
+
   const pousser = (
     autorise: boolean,
     n: number,

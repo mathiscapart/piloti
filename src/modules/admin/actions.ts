@@ -27,6 +27,7 @@ import {
 import { notify } from "@/modules/notifications/notify";
 import { ROLES, UNITS, YOUTH_UNITS } from "@/lib/enums";
 
+import { attestationDateSchema } from "./attestation";
 import { leadUnitsForRoles } from "./unit-lead";
 
 import type { ActionResult } from "@/lib/types";
@@ -112,10 +113,7 @@ const childAccountSchema = z.object({
   // jamais saisi en texte libre : élimine les fautes de frappe sur un
   // enregistrement légal. Vérifié en base dans la transaction ci-dessous.
   guardianUserId: z.string().trim().min(1, "Le responsable légal est requis."),
-  attestationDate: z.coerce
-    .date("Date de l'attestation invalide.")
-    .min(new Date("1900-01-01"), "Date de l'attestation invalide.")
-    .max(new Date(), "La date de l'attestation ne peut pas être dans le futur."),
+  attestationDate: attestationDateSchema,
 });
 
 // US-CM-01 — sentinelle pour faire échouer/rollback la transaction de

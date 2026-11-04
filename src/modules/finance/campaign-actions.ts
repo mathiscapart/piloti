@@ -17,12 +17,27 @@ import { notifyMany } from "@/modules/notifications/notify";
 import { getCampaignDetail } from "./campaigns";
 import { overpaymentCents } from "./collection";
 import { formatEuros, parseAmountToCents } from "./format";
+import { isInCampaignPopulation } from "./population";
 
 function parseDate(raw: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
   if (!m) return null;
   const [, y, mo, d] = m.map(Number);
   return new Date(Date.UTC(y, mo - 1, d));
+}
+
+// #106 — le compte fait-il partie de la population de la campagne (mêmes
+// lignes que le suivi) ? Refuser sinon : une saisie hors population est
+// comptée sans apparaître sur aucune ligne.
+async function isCampaignMember(campaignId: string, userId: string): Promise<boolean> {
+  const [campaign, user] = await Promise.all([
+    db.campaign.findUnique({ where: { id: campaignId }, select: { unit: true } }),
+    db.user.findUnique({
+      where: { id: userId },
+      select: { status: true, roles: true, unit: true },
+    }),
+  ]);
+  return !!campaign && !!user && isInCampaignPopulation(campaign, user);
 }
 
 // US-F01 — créer une campagne de cotisation et notifier les familles.
@@ -96,7 +111,9 @@ export async function createCampaign(
       body: `Montant : ${formatEuros(amountCents)}.${
         deadline ? " Merci de régler avant la date limite." : ""
       }`,
-      link: "/finances/cotisations",
+      // #106 — destinataires = jeunes et parents, pour qui
+      // /finances/cotisations redirige : même repli que la relance.
+      link: "/dashboard",
       messageId: created.id,
     }));
   });
@@ -127,10 +144,11 @@ export async function recordPayment(
   }
   const paidAt = parseDate(dateStr) ?? new Date(todayInput());
 
-  const row = (await getCampaignDetail(campaignId))?.rows.find(
-    (r) => r.user.id === userId,
-  );
-  if (!row) return { error: "Campagne ou jeune introuvable." };
+  const detail = await getCampaignDetail(campaignId);
+  if (!detail) return { error: "Campagne introuvable." };
+  // #106 — mêmes lignes que le suivi : hors population, refus.
+  const row = detail.rows.find((r) => r.user.id === userId);
+  if (!row) return { error: "Ce compte ne fait pas partie de cette campagne." };
 
   const overpaid = overpaymentCents(row.expectedCents, row.paidCents, amountCents);
   if (overpaid > 0 && !confirmOverpayment) {
@@ -214,6 +232,9 @@ export async function toggleSocialCase(
 ): Promise<ActionResult> {
   const actor = await getCurrentUser();
   if (!can(actor, "campaign.manage")) return { error: "Réservé au trésorier." };
+  if (!(await isCampaignMember(campaignId, userId))) {
+    return { error: "Ce compte ne fait pas partie de cette campagne." };
+  }
 
   const existing = await db.campaignSocialCase.findUnique({
     where: { campaignId_userId: { campaignId, userId } },
@@ -286,6 +307,9 @@ export async function toggleExemption(
   const actor = await getCurrentUser();
   if (!can(actor, "campaign.manage")) {
     return { error: "Réservé au trésorier." };
+  }
+  if (!(await isCampaignMember(campaignId, userId))) {
+    return { error: "Ce compte ne fait pas partie de cette campagne." };
   }
 
   const existing = await db.campaignExemption.findUnique({

@@ -5,17 +5,10 @@ import { db } from "@/lib/db";
 import type { PaymentStatus } from "@/lib/enums";
 
 import { summarizeCollection } from "./collection";
+import { campaignPopulationWhere, isInCampaignPopulation } from "./population";
 import { computeTiers } from "./tiers";
 
 // US-F01/F02 — campagnes de cotisation & suivi des paiements.
-
-function hasRole(rolesJson: string, role: string): boolean {
-  try {
-    return (JSON.parse(rolesJson) as string[]).includes(role);
-  } catch {
-    return false;
-  }
-}
 
 export async function listCampaigns() {
   const campaigns = await db.campaign.findMany({
@@ -46,22 +39,20 @@ export async function getCampaignDetail(id: string) {
   if (!campaign) return null;
 
   const candidates = await db.user.findMany({
-    where: {
-      status: "ACTIVE",
-      roles: { contains: "SCOUT" },
-      ...(campaign.unit ? { unit: campaign.unit } : {}),
-    },
+    where: campaignPopulationWhere(campaign.unit),
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: {
       id: true,
       firstName: true,
       lastName: true,
       image: true,
+      status: true,
       roles: true,
+      unit: true,
       socialBracket: { select: { coefficientPermille: true } },
     },
   });
-  const jeunes = candidates.filter((u) => hasRole(u.roles, "SCOUT"));
+  const jeunes = candidates.filter((u) => isInCampaignPopulation(campaign, u));
 
   const jeuneIds = jeunes.map((j) => j.id);
   const [payments, exemptions, reminders, socialCases, links] = await Promise.all([

@@ -11,6 +11,21 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 0
     labels: ["dependencies"]
+    # `fix` et non `chore` (D-050) : un correctif de sécurité fusionné sur main
+    # doit produire une version semantic-release (patch), donc une image.
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+
+  # Outillage de version de la CI (D-050), isolé de l'application : sécurité
+  # seulement, comme `/`. `chore` : une mise à jour de cet outillage ne change
+  # pas l'application et ne doit pas produire de version.
+  - package-ecosystem: "npm"
+    directory: "/.github/release"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 0
+    labels: ["dependencies"]
     commit-message:
       prefix: "chore"
       include: "scope"

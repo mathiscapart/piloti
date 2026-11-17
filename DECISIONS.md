@@ -907,3 +907,29 @@ Deux défauts laissés par #97.
 - Les alertes et les security updates s'activent dans les réglages du dépôt, pas dans le fichier.
 - Une PR de sécurité npm arrive sur `main` : une fois fusionnée, elle se rapatrie dans `develop` à la main.
 - Les images Docker (Node, Traefik, cloudflared) et les images `docker://` des workflows (gitleaks, semgrep) restent à suivre à la main. Les ajouter à Dependabot impose d'écrire leurs tags en dur.
+
+> **Amendé par D-050.** Les mises à jour de sécurité npm de l'application sont désormais commitées en `fix(deps): …` / `fix(deps-dev): …` (github-actions et outillage de version restent en `chore`), pour qu'un correctif de sécurité fusionné sur `main` produise une version.
+
+## D-050 — Versions par semantic-release et images publiées sur Docker Hub
+
+**Contexte** : l'image de prod n'était construite qu'au déploiement, sur l'hôte (D-018) : une image cassée (sharp/libvips, `better-sqlite3` sous Alpine, fichier exclu par `.dockerignore`) n'apparaissait qu'en prod. Aucune version n'était produite depuis `v0.2.0` (tag posé à la main), et rien ne reliait une image à un commit ou à une version.
+
+**Choix** (décision de Mathis, 2026-11-17), dans `.github/workflows/ci.yml` :
+- **Build à chaque run** : job `Image Docker (runner, migrate)`, les deux cibles que `docker compose build` construit en prod, avec le `NODE_IMAGE_TAG` de `.env.example`. Sur une PR : build seul, rien n'est publié.
+- **Version sur `main` seulement** : job `Version (semantic-release)`, après Qualité et Sécurité. Il lit les commits conventionnels depuis le dernier tag (`fix` → patch, `feat` → mineure, `BREAKING CHANGE` → majeure) et crée le tag `vX.Y.Z` et la Release GitHub. Pas de pré-version sur `develop`.
+- **Notes de version dans la Release GitHub seulement** : aucun commit poussé sur `main` (ni `CHANGELOG.md`, ni `version` de `package.json`, qui ne fait plus foi). `develop` et `main` restent alignés, et aucun bot n'a à contourner une protection de branche. Commentaires et labels sur les PR/issues désactivés (`.releaserc.json`) : le job n'a que `contents: write`.
+- **semantic-release 25.0.9** (pas la 26 : publiée la veille, exige Node 26 et dépend de paquets en bêta), installé dans `.github/release/` avec son propre `package-lock.json` (`npm ci --ignore-scripts`). Ce n'est pas une dépendance de l'application et il n'entre dans aucune image.
+- **Registre Docker Hub** : `<DOCKERHUB_USERNAME>/piloti` (runner) et `<DOCKERHUB_USERNAME>/piloti-migrate`, publiés sur push `develop`/`main` par un job `Publication Docker Hub` distinct, qui reçoit les images construites (artefact, pas de rebuild) et n'exécute aucun code du dépôt. Tags immuables `sha-<commit>` et `X.Y.Z` ; tags mobiles (nom de branche, `X.Y`, `latest`) seulement si le commit est encore la pointe de la branche, pour qu'un re-run ne les fasse pas reculer.
+- **Identifiants dans l'environnement GitHub `dockerhub`**, restreint aux branches `develop` et `main` : variable `DOCKERHUB_USERNAME` et secret `DOCKERHUB_TOKEN` (jeton Docker Hub « Read & Write », sans Delete). Une PR interne ou un `workflow_dispatch` sur une autre branche ne peut pas les obtenir, même avec un `ci.yml` modifié. Sans eux, la publication échoue au lieu d'être sautée.
+- **Déploiement inchangé** : `deploy.ps1` construit toujours sur l'hôte. Le passage au `docker pull` d'une version publiée fera l'objet d'un amendement de D-018, testé en staging.
+- `cancel-in-progress` ne s'applique plus qu'aux PR : un run coupé entre le tag et la publication laisserait une version sans image. GitHub ne garde qu'un run en attente par branche : un run intermédiaire en attente est annulé par le suivant, dont le commit le contient.
+
+**Conséquences** :
+- Une livraison `develop → main` contenant au moins un `fix` ou un `feat` produit une version et une Release. Les commits `chore`, `docs`, `test`, `refactor` seuls n'en produisent pas : l'image est alors publiée en `sha-<commit>` et `main` seulement.
+- Les notes de version reprennent les messages de commit (en français) sous des titres générés en anglais (« Bug Fixes », « Features »).
+- Les mises à jour de sécurité npm passent en `fix(deps)` / `fix(deps-dev)` (amendement de D-049) : fusionnées sur `main`, elles produisent une version patch, y compris pour une dépendance de dev qui ne change pas l'image.
+- Preset `angular` : un en-tête `feat!:` / `fix!:` n'est **pas** reconnu (aucune version). Une rupture se déclare par un pied de commit `BREAKING CHANGE: …`.
+- Si la création de la Release échoue après la pose du tag, un re-run rattrape l'image mais pas la Release : la créer à la main depuis le tag.
+- `contents: write` du job `release` est à la portée des dépendances de semantic-release (lockfile figé, scripts désactivés). Le ruleset sur `main`/`develop` (PR obligatoire) et un ruleset de tags `v*` (ni modification ni suppression) en bornent les dégâts : réglages GitHub à poser avant la première version.
+- Le build d'image allonge le run d'une PR : il attend Qualité et Sécurité, puis construit deux cibles.
+- `semantic-release` se met à jour à la main, en relisant le diff du lockfile et après quelques jours de recul sur une nouvelle version. Dependabot n'y propose que les correctifs de sécurité (`/.github/release`, en `chore`).

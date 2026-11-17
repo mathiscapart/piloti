@@ -14,13 +14,18 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Annule les runs obsolètes d'une même branche/PR quand un nouveau push arrive.
+# Annule les runs obsolètes d'une même PR quand un nouveau push arrive. Jamais
+# sur develop/main : un run coupé entre la création du tag de version et la
+# publication de l'image laisserait une version sans image. GitHub n'y garde
+# qu'un run en attente par branche : un run intermédiaire en attente est annulé
+# par le suivant (le commit plus récent le contient).
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # GITHUB_TOKEN en lecture seule : aucun job ci-dessous ne pousse de commit,
-# de tag, ni n'écrit sur les Pull Requests.
+# de tag, ni n'écrit sur les Pull Requests. Seule exception : le job `release`
+# (D-050), qui pose le tag de version et crée la Release (`contents: write`).
 permissions:
   contents: read
 
@@ -154,3 +159,165 @@ jobs:
           args: >-
             semgrep scan --config=p/security-audit --config=p/typescript --config=p/react
             --metrics=off --error --exclude=node_modules --exclude=.next
+
+  # Version (D-050) : sur un push sur main uniquement, une fois Qualité et
+  # Sécurité vertes. semantic-release lit les commits conventionnels depuis le
+  # dernier tag (fix → patch, feat → mineure, BREAKING CHANGE → majeure), crée
+  # le tag vX.Y.Z et la Release GitHub avec ses notes. Aucun commit n'est poussé
+  # sur main (ni CHANGELOG.md ni version de package.json) : develop et main
+  # restent alignés. Les commentaires et labels sur les PR et issues sont
+  # désactivés (.releaserc.json), d'où `contents: write` seul.
+  release:
+    name: Version (semantic-release)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [quality, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      # Historique et tags complets : semantic-release part du dernier tag.
+      - name: Récupération du code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Installation de Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      # Outillage isolé dans .github/release (lockfile figé par empreintes,
+      # aucun script d'installation exécuté) : pas une dépendance de l'app.
+      - name: Installation de semantic-release
+        run: npm ci --prefix .github/release --ignore-scripts --no-audit --no-fund
+
+      - name: Calcul et publication de la version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/release/node_modules/.bin/semantic-release
+
+      # Version portée par le commit courant, vide si ce push ne justifie
+      # aucune version (que des chore/docs/test/refactor).
+      - name: Version créée
+        id: version
+        run: |
+          tag=$(git tag --points-at HEAD --list 'v*' | sort -V | tail -n 1)
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "Version : ${tag:-aucune}"
+
+  # Images de prod (D-050) : `runner` (l'app) et `migrate` (migrations), les
+  # deux cibles que `docker compose build` construit en prod. Sur une PR, on
+  # construit seulement : l'image cassée (sharp/libvips, better-sqlite3 sous
+  # Alpine, fichiers exclus par .dockerignore) se voit avant le déploiement.
+  # Sur un push sur develop/main, les images construites sont transmises au job
+  # `publish`. Ce job n'a aucun secret : le build exécute le code du dépôt.
+  # deploy.ps1 continue de construire sur l'hôte (D-018) : rien ne tire encore
+  # ces images.
+  image:
+    name: Image Docker (runner, migrate)
+    needs: [quality, security, release]
+    # `release` est sauté hors de main : seuls `success` et `skipped` passent
+    # (un `release` annulé ou expiré a pu poser un tag sans finir).
+    if: >-
+      !cancelled()
+      && needs.quality.result == 'success'
+      && needs.security.result == 'success'
+      && (needs.release.result == 'success' || needs.release.result == 'skipped')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Même version de Node qu'en prod : NODE_IMAGE_TAG de .env.example (D-043).
+      - name: Build des images
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          node_tag=$(sed -nE 's/^NODE_IMAGE_TAG="?([^"]+)"?$/\1/p' .env.example)
+          test -n "$node_tag"
+          for target in runner migrate; do
+            docker build --target "$target" \
+              --build-arg NODE_IMAGE_TAG="$node_tag" \
+              --label org.opencontainers.image.source="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+              --label org.opencontainers.image.revision="$GITHUB_SHA" \
+              --label org.opencontainers.image.version="${VERSION:-sha-${GITHUB_SHA::7}}" \
+              -t "piloti-$target:ci" .
+          done
+
+      - name: Export des images pour la publication
+        if: github.event_name == 'push'
+        run: docker save piloti-runner:ci piloti-migrate:ci | gzip -1 > images.tar.gz
+
+      - name: Transmission des images au job de publication
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: images
+          path: images.tar.gz
+          retention-days: 1
+          compression-level: 0
+
+  # Publication Docker Hub (D-050), sans rebuild : les images sont celles
+  # construites par `image`. Le jeton vit dans l'environnement GitHub
+  # `dockerhub`, restreint aux branches develop et main : une PR ou un
+  # workflow_dispatch sur une autre branche ne peut pas l'obtenir, même avec un
+  # ci.yml modifié. Aucun code du dépôt n'est exécuté ici (pas de checkout).
+  publish:
+    name: Publication Docker Hub
+    needs: [image, release]
+    if: >-
+      !cancelled()
+      && github.event_name == 'push'
+      && needs.image.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: dockerhub
+    steps:
+      - name: Récupération des images
+        uses: actions/download-artifact@v8
+        with:
+          name: images
+
+      # Tags immuables, toujours poussés : sha-<commit>, et X.Y.Z quand
+      # `release` a créé une version. Tags mobiles (nom de branche, X.Y,
+      # latest) : seulement si ce commit est encore la pointe de la branche,
+      # pour qu'un re-run d'un ancien run ne les fasse pas reculer.
+      # Publication bloquante : sans identifiants, le run échoue au lieu de
+      # sauter la publication en silence.
+      - name: Publication sur Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "::error::Variable DOCKERHUB_USERNAME ou secret DOCKERHUB_TOKEN absent de l'environnement dockerhub (Settings > Environments)."
+            exit 1
+          fi
+          gunzip -c images.tar.gz | docker load
+          tags="sha-${GITHUB_SHA::7}"
+          if [ -n "$VERSION" ]; then tags="$tags $VERSION"; fi
+          tip=$(git ls-remote "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "refs/heads/$GITHUB_REF_NAME" | cut -f1)
+          if [ "$tip" = "$GITHUB_SHA" ]; then
+            tags="$tags $GITHUB_REF_NAME"
+            if [ -n "$VERSION" ]; then tags="$tags ${VERSION%.*} latest"; fi
+          else
+            echo "::warning::$GITHUB_SHA n'est plus la pointe de $GITHUB_REF_NAME : tags mobiles non mis à jour."
+          fi
+          echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+          for target in runner migrate; do
+            repo="$DOCKERHUB_USERNAME/piloti"
+            if [ "$target" = migrate ]; then repo="$repo-migrate"; fi
+            for tag in $tags; do
+              docker tag "piloti-$target:ci" "$repo:$tag"
+              docker push "$repo:$tag"
+            done
+          done
+          docker logout

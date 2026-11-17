@@ -286,9 +286,10 @@ jobs:
           name: images
 
       # Tags immuables, toujours poussés : sha-<commit>, et X.Y.Z quand
-      # `release` a créé une version. Tags mobiles (nom de branche, X.Y,
-      # latest) : seulement si ce commit est encore la pointe de la branche,
-      # pour qu'un re-run d'un ancien run ne les fasse pas reculer.
+      # `release` a créé une version. Tags mobiles, jamais reculés par un
+      # re-run d'un ancien run : le nom de branche seulement si ce commit en
+      # est encore la pointe ; X.Y et latest seulement si X.Y.Z est la plus
+      # haute version du dépôt.
       # Publication bloquante : sans identifiants, le run échoue au lieu de
       # sauter la publication en silence.
       - name: Publication sur Docker Hub
@@ -301,15 +302,26 @@ jobs:
             echo "::error::Variable DOCKERHUB_USERNAME ou secret DOCKERHUB_TOKEN absent de l'environnement dockerhub (Settings > Environments)."
             exit 1
           fi
+          set -o pipefail
           gunzip -c images.tar.gz | docker load
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
           tags="sha-${GITHUB_SHA::7}"
-          if [ -n "$VERSION" ]; then tags="$tags $VERSION"; fi
-          tip=$(git ls-remote "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "refs/heads/$GITHUB_REF_NAME" | cut -f1)
+          tip=$(git ls-remote "$url" "refs/heads/$GITHUB_REF_NAME" | cut -f1)
+          test -n "$tip"
           if [ "$tip" = "$GITHUB_SHA" ]; then
             tags="$tags $GITHUB_REF_NAME"
-            if [ -n "$VERSION" ]; then tags="$tags ${VERSION%.*} latest"; fi
           else
-            echo "::warning::$GITHUB_SHA n'est plus la pointe de $GITHUB_REF_NAME : tags mobiles non mis à jour."
+            echo "::warning::$GITHUB_SHA n'est plus la pointe de $GITHUB_REF_NAME : tag $GITHUB_REF_NAME non mis à jour."
+          fi
+          if [ -n "$VERSION" ]; then
+            tags="$tags $VERSION"
+            highest=$(git ls-remote --tags --refs "$url" 'v*' | sed 's#.*refs/tags/v##' | sort -V | tail -n 1)
+            test -n "$highest"
+            if [ "$VERSION" = "$highest" ]; then
+              tags="$tags ${VERSION%.*} latest"
+            else
+              echo "::warning::$VERSION n'est pas la plus haute version ($highest) : X.Y et latest non mis à jour."
+            fi
           fi
           echo "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
           for target in runner migrate; do

@@ -163,7 +163,7 @@ jobs:
   # Version (D-050) : sur un push sur main uniquement, une fois Qualité et
   # Sécurité vertes. semantic-release lit les commits conventionnels depuis le
   # dernier tag (fix → patch, feat → mineure, BREAKING CHANGE → majeure), crée
-  # le tag vX.Y.Z et la Release GitHub avec ses notes. Aucun commit n'est poussé
+  # le tag X.Y.Z (sans `v`) et la Release GitHub avec ses notes. Aucun commit n'est poussé
   # sur main (ni CHANGELOG.md ni version de package.json) : develop et main
   # restent alignés. Les commentaires et labels sur les PR et issues sont
   # désactivés (.releaserc.json), d'où `contents: write` seul.
@@ -205,7 +205,7 @@ jobs:
       - name: Version créée
         id: version
         run: |
-          tag=$(git tag --points-at HEAD --list 'v*' | sort -V | tail -n 1)
+          tag=$(git tag --points-at HEAD | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)
           echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
           echo "Version : ${tag:-aucune}"
 
@@ -315,7 +315,8 @@ jobs:
           fi
           if [ -n "$VERSION" ]; then
             tags="$tags $VERSION"
-            highest=$(git ls-remote --tags --refs "$url" 'v*' | sed 's#.*refs/tags/v##' | sort -V | tail -n 1)
+            # Tags X.Y.Z, et l'ancien format vX.Y.Z (v0.2.0) ramené à X.Y.Z.
+            highest=$(git ls-remote --tags --refs "$url" | sed 's#.*refs/tags/##; s#^v##' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
             test -n "$highest"
             if [ "$VERSION" = "$highest" ]; then
               tags="$tags ${VERSION%.*} latest"

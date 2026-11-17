@@ -14,6 +14,11 @@ l'approche runner self-hosted initialement envisagée en D-017). Le déploiement
 est **pull-based** : c'est l'hôte qui va chercher le code déjà fusionné,
 jamais GitHub qui pousse une exécution vers l'hôte.
 
+La CI construit et publie aussi les images (D-050) : `<DOCKERHUB_USERNAME>/piloti`
+et `<DOCKERHUB_USERNAME>/piloti-migrate` sur Docker Hub, versionnées par
+semantic-release sur `main` (`X.Y.Z`, `latest`). **Le déploiement ne les utilise
+pas encore** : `deploy.ps1` construit toujours les images sur l'hôte.
+
 | Branche | Script | Compose ciblé | `COMPOSE_PROJECT_NAME` | Environnement |
 |---|---|---|---|---|
 | `develop` | `scripts/deploy.ps1 -Environment staging` | `docker-compose.staging.yml` | `piloti-staging` | staging |

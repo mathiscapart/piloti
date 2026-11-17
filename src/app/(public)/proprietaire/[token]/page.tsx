@@ -10,7 +10,7 @@ import {
 import { OwnerDecisionForm } from "./OwnerDecisionForm";
 
 export const metadata: Metadata = {
-  title: "Vos coordonnées — Piloti",
+  title: "Vos coordonnées",
   // Une page qui affiche les données personnelles d'une personne identifiée
   // n'a rien à faire dans un index de moteur de recherche.
   robots: { index: false, follow: false },

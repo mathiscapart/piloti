@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { formatInstant } from "@/lib/datetime";
@@ -11,6 +12,8 @@ import {
 } from "@/modules/planning/stats";
 
 import { PrintButton } from "../../../../planning/presences/PrintButton";
+
+export const metadata: Metadata = { title: "Bilan pédagogique" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

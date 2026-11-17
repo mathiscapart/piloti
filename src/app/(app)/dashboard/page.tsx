@@ -8,6 +8,7 @@ import {
   Plus,
   Truck,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ActionCenter } from "@/components/dashboard/ActionCenter";
@@ -31,6 +32,8 @@ import { listOpenGroupTasks } from "@/modules/planning/tasks";
 import { buildTaskVMs } from "@/modules/planning/task-vm";
 
 import { TaskList } from "../planning/taches/TaskList";
+
+export const metadata: Metadata = { title: "Tableau de bord" };
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();

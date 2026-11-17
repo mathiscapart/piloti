@@ -1,4 +1,5 @@
 import { ShieldAlert } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { listReports, type ReportStatusFilter } from "@/modules/communication/moderation-queries";
 
 import { ModerationActions } from "./ModerationActions";
+
+export const metadata: Metadata = { title: "Modération" };
 
 const FILTERS: { value: ReportStatusFilter; label: string }[] = [
   { value: "PENDING", label: "En attente" },

@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -18,6 +19,8 @@ import {
 } from "../../user-actions";
 
 import { UserAccountForm } from "./UserAccountForm";
+
+export const metadata: Metadata = { title: "Modifier un utilisateur" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

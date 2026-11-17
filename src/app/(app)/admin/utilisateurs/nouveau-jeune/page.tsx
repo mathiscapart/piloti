@@ -1,10 +1,13 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { requireCan } from "@/lib/require-can";
 import { listActiveParents } from "@/modules/family/queries";
 
 import { ChildAccountForm } from "./ChildAccountForm";
+
+export const metadata: Metadata = { title: "Nouveau compte enfant" };
 
 // US-CM-01 — création d'un compte enfant sans connexion (toutes branches
 // jeunes, moins de 15 ans). Réservé à user.approve (SECRÉTAIRE + ADMIN),

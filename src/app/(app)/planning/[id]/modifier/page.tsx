@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -12,6 +13,8 @@ import { updateEvent } from "@/modules/planning/actions";
 import { getEvent } from "@/modules/planning/queries";
 
 import { EventForm } from "../../EventForm";
+
+export const metadata: Metadata = { title: "Modifier l'événement" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

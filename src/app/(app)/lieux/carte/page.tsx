@@ -1,4 +1,5 @@
 import { ArrowLeft, Map as MapIcon } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -8,6 +9,8 @@ import { can } from "@/lib/permissions";
 import { listPlacePins } from "@/modules/camp/places";
 
 import { PlacesMap } from "./PlacesMap";
+
+export const metadata: Metadata = { title: "Carte des lieux" };
 
 export default async function PlacesMapPage() {
   const user = await getCurrentUser();

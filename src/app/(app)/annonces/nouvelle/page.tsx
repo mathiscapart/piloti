@@ -1,4 +1,5 @@
 import { ArrowLeft, Megaphone } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ANNOUNCEMENT_AUDIENCES } from "@/lib/enums";
@@ -6,6 +7,8 @@ import { requireCan } from "@/lib/require-can";
 import { canPublishAnnouncementTo } from "@/modules/communication/audience";
 
 import { ComposeForm } from "./ComposeForm";
+
+export const metadata: Metadata = { title: "Publier une annonce" };
 
 export const dynamic = "force-dynamic";
 

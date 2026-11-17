@@ -8,6 +8,7 @@ import {
   UserPlus,
   Users,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,8 @@ import { rejectedPurgeDate } from "@/modules/admin/rejected-retention";
 
 import { DeleteUserButton } from "./user-actions";
 import { UserFiltersForm } from "./user-filters-form";
+
+export const metadata: Metadata = { title: "Utilisateurs" };
 
 // US-29 — parse le JSON des rôles additionnels de façon défensive.
 function parseRoles(raw: unknown): string[] {

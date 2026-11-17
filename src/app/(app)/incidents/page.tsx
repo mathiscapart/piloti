@@ -1,4 +1,5 @@
 import { AlertTriangle, Plus } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -14,6 +15,8 @@ import {
   type IncidentStatusFilter,
 } from "@/modules/inventory/queries";
 import { SEVERITY_LABEL } from "@/modules/inventory/types";
+
+export const metadata: Metadata = { title: "Incidents" };
 
 const SEVERITY_CHOICES: { value: IncidentSeverityFilter; label: string; tone?: string }[] = [
   { value: "all", label: "Toutes" },

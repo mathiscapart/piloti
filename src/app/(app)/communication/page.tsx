@@ -1,4 +1,5 @@
 import { MessageSquare } from "lucide-react";
+import type { Metadata } from "next";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { getCurrentUser } from "@/lib/get-current-user";
@@ -6,6 +7,8 @@ import { listChannelTree } from "@/modules/communication/queries";
 
 import { ChannelSidebar } from "./ChannelSidebar";
 import { MessagingTabs } from "./MessagingTabs";
+
+export const metadata: Metadata = { title: "Messagerie" };
 
 export default async function CommunicationPage() {
   const user = await getCurrentUser();

@@ -1,4 +1,5 @@
 import { Gift } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
@@ -17,6 +18,8 @@ import {
 } from "@/modules/inventory/types";
 
 import { DonationReviewActions } from "./donation-review-actions";
+
+export const metadata: Metadata = { title: "Dons" };
 
 const FILTERS: { value: DonationStatusFilter; label: string }[] = [
   { value: "pending", label: "En attente" },

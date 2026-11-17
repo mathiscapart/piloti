@@ -15,6 +15,7 @@ import {
   UserPlus,
   UserX,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
@@ -28,6 +29,8 @@ import {
   listAuditLog,
   listAuditUsers,
 } from "@/modules/admin/queries";
+
+export const metadata: Metadata = { title: "Journal d'audit" };
 
 const ACTION_LABEL: Record<string, string> = {
   USER_REGISTERED: "Inscription",

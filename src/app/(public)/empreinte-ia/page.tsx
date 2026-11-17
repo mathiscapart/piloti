@@ -31,7 +31,7 @@ import {
 import { VideoEmbed } from "./VideoEmbed";
 
 export const metadata: Metadata = {
-  title: "Empreinte écologique de l'IA — Piloti",
+  title: "Empreinte écologique de l'IA",
   description:
     "Ce que l'assistance par IA a coûté en eau pour développer Piloti, comment c'est estimé, et ce que cette estimation ne sait pas.",
 };

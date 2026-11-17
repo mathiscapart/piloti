@@ -1,4 +1,5 @@
 import { ArrowLeft, Wallet } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -11,6 +12,8 @@ import { formatEuros } from "@/modules/finance/format";
 import { BudgetManager } from "./BudgetManager";
 import { EventPaymentRow } from "./EventPaymentRow";
 import { TicketsSection } from "./TicketsSection";
+
+export const metadata: Metadata = { title: "Budget de l'événement" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

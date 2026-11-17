@@ -1,8 +1,11 @@
 import { ScanLine } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
+
+export const metadata: Metadata = { title: "Tag NFC" };
 
 interface PageProps {
   params: Promise<{ uid: string }>;

@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ORG_GROUP, ORG_NAME, ORG_PRIVACY_EMAIL } from "@/lib/legal/organization";
 import { THIRD_PARTY_NOTICE_VERSION } from "@/lib/legal/versions";
 
-export const metadata: Metadata = { title: "Information — Piloti" };
+export const metadata: Metadata = { title: "Information" };
 
 // L'identité de l'instance est lue dans l'environnement au rendu (CONF-01) :
 // cette page ne peut donc pas être pré-rendue statiquement.

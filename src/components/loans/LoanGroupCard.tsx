@@ -42,7 +42,7 @@ export function LoanGroupCard({
         <div className="min-w-0">
           {/* US-14 — nom cliquable → fiche membre (matériel détenu + contact) */}
           <Link
-            href={`/membres/${head.borrower.id}`}
+            href={`/membres/${head.borrower.id}?from=prets`}
             className="font-bold text-earth hover:text-forest"
           >
             {head.borrower.firstName} {head.borrower.lastName}

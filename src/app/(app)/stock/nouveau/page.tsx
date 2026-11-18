@@ -1,10 +1,13 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EquipmentForm } from "@/components/equipment/EquipmentForm";
 import { requireCan } from "@/lib/require-can";
 import { createEquipment } from "@/modules/inventory/actions";
 import { listCategories } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Nouvel article" };
 
 export default async function NewEquipmentPage() {
   await requireCan("equipment.create");

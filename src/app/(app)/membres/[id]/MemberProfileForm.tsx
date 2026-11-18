@@ -13,6 +13,8 @@ const initialState: ActionResult = { error: null };
 
 interface Props {
   userId: string;
+  /** #66 — page d'origine, renvoyée à l'action pour y revenir après succès. */
+  from: string | null;
   profession: string | null;
   skills: string | null;
   availability: string | null;
@@ -22,6 +24,7 @@ interface Props {
 
 export function MemberProfileForm({
   userId,
+  from,
   profession,
   skills,
   availability,
@@ -39,6 +42,7 @@ export function MemberProfileForm({
       className="space-y-4 rounded-2xl border border-stone/60 bg-snow p-5"
     >
       <input type="hidden" name="userId" value={userId} />
+      {from ? <input type="hidden" name="from" value={from} /> : null}
       <h3 className="font-bold text-earth">Profil &amp; compétences (parent)</h3>
 
       <div className="space-y-1.5">

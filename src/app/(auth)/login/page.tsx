@@ -1,13 +1,18 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
+import { safeNextPath } from "@/lib/safe-redirect";
+
 import { LoginForm } from "./login-form";
+
+export const metadata: Metadata = { title: "Connexion" };
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ reset?: string; locked?: string }>;
+  searchParams: Promise<{ reset?: string; locked?: string; next?: string | string[] }>;
 }) {
-  const { reset, locked } = await searchParams;
+  const { reset, locked, next } = await searchParams;
 
   return (
     <div className="w-full max-w-md space-y-6">
@@ -33,7 +38,10 @@ export default async function LoginPage({
         </p>
       ) : null}
 
-      <LoginForm />
+      {/* #85 — validé dès l'affichage (le champ caché ne porte jamais une
+          valeur piégée) puis revalidé par l'action. Répété (`?next=a&next=b`),
+          il est ignoré. */}
+      <LoginForm next={safeNextPath(next)} />
 
       <p className="text-center text-sm text-trail">
         Pas encore de compte ?{" "}

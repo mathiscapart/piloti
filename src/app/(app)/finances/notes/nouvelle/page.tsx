@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -7,6 +8,8 @@ import { can } from "@/lib/permissions";
 import { listEvents } from "@/modules/planning/queries";
 
 import { ExpenseForm } from "../ExpenseForm";
+
+export const metadata: Metadata = { title: "Nouvelle note de frais" };
 
 export default async function NewExpensePage() {
   const user = await getCurrentUser();

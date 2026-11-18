@@ -1,10 +1,13 @@
 import { ArrowLeft, ShieldOff, Upload } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ImportClient } from "@/components/equipment/ImportClient";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { db } from "@/lib/db";
+
+export const metadata: Metadata = { title: "Importer l'inventaire" };
 
 export default async function ImportEquipmentPage() {
   const user = await getCurrentUser();

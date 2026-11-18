@@ -62,3 +62,4 @@ next-env.d.ts
 
 # uploads (Phase 7) — stockés hors de public/ (contrôle d'accès, cf. lib/upload.ts)
 /var/uploads/
+/.github/release/node_modules

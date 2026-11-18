@@ -4,6 +4,7 @@ import { unlink } from "fs/promises";
 
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { z } from "zod";
 
@@ -14,6 +15,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { birthDateSchema, canCreateChildAccount, canEnableLogin } from "@/lib/legal/age";
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
+import { memberProfileRedirect } from "@/lib/member-back-link";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
 import {
@@ -653,7 +655,9 @@ export async function updateMemberProfile(
 
   revalidatePath(`/membres/${userId}`);
   revalidatePath("/membres/annuaire");
-  return { error: null };
+  // #66 — confirmer et revenir à la page d'origine (liste blanche, cf. #80).
+  // Hors try/catch : `redirect` lève une exception de navigation.
+  redirect(memberProfileRedirect(formData.get("from")));
 }
 
 export async function suspendUser(

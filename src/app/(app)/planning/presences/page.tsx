@@ -1,4 +1,5 @@
 import { ArrowLeft, TriangleAlert, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { getUnitAttendanceDashboard } from "@/modules/planning/stats";
 
 import { PrintButton } from "./PrintButton";
+
+export const metadata: Metadata = { title: "Présences" };
 
 interface PageProps {
   searchParams: Promise<{ unit?: string }>;
@@ -115,7 +118,7 @@ export default async function AttendanceDashboardPage({ searchParams }: PageProp
           {dashboard.rows.map((r) => (
             <li key={r.user.id}>
               <Link
-                href={`/membres/${r.user.id}`}
+                href={`/membres/${r.user.id}?from=presences`}
                 className="flex items-center gap-3 p-3 transition-colors hover:bg-sand/40"
               >
                 <UserAvatar

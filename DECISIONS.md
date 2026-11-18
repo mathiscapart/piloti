@@ -907,3 +907,56 @@ Deux défauts laissés par #97.
 - Les alertes et les security updates s'activent dans les réglages du dépôt, pas dans le fichier.
 - Une PR de sécurité npm arrive sur `main` : une fois fusionnée, elle se rapatrie dans `develop` à la main.
 - Les images Docker (Node, Traefik, cloudflared) et les images `docker://` des workflows (gitleaks, semgrep) restent à suivre à la main. Les ajouter à Dependabot impose d'écrire leurs tags en dur.
+
+> **Amendé par D-050.** Les mises à jour de sécurité npm de l'application sont désormais commitées en `fix(deps): …` / `fix(deps-dev): …` (github-actions et outillage de version restent en `chore`), pour qu'un correctif de sécurité fusionné sur `main` produise une version.
+
+## D-050 — Versions par semantic-release et images publiées sur Docker Hub
+
+**Contexte** : l'image de prod n'était construite qu'au déploiement, sur l'hôte (D-018) : une image cassée (sharp/libvips, `better-sqlite3` sous Alpine, fichier exclu par `.dockerignore`) n'apparaissait qu'en prod. Aucune version n'était produite depuis `v0.2.0` (tag posé à la main), et rien ne reliait une image à un commit ou à une version.
+
+**Choix** (décision de Mathis, 2026-11-17), dans `.github/workflows/ci.yml` :
+- **Build à chaque run** : job `Image Docker (runner, migrate)`, les deux cibles que `docker compose build` construit en prod, avec le `NODE_IMAGE_TAG` de `.env.example`. Sur une PR : build seul, rien n'est publié.
+- **Version sur `main` seulement** : job `Version (semantic-release)`, après Qualité et Sécurité. Il lit les commits conventionnels depuis le dernier tag (`fix` → patch, `feat` → mineure, `BREAKING CHANGE` → majeure) et crée le tag `X.Y.Z` (sans `v`, `tagFormat: "${version}"` ; l'ancien `v0.2.0` reste reconnu comme dernière version) et la Release GitHub. Pas de pré-version sur `develop`.
+- **Notes de version dans la Release GitHub seulement** : aucun commit poussé sur `main` (ni `CHANGELOG.md`, ni `version` de `package.json`, qui ne fait plus foi). `develop` et `main` restent alignés, et aucun bot n'a à contourner une protection de branche. Commentaires et labels sur les PR/issues désactivés (`.releaserc.json`) : le job n'a que `contents: write`.
+- **semantic-release 25.0.9** (pas la 26 : publiée la veille, exige Node 26 et dépend de paquets en bêta), installé dans `.github/release/` avec son propre `package-lock.json` (`npm ci --ignore-scripts`). Ce n'est pas une dépendance de l'application et il n'entre dans aucune image.
+- **Registre Docker Hub** : `<DOCKERHUB_USERNAME>/piloti` (runner) et `<DOCKERHUB_USERNAME>/piloti-migrate`, publiés sur push `develop`/`main` par un job `Publication Docker Hub` distinct, qui reçoit les images construites (artefact, pas de rebuild) et n'exécute aucun code du dépôt. Tags immuables `sha-<commit>` et `X.Y.Z`. Tags mobiles, qu'un re-run ne fait jamais reculer : le nom de branche seulement si le commit en est encore la pointe ; `X.Y` et `latest` seulement si `X.Y.Z` est la plus haute version du dépôt.
+- **Identifiants dans l'environnement GitHub `dockerhub`** : variable `DOCKERHUB_USERNAME` et secret `DOCKERHUB_TOKEN` (jeton Docker Hub « Read & Write », sans Delete). Sans eux, la publication échoue au lieu d'être sautée. **À configurer à la main** : GitHub crée l'environnement au premier run **sans restriction de branche**. Il faut le restreindre à `develop` et `main` (*Deployment branches*) **avant** d'y déposer le secret ; une PR interne ou un `workflow_dispatch` sur une autre branche ne peut alors pas l'obtenir, même avec un `ci.yml` modifié.
+- **Déploiement inchangé** : `deploy.ps1` construit toujours sur l'hôte. Le passage au `docker pull` d'une version publiée fera l'objet d'un amendement de D-018, testé en staging.
+- `cancel-in-progress` ne s'applique plus qu'aux PR : un run coupé entre le tag et la publication laisserait une version sans image. GitHub ne garde qu'un run en attente par branche : un run intermédiaire en attente est annulé par le suivant, dont le commit le contient.
+
+**Conséquences** :
+- Une livraison `develop → main` contenant au moins un `fix` ou un `feat` produit une version et une Release. Les commits `chore`, `docs`, `test`, `refactor` seuls n'en produisent pas : l'image est alors publiée en `sha-<commit>`, plus `main` si le commit est encore la pointe de la branche.
+- Les notes de version reprennent les messages de commit (en français) sous des titres générés en anglais (« Bug Fixes », « Features »).
+- Les mises à jour de sécurité npm passent en `fix(deps)` / `fix(deps-dev)` (amendement de D-049) : fusionnées sur `main`, elles produisent une version patch, y compris pour une dépendance de dev qui ne change pas l'image.
+- Preset `angular` : un en-tête `feat!:` / `fix!:` n'est **pas** reconnu (aucune version). Une rupture se déclare par un pied de commit `BREAKING CHANGE: …`.
+- Si la création de la Release échoue après la pose du tag, un re-run rattrape l'image mais pas la Release : la créer à la main depuis le tag. Les images passent de `image` à `publish` par un artefact gardé 24 h : au-delà, « Re-run failed jobs » échoue, il faut « Re-run all jobs » (rebuild).
+- `contents: write` du job `release` est à la portée des dépendances de semantic-release (lockfile figé, scripts désactivés). Le ruleset sur `main`/`develop` (PR obligatoire) et un ruleset de tags (ni modification ni suppression, création autorisée) en bornent les dégâts. Ces deux rulesets et la restriction de l'environnement `dockerhub` sont des réglages GitHub à poser avant la première version.
+- Le build d'image allonge le run d'une PR : il attend Qualité et Sécurité, puis construit deux cibles.
+- `semantic-release` se met à jour à la main, en relisant le diff du lockfile et après quelques jours de recul sur une nouvelle version. Dependabot n'y propose que les correctifs de sécurité (`/.github/release`, en `chore`).
+
+## D-051 — #81 : titres d'onglet fixes, suffixe « — Piloti » au seul layout racine
+
+**Contexte** : toutes les pages s'intitulaient « Piloti » : impossible de distinguer les onglets, et le critère WCAG 2.4.2 (« Titre de page ») n'était pas respecté. L'issue proposait des titres de détail portant le nom de l'objet (« Tente Igloo 6p #1 »), tout en relevant le risque des noms de mineurs dans l'historique d'un poste partagé.
+
+**Choix** :
+- `src/app/layout.tsx` porte `title: { template: "%s — Piloti", default: "Piloti" }`. Chaque `page.tsx` exporte `metadata` avec un titre court, sans suffixe, aligné sur le libellé de navigation ou le h1. Aucun layout imbriqué ne définit de `title`, car il masquerait le template racine.
+- **Titres fixes partout, routes dynamiques comprises** (« Article », « Fiche membre », « Conversation », « Vos coordonnées »). Un `generateMetadata` coûterait une requête par page et devrait redoubler le contrôle `can()` / périmètre de la page, faute de quoi un nom s'afficherait dans le `<title>` pour quelqu'un qui n'a pas le droit de le voir. Il mettrait aussi des données personnelles (mineurs, propriétaires de lieux sur la page publique à jeton) dans l'historique du navigateur.
+- Verrou : `src/lib/page-titles.test.ts`. Il fait échouer le test si une page n'a pas de titre, si un titre contient « Piloti », si deux titres sont identiques, si un layout imbriqué définit un titre, ou si une page utilise `generateMetadata` hors de la liste d'exceptions `GENERATE_METADATA_ALLOWED`, vide aujourd'hui. Deux pages sont exemptées de titre : `/` (redirection) et `/finances/tranches` (`notFound()`).
+
+**Conséquences** :
+- Deux onglets de même type (deux articles, deux événements) portent le même titre. C'est le prix de l'absence de donnée dans les titres.
+- Un titre calculé à partir des données (objet non personnel, comme un article ou un lieu) reste possible. Il passe par une entrée dans `GENERATE_METADATA_ALLOWED`, avec le même contrôle d'accès que la page, et il est relu en PR.
+
+## D-052 — #85 : retour sur la page demandée après connexion (`?next=`)
+
+**Contexte** : un visiteur non connecté qui ouvre un lien profond (email, notification push, favori) arrivait toujours sur `/dashboard` après connexion. Mémoriser la page demandée impose de transporter une URL fournie par le client, donc de ne pas ouvrir de redirection.
+
+**Choix** :
+- Le paramètre s'appelle `next` et ne porte qu'un **chemin interne** (`pathname + search`). Le proxy l'ajoute en redirigeant vers `/login` (visiteur sans session, ou session refusée : cookie périmé, compte non-ACTIVE). Pas pour `/`, ni au-delà de 2048 caractères ; jamais pour les pages publiques, légales ou tiers, ni pour `/api` (hors matcher).
+- **Point de validation unique : `safeNextPath()`** (`src/lib/safe-redirect.ts`, fonction pure testée). Toute valeur douteuse retombe sur `/dashboard` : non textuelle, trop longue, ne commençant pas par un seul `/`, `\` ou caractère de contrôle (aussi sous forme encodée `%2f`, `%5c`, `%09`), origine différente une fois résolue, page d'authentification, `/api` ou `/_next` (comparés sur le chemin décodé, sans casse). Un `next` répété est ignoré. Côté proxy, `nextForLogin()` ne transporte que ce que `safeNextPath` accepterait tel quel. Elle est appliquée à l'affichage de `/login` (champ caché), dans `signInAction`, et dans le proxy pour un utilisateur déjà connecté qui ouvre `/login?next=…`.
+- Aucun contrôle d'accès n'est fait sur la cible : la page visée applique son propre `can(user, "…")`, comme pour une navigation directe.
+
+**Conséquences** :
+- Toute nouvelle redirection post-authentification (2FA, connexion après inscription…) doit passer par `safeNextPath`, jamais par `redirect(<valeur client>)`.
+- `next` n'est pas conservé à travers « mot de passe oublié » (le lien arrive par email) ni par le repli `redirect("/login")` de `getCurrentUser`, qui ne connaît pas le chemin courant.
+- `next` apparaît dans l'URL de `/login` : la `Referrer-Policy` `strict-origin-when-cross-origin` (Traefik) empêche qu'il parte vers un tiers.

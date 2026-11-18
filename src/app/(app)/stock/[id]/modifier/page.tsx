@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -10,6 +11,8 @@ import { listCategories } from "@/modules/inventory/queries";
 import { db } from "@/lib/db";
 
 import { ArchiveButton } from "./archive-button";
+
+export const metadata: Metadata = { title: "Modifier l'article" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

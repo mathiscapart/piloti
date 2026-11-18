@@ -1,9 +1,12 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/get-current-user";
 import { getThread } from "@/modules/communication/dm-queries";
 
 import { ThreadView } from "./ThreadView";
+
+export const metadata: Metadata = { title: "Conversation" };
 
 export const dynamic = "force-dynamic";
 

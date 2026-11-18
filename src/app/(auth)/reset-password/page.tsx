@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ResetPasswordForm } from "./reset-form";
+
+export const metadata: Metadata = { title: "Nouveau mot de passe" };
 
 export default async function ResetPasswordPage({
   searchParams,

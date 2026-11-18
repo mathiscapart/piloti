@@ -1,4 +1,5 @@
 import { ArrowLeft, Phone, Search, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -8,6 +9,8 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { listAllParents, listParentDirectory } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Annuaire des compétences" };
 
 interface PageProps {
   searchParams: Promise<{ q?: string }>;
@@ -71,7 +74,7 @@ export default async function ParentDirectoryPage({ searchParams }: PageProps) {
             <li key={p.id} className="rounded-2xl bg-snow p-4 shadow-card">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <Link
-                  href={`/membres/${p.id}`}
+                  href={`/membres/${p.id}?from=annuaire`}
                   className="font-bold text-earth hover:text-forest"
                 >
                   {p.firstName} {p.lastName}
@@ -128,7 +131,7 @@ export default async function ParentDirectoryPage({ searchParams }: PageProps) {
               return (
                 <li key={p.id}>
                   <Link
-                    href={`/membres/${p.id}`}
+                    href={`/membres/${p.id}?from=annuaire`}
                     className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-sand"
                   >
                     <span className="min-w-0 truncate font-bold text-earth">

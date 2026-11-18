@@ -1,4 +1,5 @@
 import { GraduationCap } from "lucide-react";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { UNITS, UNIT_LABEL, type Unit } from "@/lib/enums";
@@ -8,6 +9,8 @@ import { listBadges, listSteps } from "@/modules/pedagogy/referential";
 
 import { BadgesManager } from "./BadgesManager";
 import { StepsManager } from "./StepsManager";
+
+export const metadata: Metadata = { title: "Référentiels" };
 
 export default async function ReferentialPage() {
   const user = await getCurrentUser();

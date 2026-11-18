@@ -12,7 +12,7 @@ import { signInAction, type SignInActionResult } from "./actions";
 
 const initialState: SignInActionResult = { error: null };
 
-export function LoginForm() {
+export function LoginForm({ next }: { next: string }) {
   const [state, action, pending] = useActionState(signInAction, initialState);
 
   return (
@@ -20,6 +20,8 @@ export function LoginForm() {
       action={action}
       className="space-y-4 rounded-2xl bg-snow p-6 shadow-card"
     >
+      {/* #85 — page demandée avant la connexion, revalidée côté serveur. */}
+      <input type="hidden" name="next" value={next} />
       <div className="space-y-1.5">
         <Label htmlFor="email">Email</Label>
         <Input

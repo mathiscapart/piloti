@@ -1,4 +1,5 @@
 import { Award } from "lucide-react";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { db } from "@/lib/db";
@@ -8,6 +9,8 @@ import { can, canActOnUnit } from "@/lib/permissions";
 import { listBadges } from "@/modules/pedagogy/referential";
 
 import { AwardForm } from "./AwardForm";
+
+export const metadata: Metadata = { title: "Attribuer un badge" };
 
 function hasRole(rolesJson: string, role: string): boolean {
   try {

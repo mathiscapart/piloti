@@ -1,9 +1,12 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { IncidentForm } from "@/components/incidents/IncidentForm";
 import { db } from "@/lib/db";
 import { requireCan } from "@/lib/require-can";
+
+export const metadata: Metadata = { title: "Signaler un incident" };
 
 interface PageProps {
   searchParams: Promise<{

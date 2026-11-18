@@ -11,6 +11,7 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -44,6 +45,8 @@ import { DeleteEventButton } from "../DeleteEventButton";
 import { PrintButton } from "../presences/PrintButton";
 import { RsvpControl } from "../RsvpControl";
 import { WithdrawRegistrationButton } from "../WithdrawRegistrationButton";
+
+export const metadata: Metadata = { title: "Événement" };
 
 const RSVP_TONE: Record<RsvpResponse, string> = {
   PRESENT: "text-forest-ink",

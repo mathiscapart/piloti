@@ -1,4 +1,5 @@
 import { ArrowLeft, CalendarDays } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -9,6 +10,8 @@ import { canActOnEvent } from "@/modules/planning/event-scope";
 import { getAttendanceRoster } from "@/modules/planning/queries";
 
 import { AttendanceList } from "./AttendanceList";
+
+export const metadata: Metadata = { title: "Présences de l'événement" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

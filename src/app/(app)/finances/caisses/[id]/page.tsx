@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -10,6 +11,8 @@ import { getCashBox } from "@/modules/finance/cashbox";
 import { formatEuros } from "@/modules/finance/format";
 
 import { AddMovementForm } from "../AddMovementForm";
+
+export const metadata: Metadata = { title: "Caisse" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

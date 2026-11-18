@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { formatWall, wallNow } from "@/lib/datetime";
 import { UNIT_LABEL, UNITS } from "@/lib/enums";
+import { memberBackLink } from "@/lib/member-back-link";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, canActOnUnit, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -42,10 +43,13 @@ const ROLE_LABEL: Record<string, string> = {
 // Date d'événement : formatée en UTC (heure murale, cf. module planning).
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }
 
-export default async function MemberDetailPage({ params }: PageProps) {
+export default async function MemberDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  // #80 — retour vers la page d'origine (liste blanche), `/membres` par défaut.
+  const back = memberBackLink((await searchParams).from);
   const currentUser = await getCurrentUser();
   // US-14 — réservé aux chefs / admins.
   if (!can(currentUser, "member.view")) redirect("/dashboard");
@@ -110,11 +114,11 @@ export default async function MemberDetailPage({ params }: PageProps) {
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
-          href="/prets"
+          href={back.href}
           className="inline-flex items-center gap-1 text-sm font-bold text-trail hover:text-earth"
         >
           <ArrowLeft className="size-4" />
-          Retour aux prêts
+          {back.label}
         </Link>
         {isJeune && can(currentUser, "pedago.view") ? (
           <Link
@@ -201,6 +205,7 @@ export default async function MemberDetailPage({ params }: PageProps) {
       {isParent && canManageProfile ? (
         <MemberProfileForm
           userId={user.id}
+          from={back.from}
           profession={user.profession}
           skills={user.skills}
           availability={user.availability}

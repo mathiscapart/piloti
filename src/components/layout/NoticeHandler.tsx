@@ -19,6 +19,7 @@ const SUCCESS_MESSAGES: Record<string, string> = {
   "event-deleted": "Événement supprimé.",
   "expense-created": "Note de frais envoyée au trésorier.",
   "campaign-created": "Campagne lancée — les familles sont notifiées.",
+  "member-profile-updated": "Profil enregistré.",
 };
 
 /**

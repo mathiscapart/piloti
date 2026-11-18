@@ -118,7 +118,7 @@ export default async function AttendanceDashboardPage({ searchParams }: PageProp
           {dashboard.rows.map((r) => (
             <li key={r.user.id}>
               <Link
-                href={`/membres/${r.user.id}`}
+                href={`/membres/${r.user.id}?from=presences`}
                 className="flex items-center gap-3 p-3 transition-colors hover:bg-sand/40"
               >
                 <UserAvatar

@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { ACCOUNT_NOT_ACTIVE_CODE, auth } from "@/lib/auth";
 import { rateLimitMessage } from "@/lib/auth-rate-limit";
+import { safeNextPath } from "@/lib/safe-redirect";
 
 export interface SignInActionResult {
   error: string | null;
@@ -62,5 +63,6 @@ export async function signInAction(
 
   if (!user) return { error: "Erreur de connexion." };
 
-  redirect("/dashboard");
+  // #85 — retour sur la page demandée, validée (jamais hors de l'application).
+  redirect(safeNextPath(formData.get("next")));
 }

@@ -946,3 +946,17 @@ Deux défauts laissés par #97.
 **Conséquences** :
 - Deux onglets de même type (deux articles, deux événements) portent le même titre. C'est le prix de l'absence de donnée dans les titres.
 - Un titre calculé à partir des données (objet non personnel, comme un article ou un lieu) reste possible. Il passe par une entrée dans `GENERATE_METADATA_ALLOWED`, avec le même contrôle d'accès que la page, et il est relu en PR.
+
+## D-052 — #85 : retour sur la page demandée après connexion (`?next=`)
+
+**Contexte** : un visiteur non connecté qui ouvre un lien profond (email, notification push, favori) arrivait toujours sur `/dashboard` après connexion. Mémoriser la page demandée impose de transporter une URL fournie par le client, donc de ne pas ouvrir de redirection.
+
+**Choix** :
+- Le paramètre s'appelle `next` et ne porte qu'un **chemin interne** (`pathname + search`). Le proxy l'ajoute en redirigeant vers `/login` (visiteur sans session, ou session refusée : cookie périmé, compte non-ACTIVE). Pas pour `/`, ni au-delà de 2048 caractères ; jamais pour les pages publiques, légales ou tiers, ni pour `/api` (hors matcher).
+- **Point de validation unique : `safeNextPath()`** (`src/lib/safe-redirect.ts`, fonction pure testée). Toute valeur douteuse retombe sur `/dashboard` : non textuelle, trop longue, ne commençant pas par un seul `/`, `\` ou caractère de contrôle (aussi sous forme encodée `%2f`, `%5c`, `%09`), origine différente une fois résolue, page d'authentification, `/api` ou `/_next` (comparés sur le chemin décodé, sans casse). Un `next` répété est ignoré. Côté proxy, `nextForLogin()` ne transporte que ce que `safeNextPath` accepterait tel quel. Elle est appliquée à l'affichage de `/login` (champ caché), dans `signInAction`, et dans le proxy pour un utilisateur déjà connecté qui ouvre `/login?next=…`.
+- Aucun contrôle d'accès n'est fait sur la cible : la page visée applique son propre `can(user, "…")`, comme pour une navigation directe.
+
+**Conséquences** :
+- Toute nouvelle redirection post-authentification (2FA, connexion après inscription…) doit passer par `safeNextPath`, jamais par `redirect(<valeur client>)`.
+- `next` n'est pas conservé à travers « mot de passe oublié » (le lien arrive par email) ni par le repli `redirect("/login")` de `getCurrentUser`, qui ne connaît pas le chemin courant.
+- `next` apparaît dans l'URL de `/login` : la `Referrer-Policy` `strict-origin-when-cross-origin` (Traefik) empêche qu'il parte vers un tiers.

@@ -20,57 +20,58 @@ const NON_PAGE_PREFIXES = ["/api", "/_next"];
 // Origine fictive : sert uniquement à vérifier que le chemin ne la quitte pas.
 const BASE = "http://piloti.invalid";
 
+// `\` est lu comme `/` par les navigateurs (`/\example.com` → `//example.com`).
+const UNSAFE_CHARS = /[\\\u0000-\u001f\u007f]/;
+
+/** Un seul `/` initial, ni `\`, ni caractère de contrôle. */
+function isPlainPath(path: string): boolean {
+  return path.startsWith("/") && !path.startsWith("//") && !UNSAFE_CHARS.test(path);
+}
+
 /**
- * Valide le paramètre `next` reçu par la page de connexion. N'accepte qu'un
- * chemin interne (un seul `/` initial, ni `\`, ni caractère de contrôle, y
- * compris sous forme encodée `%2f`, `%5c`, `%09`…) qui, une fois résolu, reste
- * sur la même origine et ne vise ni une page d'authentification ni l'API.
- * Tout le reste retombe sur le tableau de bord.
+ * Chemin interne normalisé, ou `null` si `next` n'en est pas un : non textuel,
+ * trop long, chemin piégé (y compris sous forme encodée `%2f`, `%5c`, `%09`…),
+ * hors de l'origine une fois résolu, page d'authentification ou API.
  */
-export function safeNextPath(next: unknown): string {
-  if (typeof next !== "string" || next.length > MAX_NEXT_LENGTH) return DEFAULT_AFTER_LOGIN;
-  if (!next.startsWith("/") || next.startsWith("//")) return DEFAULT_AFTER_LOGIN;
-  // Les navigateurs lisent `\` comme `/` (`/\example.com` → `//example.com`).
-  if (/[\\\u0000-\u001f\u007f]/.test(next)) return DEFAULT_AFTER_LOGIN;
+function internalPath(next: unknown): string | null {
+  if (typeof next !== "string" || next.length > MAX_NEXT_LENGTH || !isPlainPath(next)) {
+    return null;
+  }
 
   let url: URL;
-  try {
-    url = new URL(next, BASE);
-  } catch {
-    return DEFAULT_AFTER_LOGIN;
-  }
-  if (url.origin !== BASE) return DEFAULT_AFTER_LOGIN;
-
-  // Mêmes règles sur le chemin décodé : un intermédiaire (proxy, CDN) qui
-  // décoderait `/%2f%2fevil.com` en `//evil.com` ne doit rien en tirer.
   let decoded: string;
   try {
+    url = new URL(next, BASE);
+    // Mêmes règles sur le chemin décodé : un intermédiaire (proxy, CDN) qui
+    // décoderait `/%2f%2fevil.com` en `//evil.com` ne doit rien en tirer.
     decoded = decodeURIComponent(url.pathname);
   } catch {
-    return DEFAULT_AFTER_LOGIN;
+    return null;
   }
-  if (decoded.startsWith("//") || /[\\\u0000-\u001f\u007f]/.test(decoded)) {
-    return DEFAULT_AFTER_LOGIN;
-  }
+  if (url.origin !== BASE || !isPlainPath(decoded)) return null;
 
-  // Insensible à la casse : `/LOGIN` n'existe pas, inutile d'y atterrir.
-  const lower = decoded.toLowerCase();
-  const page = lower.length > 1 ? lower.replace(/\/+$/, "") : lower;
-  if (AUTH_PATHS.has(page)) return DEFAULT_AFTER_LOGIN;
-  if (NON_PAGE_PREFIXES.some((p) => page === p || page.startsWith(`${p}/`))) {
-    return DEFAULT_AFTER_LOGIN;
-  }
+  // Insensible à la casse et au `/` final : `/LOGIN` et `/login/` sont refusés.
+  const page = decoded.toLowerCase().replace(/\/+$/, "");
+  if (AUTH_PATHS.has(page)) return null;
+  if (NON_PAGE_PREFIXES.some((prefix) => `${page}/`.startsWith(`${prefix}/`))) return null;
 
   return url.pathname + url.search + url.hash;
 }
 
 /**
+ * Valide le paramètre `next` reçu par la page de connexion : le chemin interne
+ * normalisé, ou le tableau de bord pour toute autre valeur.
+ */
+export function safeNextPath(next: unknown): string {
+  return internalPath(next) ?? DEFAULT_AFTER_LOGIN;
+}
+
+/**
  * Valeur de `next` à joindre à l'URL de connexion pour la requête refusée, ou
  * `null` s'il n'y a rien à mémoriser : la racine, ou un chemin que
- * `safeNextPath` rejetterait de toute façon (trop long, page d'auth…).
+ * `safeNextPath` ne rendrait pas tel quel (trop long, page d'auth…).
  */
 export function nextForLogin(pathname: string, search: string): string | null {
-  if (pathname === "/") return null;
   const next = pathname + search;
-  return safeNextPath(next) === next ? next : null;
+  return pathname !== "/" && internalPath(next) === next ? next : null;
 }

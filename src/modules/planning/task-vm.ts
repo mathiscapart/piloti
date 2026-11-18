@@ -24,6 +24,11 @@ export interface TaskVM {
   covered: boolean;
 }
 
+// #75 — l'année n'est affichée que si elle diffère de l'année courante.
+export function dueLabel(due: Date, now: Date): string {
+  return formatWall(due, due.getUTCFullYear() === now.getUTCFullYear() ? "dayMonth" : "date");
+}
+
 export function buildTaskVMs(
   tasks: TaskListItem[],
   opts: { userId: string; canManage: boolean },
@@ -46,7 +51,7 @@ export function buildTaskVMs(
       assigneeFirst: t.assignee?.firstName ?? null,
       assigneeLast: t.assignee?.lastName ?? null,
       assigneeImage: t.assignee?.image ?? null,
-      dueLabel: t.dueDate ? formatWall(t.dueDate, "dayMonth") : null,
+      dueLabel: t.dueDate ? dueLabel(t.dueDate, now) : null,
       overdue: !t.done && t.dueDate ? t.dueDate.getTime() < todayUtc : false,
       canToggle:
         opts.canManage ||

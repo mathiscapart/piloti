@@ -41,6 +41,7 @@ export default async function NewEventPage() {
           submitLabel="Créer l'événement"
           places={places}
           units={units}
+          allowAlreadyHappened
         />
       </section>
     </div>

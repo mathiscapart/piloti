@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ export function EventForm({
   submitLabel,
   places = [],
   units = UNITS,
+  allowAlreadyHappened = false,
 }: {
   action: (prev: ActionResult, formData: FormData) => Promise<ActionResult>;
   defaults?: Partial<EventFormValues>;
@@ -48,17 +49,26 @@ export function EventForm({
   // la page appelante, qui seule dispose de la session. « Tout le groupe »
   // reste toujours ouvert : un événement de groupe concerne tout le monde.
   units?: readonly string[];
+  // #75 — création seulement : case « Cet événement a déjà eu lieu ».
+  allowAlreadyHappened?: boolean;
 }) {
   const router = useRouter();
   const [state, formAction, pending] = useActionState<ActionResult, FormData>(
     action,
     emptyState,
   );
+  const [alreadyHappened, setAlreadyHappened] = useState(false);
+  const alreadyHappenedRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     // Succès = redirection serveur ; ici on n'affiche un toast que sur erreur.
     if (state.error) toast.error(state.error);
-  }, [state]);
+    // React réinitialise le formulaire après l'action, y compris cette case
+    // pourtant contrôlée : on la remet d'accord avec l'état.
+    if (alreadyHappenedRef.current) {
+      alreadyHappenedRef.current.checked = alreadyHappened;
+    }
+  }, [state, alreadyHappened]);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -133,6 +143,26 @@ export function EventForm({
         </div>
       </div>
 
+      {allowAlreadyHappened ? (
+        <label className="flex items-start gap-2">
+          <input
+            ref={alreadyHappenedRef}
+            type="checkbox"
+            name="alreadyHappened"
+            checked={alreadyHappened}
+            onChange={(e) => setAlreadyHappened(e.target.checked)}
+            className="mt-0.5 size-4 accent-forest"
+          />
+          <span className="text-sm font-medium text-earth">
+            Cet événement a déjà eu lieu
+            <span className="block text-xs font-normal text-trail">
+              Pour l&apos;enregistrer après coup (présences, historique) : ni
+              inscriptions ni annonce aux membres.
+            </span>
+          </span>
+        </label>
+      ) : null}
+
       <div className="space-y-1.5">
         <Label htmlFor="location">Lieu</Label>
         <Input
@@ -179,8 +209,11 @@ export function EventForm({
         />
       </div>
 
-      {/* US-P04 — inscriptions */}
-      <div className="space-y-3 rounded-xl bg-sand/50 p-4">
+      {/* US-P04 — inscriptions (sans objet pour un événement déjà passé) */}
+      <div
+        className="space-y-3 rounded-xl bg-sand/50 p-4"
+        hidden={alreadyHappened}
+      >
         <label className="flex items-start gap-2">
           <input
             type="checkbox"

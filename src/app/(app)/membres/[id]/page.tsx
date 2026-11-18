@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { formatWall, wallNow } from "@/lib/datetime";
 import { UNIT_LABEL, UNITS } from "@/lib/enums";
-import { memberBackLink } from "@/lib/member-back-link";
+import { memberBackLink, memberBackQuery } from "@/lib/member-back-link";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, canActOnUnit, effectiveRoles } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -122,7 +122,7 @@ export default async function MemberDetailPage({ params, searchParams }: PagePro
         </Link>
         {isJeune && can(currentUser, "pedago.view") ? (
           <Link
-            href={`/membres/${user.id}/progression`}
+            href={`/membres/${user.id}/progression${memberBackQuery(back.from)}`}
             className="text-sm font-bold text-forest hover:underline"
           >
             Progression →

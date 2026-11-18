@@ -15,7 +15,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { birthDateSchema, canCreateChildAccount, canEnableLogin } from "@/lib/legal/age";
 import { PRIVACY_VERSION } from "@/lib/legal/versions";
-import { memberBackLink } from "@/lib/member-back-link";
+import { memberProfileRedirect } from "@/lib/member-back-link";
 import { passwordSchema } from "@/lib/password-policy";
 import { uploadFsPath } from "@/lib/upload";
 import {
@@ -656,8 +656,8 @@ export async function updateMemberProfile(
   revalidatePath(`/membres/${userId}`);
   revalidatePath("/membres/annuaire");
   // #66 — confirmer et revenir à la page d'origine (liste blanche, cf. #80).
-  const back = memberBackLink(formData.get("from")?.toString());
-  redirect(`${back.href}?notice=member-profile-updated`);
+  // Hors try/catch : `redirect` lève une exception de navigation.
+  redirect(memberProfileRedirect(formData.get("from")));
 }
 
 export async function suspendUser(

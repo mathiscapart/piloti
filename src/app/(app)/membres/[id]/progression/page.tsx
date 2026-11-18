@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { getCurrentUser } from "@/lib/get-current-user";
+import { memberBackLink, memberBackQuery } from "@/lib/member-back-link";
 import { can, canActOnUnit, canReadPedagoNotes } from "@/lib/permissions";
 import { isChildOf } from "@/modules/family/queries";
 import { listBadgesForUnit } from "@/modules/pedagogy/referential";
@@ -16,10 +17,13 @@ export const metadata: Metadata = { title: "Progression" };
 
 interface PageProps {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string | string[] }>;
 }
 
-export default async function ProgressionPage({ params }: PageProps) {
+export default async function ProgressionPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  // #80 — conserve l'origine de la fiche membre pour son lien « Retour ».
+  const { from } = memberBackLink((await searchParams).from);
   const user = await getCurrentUser();
 
   // Accès : encadrement (pedago.view) ; le jeune lui-même ; un parent du jeune.
@@ -54,7 +58,7 @@ export default async function ProgressionPage({ params }: PageProps) {
     <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-8 md:py-10">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link
-          href={isStaff ? `/membres/${id}` : "/dashboard"}
+          href={isStaff ? `/membres/${id}${memberBackQuery(from)}` : "/dashboard"}
           className="inline-flex items-center gap-1 text-sm font-bold text-trail hover:text-earth"
         >
           <ArrowLeft className="size-4" />

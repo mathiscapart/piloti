@@ -29,7 +29,7 @@ export function MyChildren({ enfants }: { enfants: ChildSummary[] }) {
         {enfants.map((enfant) => (
           <li key={enfant.id}>
             <Link
-              href={`/membres/${enfant.id}`}
+              href={`/membres/${enfant.id}?from=dashboard`}
               className="flex items-center justify-between gap-3 rounded-2xl bg-snow p-4 shadow-card transition-transform hover:-translate-y-0.5"
             >
               <div className="min-w-0">

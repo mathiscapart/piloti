@@ -1,4 +1,5 @@
 import { ArrowLeft, Hash } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -16,6 +17,8 @@ import {
 import { ChannelSidebar } from "../ChannelSidebar";
 import { ChannelMuteButton } from "./ChannelMuteButton";
 import { ChannelView } from "./ChannelView";
+
+export const metadata: Metadata = { title: "Salon" };
 
 interface PageProps {
   params: Promise<{ slug: string }>;

@@ -1,4 +1,5 @@
 import { TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -15,6 +16,8 @@ import {
   getFinancialYears,
 } from "@/modules/finance/dashboard";
 import { formatEuros } from "@/modules/finance/format";
+
+export const metadata: Metadata = { title: "Finances" };
 
 const MONTHS = [
   "janv",

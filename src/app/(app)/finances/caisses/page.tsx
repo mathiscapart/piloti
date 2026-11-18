@@ -1,4 +1,5 @@
 import { PiggyBank, Wallet } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -10,6 +11,8 @@ import { listCashBoxes } from "@/modules/finance/cashbox";
 import { formatEuros } from "@/modules/finance/format";
 
 import { CashBoxAdmin } from "./CashBoxAdmin";
+
+export const metadata: Metadata = { title: "Caisses" };
 
 export default async function CashBoxesPage() {
   const user = await getCurrentUser();

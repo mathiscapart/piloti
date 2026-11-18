@@ -1,9 +1,12 @@
 import { ArrowLeft, Gift } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { DonationForm } from "@/components/donations/DonationForm";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { listCategories } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Proposer un don" };
 
 interface PageProps {
   searchParams: Promise<{ notice?: string }>;

@@ -933,3 +933,16 @@ Deux défauts laissés par #97.
 - `contents: write` du job `release` est à la portée des dépendances de semantic-release (lockfile figé, scripts désactivés). Le ruleset sur `main`/`develop` (PR obligatoire) et un ruleset de tags (ni modification ni suppression, création autorisée) en bornent les dégâts. Ces deux rulesets et la restriction de l'environnement `dockerhub` sont des réglages GitHub à poser avant la première version.
 - Le build d'image allonge le run d'une PR : il attend Qualité et Sécurité, puis construit deux cibles.
 - `semantic-release` se met à jour à la main, en relisant le diff du lockfile et après quelques jours de recul sur une nouvelle version. Dependabot n'y propose que les correctifs de sécurité (`/.github/release`, en `chore`).
+
+## D-051 — #81 : titres d'onglet fixes, suffixe « — Piloti » au seul layout racine
+
+**Contexte** : toutes les pages s'intitulaient « Piloti » : impossible de distinguer les onglets, et le critère WCAG 2.4.2 (« Titre de page ») n'était pas respecté. L'issue proposait des titres de détail portant le nom de l'objet (« Tente Igloo 6p #1 »), tout en relevant le risque des noms de mineurs dans l'historique d'un poste partagé.
+
+**Choix** :
+- `src/app/layout.tsx` porte `title: { template: "%s — Piloti", default: "Piloti" }`. Chaque `page.tsx` exporte `metadata` avec un titre court, sans suffixe, aligné sur le libellé de navigation ou le h1. Aucun layout imbriqué ne définit de `title`, car il masquerait le template racine.
+- **Titres fixes partout, routes dynamiques comprises** (« Article », « Fiche membre », « Conversation », « Vos coordonnées »). Un `generateMetadata` coûterait une requête par page et devrait redoubler le contrôle `can()` / périmètre de la page, faute de quoi un nom s'afficherait dans le `<title>` pour quelqu'un qui n'a pas le droit de le voir. Il mettrait aussi des données personnelles (mineurs, propriétaires de lieux sur la page publique à jeton) dans l'historique du navigateur.
+- Verrou : `src/lib/page-titles.test.ts`. Il fait échouer le test si une page n'a pas de titre, si un titre contient « Piloti », si deux titres sont identiques, si un layout imbriqué définit un titre, ou si une page utilise `generateMetadata` hors de la liste d'exceptions `GENERATE_METADATA_ALLOWED`, vide aujourd'hui. Deux pages sont exemptées de titre : `/` (redirection) et `/finances/tranches` (`notFound()`).
+
+**Conséquences** :
+- Deux onglets de même type (deux articles, deux événements) portent le même titre. C'est le prix de l'absence de donnée dans les titres.
+- Un titre calculé à partir des données (objet non personnel, comme un article ou un lieu) reste possible. Il passe par une entrée dans `GENERATE_METADATA_ALLOWED`, avec le même contrôle d'accès que la page, et il est relu en PR.

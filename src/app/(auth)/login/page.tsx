@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { LoginForm } from "./login-form";
+
+export const metadata: Metadata = { title: "Connexion" };
 
 export default async function LoginPage({
   searchParams,

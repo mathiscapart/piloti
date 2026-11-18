@@ -1,4 +1,5 @@
 import { Megaphone, Plus } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,6 +15,8 @@ import {
   MarkAnnouncementsRead,
   ReadStatsButton,
 } from "./AnnouncementActions";
+
+export const metadata: Metadata = { title: "Annonces" };
 
 export const dynamic = "force-dynamic";
 

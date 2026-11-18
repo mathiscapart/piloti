@@ -1,4 +1,5 @@
 import { Phone, Search, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -16,6 +17,8 @@ import {
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can, effectiveRoles } from "@/lib/permissions";
 import { listMembers } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Membres" };
 
 interface PageProps {
   searchParams: Promise<{ q?: string; unit?: string; role?: string }>;

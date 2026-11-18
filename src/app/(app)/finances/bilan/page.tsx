@@ -1,4 +1,5 @@
 import { Download, Wallet } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -14,6 +15,8 @@ import {
 import { formatEuros } from "@/modules/finance/format";
 
 import { PrintButton } from "./PrintButton";
+
+export const metadata: Metadata = { title: "Bilan financier" };
 
 interface PageProps {
   searchParams: Promise<{ year?: string }>;

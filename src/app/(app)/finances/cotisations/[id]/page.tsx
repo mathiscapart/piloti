@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -11,6 +12,8 @@ import { formatEuros } from "@/modules/finance/format";
 
 import { CampaignReminderSettings } from "../CampaignReminderSettings";
 import { RecordPaymentRow } from "../RecordPaymentRow";
+
+export const metadata: Metadata = { title: "Campagne de cotisation" };
 
 function reminderDaysLabel(json: string): string {
   try {

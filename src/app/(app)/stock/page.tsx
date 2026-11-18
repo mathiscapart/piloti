@@ -1,4 +1,5 @@
 import { ChevronRight, Gift, Package, Plus, Search, Upload } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { EquipmentCard } from "@/components/equipment/EquipmentCard";
@@ -9,6 +10,8 @@ import { cn } from "@/lib/utils";
 import { requireCan } from "@/lib/require-can";
 import { showArchived } from "@/modules/inventory/archive";
 import { listEquipment, listCategoryTree } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Stock" };
 
 interface PageProps {
   searchParams: Promise<{ q?: string; cat?: string; archived?: string }>;

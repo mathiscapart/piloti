@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ORG_EMAIL, ORG_GROUP } from "@/lib/legal/organization";
 import { TERMS_VERSION } from "@/lib/legal/versions";
 
-export const metadata: Metadata = { title: "Conditions générales d'utilisation — Piloti" };
+export const metadata: Metadata = { title: "Conditions générales d'utilisation" };
 
 // Les valeurs d'identité légale sont lues dans l'environnement au rendu : cette
 // page ne peut donc pas être pré-rendue statiquement, sinon `next build` figerait

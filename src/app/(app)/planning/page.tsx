@@ -1,4 +1,5 @@
 import { CalendarDays, ListTodo, MapPin, Plus, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -18,6 +19,8 @@ import { can, scopedUnits } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { listEvents, type EventListItem } from "@/modules/planning/queries";
 import { listOpenTasksPreview } from "@/modules/planning/tasks";
+
+export const metadata: Metadata = { title: "Planning" };
 
 const TYPE_TONE: Record<EventType, string> = {
   REUNION: "bg-sky-soft text-sky-ink",

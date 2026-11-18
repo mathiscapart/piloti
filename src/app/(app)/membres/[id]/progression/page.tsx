@@ -1,4 +1,5 @@
 import { ArrowLeft, FileText, GraduationCap } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -10,6 +11,8 @@ import { listBadgesForUnit } from "@/modules/pedagogy/referential";
 import { getProgression } from "@/modules/pedagogy/progression";
 
 import { ProgressionView } from "./ProgressionView";
+
+export const metadata: Metadata = { title: "Progression" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

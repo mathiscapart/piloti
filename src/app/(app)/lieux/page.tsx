@@ -1,4 +1,5 @@
 import { Map, MapPin, Plus, Tent, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -15,6 +16,8 @@ import { can } from "@/lib/permissions";
 import { listPlaces, type PlaceListFilter } from "@/modules/camp/places";
 
 import { PlaceFilters } from "./PlaceFilters";
+
+export const metadata: Metadata = { title: "Lieux de camp" };
 
 interface PageProps {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

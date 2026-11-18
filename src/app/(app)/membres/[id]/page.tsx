@@ -1,4 +1,5 @@
 import { ArrowLeft, Mail, Package, Phone } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -28,6 +29,8 @@ import {
 import { FamilySection } from "./FamilySection";
 import { ImageRightsSection } from "./ImageRightsSection";
 import { MemberProfileForm } from "./MemberProfileForm";
+
+export const metadata: Metadata = { title: "Fiche membre" };
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Administrateur",

@@ -1,4 +1,5 @@
 import { CreditCard, Wallet } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -11,6 +12,8 @@ import { formatEuros } from "@/modules/finance/format";
 import { listCampaigns } from "@/modules/finance/campaigns";
 
 import { CampaignForm } from "./CampaignForm";
+
+export const metadata: Metadata = { title: "Cotisations" };
 
 export default async function CampaignsPage() {
   const user = await getCurrentUser();

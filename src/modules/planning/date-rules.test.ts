@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { checkEventDates, checkTaskDueDate } from "./date-rules";
+import { checkEventDates, checkTaskDueDate, FUTURE_START, PAST_START } from "./date-rules";
 import { dueLabel } from "./task-vm";
 
 // #75 — bornes des dates du planning. « Maintenant » en heure murale : 11/09/2026 10:00.
@@ -36,7 +36,7 @@ describe("checkEventDates", () => {
   it("refuse un début passé à la création, l'accepte en modification", () => {
     const past = { start: at(2026, 9, 1), end: at(2026, 9, 1, 12), deadline: null };
     expect(checkEventDates(past, { now: NOW, creating: true })).toBe(
-      "Le début de l'événement est déjà passé.",
+      PAST_START,
     );
     expect(checkEventDates(past, { now: NOW, creating: false })).toBeNull();
   });
@@ -169,7 +169,7 @@ describe("checkEventDates — ordre des dates", () => {
     expect(checkEventDates({ start: NOW, end: NOW, deadline: null }, creating)).toBeNull();
     const before = at(2026, 9, 11, 9, 59);
     expect(checkEventDates({ start: before, end: NOW, deadline: null }, creating)).toBe(
-      "Le début de l'événement est déjà passé.",
+      PAST_START,
     );
     expect(checkEventDates({ start: before, end: NOW, deadline: null }, edit)).toBeNull();
   });
@@ -215,5 +215,55 @@ describe("dueLabel — année", () => {
     expect(dueLabel(at(2025, 12, 31, 23, 59), NOW)).toContain("2025");
     expect(dueLabel(at(2027, 6, 15), NOW)).not.toBe(dueLabel(at(2026, 6, 15), NOW));
     expect(dueLabel(at(2026, 6, 15), NOW)).not.toContain("2026");
+  });
+});
+
+// #75 — case « Cet événement a déjà eu lieu » (décision de Mathis, PR #221).
+describe("checkEventDates — événement déjà passé", () => {
+  const past = { start: at(2026, 9, 1), end: at(2026, 9, 1, 12), deadline: null };
+  const sameDay = { start: at(2026, 9, 11, 8), end: at(2026, 9, 11, 9), deadline: null };
+  const future = { start: at(2026, 10, 10), end: at(2026, 10, 10, 12), deadline: null };
+  const ticked = { now: NOW, creating: true, alreadyHappened: true };
+  const unticked = { now: NOW, creating: true, alreadyHappened: false };
+
+  it("le message de refus mentionne la case", () => {
+    expect(PAST_START).toContain("Cet événement a déjà eu lieu");
+  });
+
+  it("case non cochée : début passé refusé, y compris plus tôt le jour même", () => {
+    expect(checkEventDates(past, unticked)).toBe(PAST_START);
+    expect(checkEventDates(sameDay, unticked)).toBe(PAST_START);
+  });
+
+  it("case cochée : début passé accepté, y compris plus tôt le jour même", () => {
+    expect(checkEventDates(past, ticked)).toBeNull();
+    expect(checkEventDates(sameDay, ticked)).toBeNull();
+  });
+
+  it("case non cochée : un événement futur est accepté", () => {
+    expect(checkEventDates(future, unticked)).toBeNull();
+  });
+
+  it("case cochée : un début futur ou égal à maintenant est refusé, message citant la case", () => {
+    expect(FUTURE_START).toContain("Cet événement a déjà eu lieu");
+    expect(checkEventDates(future, ticked)).toBe(FUTURE_START);
+    expect(checkEventDates({ start: NOW, end: NOW, deadline: null }, ticked)).toBe(FUTURE_START);
+    expect(checkEventDates({ start: at(2026, 9, 11, 9, 59), end: NOW, deadline: null }, ticked)).toBeNull();
+  });
+
+  it("la case n'a aucun effet en modification", () => {
+    const edit = { now: NOW, creating: false, alreadyHappened: true };
+    expect(checkEventDates(future, edit)).toBeNull();
+    expect(checkEventDates(past, edit)).toBeNull();
+  });
+
+  it("case cochée : les autres règles restent actives", () => {
+    expect(
+      checkEventDates({ start: at(2024, 6, 1), end: at(2024, 6, 1, 12), deadline: null }, ticked),
+    ).toBe("Les dates doivent être comprises entre 2025 et 2031.");
+    expect(checkEventDates({ ...past, end: at(2026, 8, 31) }, ticked)).toBe(
+      "La date de fin doit être postérieure au début.",
+    );
+    // Pas de date limite ici : createEvent l'ignore pour un événement passé.
   });
 });

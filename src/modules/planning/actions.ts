@@ -64,6 +64,7 @@ function readForm(formData: FormData) {
     campPlaceId: str("campPlaceId"),
     registrationOpen: formData.get("registrationOpen"),
     registrationDeadline: str("registrationDeadline"),
+    alreadyHappened: formData.get("alreadyHappened"),
   };
 }
 
@@ -114,9 +115,15 @@ export async function createEvent(
   if ("error" in dates) return { error: dates.error };
   const deadline = parseDeadline(parsed.data.registrationDeadline);
   if ("error" in deadline) return { error: deadline.error };
+  // #75 — événement déjà passé, confirmé par la case (checkEventDates refuse
+  // la case sur un début futur) : pas d'inscriptions (ni date limite) et
+  // aucune annonce, qui partirait pour un événement fini.
+  const past = parsed.data.alreadyHappened;
+  const registrationOpen = past ? false : parsed.data.registrationOpen;
+  const registrationDeadline = past ? null : deadline.value;
   const dateError = checkEventDates(
-    { start: dates.start, end: dates.end, deadline: deadline.value },
-    { now: wallNow(), creating: true },
+    { start: dates.start, end: dates.end, deadline: registrationDeadline },
+    { now: wallNow(), creating: true, alreadyHappened: past },
   );
   if (dateError) return { error: dateError };
 
@@ -132,20 +139,25 @@ export async function createEvent(
           location: parsed.data.location,
           description: parsed.data.description,
           campPlaceId: parsed.data.campPlaceId,
-          registrationOpen: parsed.data.registrationOpen,
-          registrationDeadline: deadline.value,
+          registrationOpen,
+          registrationDeadline,
           createdById: user.id,
         },
       }),
     (event) => ({
       action: "EVENT_CREATED",
       userId: user.id,
-      metadata: { eventId: event.id, name: event.name, type: event.type },
+      metadata: {
+        eventId: event.id,
+        name: event.name,
+        type: event.type,
+        ...(past ? { alreadyHappened: true } : {}),
+      },
     }),
   );
 
   // Fixation logique : notifie l'unité (jeunes + parents) + poste au salon.
-  after(() => notifyEventAudience(created, user.id, "created"));
+  if (!past) after(() => notifyEventAudience(created, user.id, "created"));
 
   revalidatePath("/planning");
   revalidatePath("/dashboard");

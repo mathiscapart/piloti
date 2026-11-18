@@ -38,6 +38,8 @@ export const eventSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null)),
+  // #75 — case « Cet événement a déjà eu lieu » (création seulement).
+  alreadyHappened: z.preprocess((v) => v === "on" || v === "true" || v === true, z.boolean()),
 });
 
 export type EventInput = z.infer<typeof eventSchema>;

@@ -18,14 +18,20 @@ function outOfRange(dates: Date[], now: Date): { min: number; max: number } | nu
   return bad ? range : null;
 }
 
+export const PAST_START =
+  "Le début de l'événement est déjà passé. Coche « Cet événement a déjà eu lieu » pour l'enregistrer quand même.";
+export const FUTURE_START =
+  "Le début de l'événement est à venir : décoche « Cet événement a déjà eu lieu ».";
+
 /**
  * Message d'erreur, ou null si les dates sont acceptables. Le début passé
- * n'est refusé qu'à la création : en modification, on doit pouvoir corriger
+ * n'est refusé qu'à la création, et seulement si l'auteur n'a pas confirmé
+ * que l'événement a déjà eu lieu : en modification, on doit pouvoir corriger
  * un événement déjà passé.
  */
 export function checkEventDates(
   dates: { start: Date; end: Date; deadline: Date | null },
-  opts: { now: Date; creating: boolean },
+  opts: { now: Date; creating: boolean; alreadyHappened?: boolean },
 ): string | null {
   const { start, end, deadline } = dates;
   const range = outOfRange(deadline ? [start, end, deadline] : [start, end], opts.now);
@@ -34,7 +40,11 @@ export function checkEventDates(
   if (deadline && deadline > start) {
     return "La date limite d'inscription doit précéder le début de l'événement.";
   }
-  if (opts.creating && start < opts.now) return "Le début de l'événement est déjà passé.";
+  if (opts.creating) {
+    if (!opts.alreadyHappened && start < opts.now) return PAST_START;
+    // Sinon un événement futur serait créé sans inscriptions ni annonce.
+    if (opts.alreadyHappened && start >= opts.now) return FUTURE_START;
+  }
   return null;
 }
 

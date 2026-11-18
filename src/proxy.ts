@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { canEnableLogin } from "@/lib/legal/age";
+import { nextForLogin, safeNextPath } from "@/lib/safe-redirect";
 
 const PUBLIC_PATHS = new Set(["/login", "/register", "/forgot-password", "/reset-password"]);
 // RGPD-01 — pages légales, accessibles à tous sans compte ni base de données
@@ -28,6 +29,21 @@ function isThirdPartyPath(pathname: string): boolean {
 }
 const SETUP_PATH = "/setup";
 const COOKIE_NAME = "piloti.session_token";
+
+// #85 — l'URL de connexion transporte la page demandée (`?next=`), validée à
+// l'arrivée par `safeNextPath`. `nextUrl` est déjà débarrassé des paramètres
+// internes de Next (`_rsc`).
+function loginUrl(request: NextRequest): URL {
+  const url = new URL("/login", request.url);
+  const next = nextForLogin(request.nextUrl.pathname, request.nextUrl.search);
+  if (next) url.searchParams.set("next", next);
+  return url;
+}
+
+// Un `next` répété est ignoré, comme sur la page /login (tableau refusé).
+function singleParam(values: string[]): string | undefined {
+  return values.length === 1 ? values[0] : undefined;
+}
 
 function noStoreRedirect(url: URL): NextResponse {
   const res = NextResponse.redirect(url);
@@ -62,7 +78,7 @@ export async function proxy(request: NextRequest) {
     }
 
     if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
-    return noStoreRedirect(new URL("/login", request.url));
+    return noStoreRedirect(loginUrl(request));
   }
 
   // ── Requêtes authentifiées ────────────────────────────────────────────────
@@ -93,14 +109,20 @@ export async function proxy(request: NextRequest) {
     const isPublic = PUBLIC_PATHS.has(pathname);
     const target = isPublic
       ? NextResponse.next()
-      : noStoreRedirect(new URL("/login", request.url));
+      : noStoreRedirect(loginUrl(request));
     target.cookies.delete(COOKIE_NAME);
     return target;
   }
 
-  // Session ACTIVE sur page publique → dashboard
+  // Session ACTIVE sur page publique → dashboard, ou page demandée (#85) si
+  // l'on arrive sur /login avec un `next` valide (lien ouvert dans un autre
+  // onglet déjà connecté).
   if (PUBLIC_PATHS.has(pathname)) {
-    return noStoreRedirect(new URL("/dashboard", request.url));
+    const target =
+      pathname === "/login"
+        ? safeNextPath(singleParam(request.nextUrl.searchParams.getAll("next")))
+        : "/dashboard";
+    return noStoreRedirect(new URL(target, request.url));
   }
 
   return NextResponse.next();

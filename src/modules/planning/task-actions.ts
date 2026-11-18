@@ -4,12 +4,14 @@ import { revalidatePath } from "next/cache";
 import { after } from "next/server";
 
 import { withAudit } from "@/lib/audit";
+import { wallNow } from "@/lib/datetime";
 import { db } from "@/lib/db";
 import { RECURRENCES } from "@/lib/enums";
 import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import type { ActionResult } from "@/lib/types";
 
+import { checkTaskDueDate } from "./date-rules";
 import { postGroupTaskToChannel } from "./event-hooks";
 import { nextOccurrenceData } from "./recurrence";
 
@@ -38,6 +40,8 @@ export async function createTask(
 
   const assigneeRaw = String(formData.get("assigneeId") ?? "").trim();
   const dueDate = parseDueDate(String(formData.get("dueDate") ?? "") || null);
+  const dueError = checkTaskDueDate(dueDate, wallNow());
+  if (dueError) return { error: dueError };
 
   // US-P11 — récurrence + tâche de groupe.
   const recurrenceRaw = String(formData.get("recurrence") ?? "NONE");

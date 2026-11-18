@@ -16,6 +16,7 @@ import type { ActionResult } from "@/lib/types";
 import { isChildOf } from "@/modules/family/queries";
 
 import { isConcernedByEvent, isOnAttendanceSheet } from "./audience";
+import { checkEventDates } from "./date-rules";
 import { maybeAlertAbsences, notifyEventAudience } from "./event-hooks";
 import { canActOnEvent, refuseIfEventOutOfScope } from "./event-scope";
 import { eventSchema, withdrawalReasonSchema } from "./types";
@@ -43,9 +44,6 @@ function parseDates(
   const start = parseWallTime(startStr);
   const end = parseWallTime(endStr);
   if (!start || !end) return { error: "Dates invalides." };
-  if (end < start) {
-    return { error: "La date de fin doit être postérieure au début." };
-  }
   return { start, end };
 }
 
@@ -116,6 +114,11 @@ export async function createEvent(
   if ("error" in dates) return { error: dates.error };
   const deadline = parseDeadline(parsed.data.registrationDeadline);
   if ("error" in deadline) return { error: deadline.error };
+  const dateError = checkEventDates(
+    { start: dates.start, end: dates.end, deadline: deadline.value },
+    { now: wallNow(), creating: true },
+  );
+  if (dateError) return { error: dateError };
 
   const created = await withAudit(
     (tx) =>
@@ -183,6 +186,11 @@ export async function updateEvent(
   if ("error" in dates) return { error: dates.error };
   const deadline = parseDeadline(parsed.data.registrationDeadline);
   if ("error" in deadline) return { error: deadline.error };
+  const dateError = checkEventDates(
+    { start: dates.start, end: dates.end, deadline: deadline.value },
+    { now: wallNow(), creating: false },
+  );
+  if (dateError) return { error: dateError };
 
   const updated = await withAudit(
     (tx) =>

@@ -10,7 +10,7 @@ import {
 } from "@/lib/legal/organization";
 import { PRIVACY_VERSION, legalVersionDate } from "@/lib/legal/versions";
 
-export const metadata: Metadata = { title: "Politique de confidentialité — Piloti" };
+export const metadata: Metadata = { title: "Politique de confidentialité" };
 
 // Les valeurs d'identité légale sont lues dans l'environnement au rendu : cette
 // page ne peut donc pas être pré-rendue statiquement, sinon `next build` figerait

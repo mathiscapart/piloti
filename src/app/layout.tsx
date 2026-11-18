@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Piloti",
+  title: { template: "%s — Piloti", default: "Piloti" },
   description:
     "Application de gestion du matériel pour les Scouts et Guides de France.",
   applicationName: "Piloti",

@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -9,6 +10,8 @@ import { db } from "@/lib/db";
 import { requireCan } from "@/lib/require-can";
 import { isLoanLate } from "@/modules/inventory/loan-overdue";
 import { getLoanDetail } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Retour de matériel" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

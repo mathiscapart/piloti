@@ -1,4 +1,5 @@
 import { Plus, Truck } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { LoanGroupCard } from "@/components/loans/LoanGroupCard";
@@ -12,6 +13,8 @@ import {
   type LoanFilter,
   type LoanListItem,
 } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Prêts" };
 
 // « En cours » est le défaut (masque les prêts terminés). « Tous » les inclut.
 const FILTERS: { value: LoanFilter; label: string }[] = [

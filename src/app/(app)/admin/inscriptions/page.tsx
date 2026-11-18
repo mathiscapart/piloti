@@ -1,4 +1,5 @@
 import { UserPlus } from "lucide-react";
+import type { Metadata } from "next";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatInstant } from "@/lib/datetime";
@@ -10,6 +11,8 @@ import { listPendingUsers } from "@/modules/admin/queries";
 
 import { ApproveDialog } from "./approve-dialog";
 import { RejectDialog } from "./reject-dialog";
+
+export const metadata: Metadata = { title: "Inscriptions en attente" };
 
 export default async function AdminInscriptionsPage() {
   // US-32 — ADMIN + SECRÉTAIRE valident les inscriptions.

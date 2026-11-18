@@ -1,4 +1,5 @@
 import { ArrowLeft, MapPin } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -6,6 +7,8 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 
 import { PlaceForm } from "../PlaceForm";
+
+export const metadata: Metadata = { title: "Ajouter un lieu" };
 
 export default async function NewPlacePage() {
   const user = await getCurrentUser();

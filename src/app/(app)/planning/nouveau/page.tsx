@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -9,6 +10,8 @@ import { can, scopedUnits } from "@/lib/permissions";
 import { createEvent } from "@/modules/planning/actions";
 
 import { EventForm } from "../EventForm";
+
+export const metadata: Metadata = { title: "Nouvel événement" };
 
 export default async function NewEventPage() {
   const user = await getCurrentUser();

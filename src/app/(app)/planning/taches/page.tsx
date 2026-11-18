@@ -1,4 +1,5 @@
 import { ArrowLeft, ListTodo } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -11,6 +12,8 @@ import { buildTaskVMs } from "@/modules/planning/task-vm";
 
 import { CreateTaskForm } from "./CreateTaskForm";
 import { TaskList } from "./TaskList";
+
+export const metadata: Metadata = { title: "Tâches" };
 
 const STATUS_TABS: { value: TaskStatusFilter; label: string }[] = [
   { value: "open", label: "À faire" },

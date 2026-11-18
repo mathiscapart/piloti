@@ -1,4 +1,5 @@
 import { ArrowLeft, Phone, Search, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -8,6 +9,8 @@ import { getCurrentUser } from "@/lib/get-current-user";
 import { can } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import { listAllParents, listParentDirectory } from "@/modules/inventory/queries";
+
+export const metadata: Metadata = { title: "Annuaire des compétences" };
 
 interface PageProps {
   searchParams: Promise<{ q?: string }>;

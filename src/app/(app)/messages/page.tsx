@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
+
 import { getCurrentUser } from "@/lib/get-current-user";
 import { listContacts, listConversations } from "@/modules/communication/dm-queries";
 
 import { ConversationList } from "./MessagesUI";
+
+export const metadata: Metadata = { title: "Messages privés" };
 
 export const dynamic = "force-dynamic";
 

@@ -7,6 +7,7 @@ import {
   Scale,
   Truck,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -30,6 +31,8 @@ import { getEquipmentDetail, listCategories } from "@/modules/inventory/queries"
 import { CONDITION_LABEL } from "@/modules/inventory/types";
 
 import { RestoreButton } from "./restore-button";
+
+export const metadata: Metadata = { title: "Article" };
 
 interface PageProps {
   params: Promise<{ id: string }>;

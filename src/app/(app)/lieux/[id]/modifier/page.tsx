@@ -1,4 +1,5 @@
 import { ArrowLeft, MapPin } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -9,6 +10,8 @@ import { can, canManagePlace } from "@/lib/permissions";
 import { ownerContactVersion } from "@/modules/camp/owner-consent";
 
 import { PlaceForm, type PlaceFormValues } from "../../PlaceForm";
+
+export const metadata: Metadata = { title: "Modifier le lieu" };
 
 function parseJsonArray(raw: string): string[] {
   try {

@@ -1,3 +1,5 @@
+import type { Metadata } from "next";
+
 import { requireCan } from "@/lib/require-can";
 import { listCategoryTree, listCategories } from "@/modules/inventory/queries";
 
@@ -5,6 +7,8 @@ import { CategoryArchiveButton } from "./category-archive-button";
 import { CategoryBehaviorToggle } from "./category-behavior-toggle";
 import { CategoryCreateForm } from "./category-create-form";
 import { CategoryParentSelect } from "./category-parent-select";
+
+export const metadata: Metadata = { title: "Catégories" };
 
 export default async function CategoriesPage() {
   // US-32 — gestion des catégories : CHEF + RESPONSABLE_MATERIEL (+ ADMIN).

@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -13,6 +14,8 @@ import { listEvents } from "@/modules/planning/queries";
 
 import { Step1Details } from "./step1-details";
 import { Step2Select } from "./step2-select";
+
+export const metadata: Metadata = { title: "Nouveau prêt" };
 
 // Emprunteur courant (jeune : prêt pour lui-même uniquement).
 interface SelfBorrower {

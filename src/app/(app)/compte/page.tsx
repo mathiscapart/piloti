@@ -1,4 +1,5 @@
 import { ChevronRight, UserCog, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { NotificationSettings } from "@/components/notifications/NotificationSettings";
@@ -18,6 +19,8 @@ import {
 import { UserAvatar } from "@/components/ui/user-avatar";
 
 import { CalendarSubscription } from "./CalendarSubscription";
+
+export const metadata: Metadata = { title: "Mon compte" };
 
 export default async function AccountPage() {
   const user = await getCurrentUser();

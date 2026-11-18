@@ -1,4 +1,5 @@
 import { ArrowLeft, TriangleAlert, Users } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -10,6 +11,8 @@ import { cn } from "@/lib/utils";
 import { getUnitAttendanceDashboard } from "@/modules/planning/stats";
 
 import { PrintButton } from "./PrintButton";
+
+export const metadata: Metadata = { title: "Présences" };
 
 interface PageProps {
   searchParams: Promise<{ unit?: string }>;

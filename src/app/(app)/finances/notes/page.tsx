@@ -1,4 +1,5 @@
 import { Download, Plus, Receipt, Wallet } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -26,6 +27,8 @@ import {
 
 import { BatchApproveButton } from "./BatchApproveButton";
 import { ExpenseActions } from "./ExpenseActions";
+
+export const metadata: Metadata = { title: "Notes de frais" };
 
 const STATUS_TONE: Record<ExpenseStatus, string> = {
   PENDING: "bg-sun-soft text-sun-ink",

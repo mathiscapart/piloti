@@ -8,6 +8,7 @@ import {
   Tent,
   Users,
 } from "lucide-react";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
@@ -32,6 +33,8 @@ import { PlaceNavActions } from "./PlaceNavActions";
 import { ResendOwnerConsentButton } from "./ResendOwnerConsentButton";
 import { ReviewForm } from "./ReviewForm";
 import { ReviewList } from "./ReviewList";
+
+export const metadata: Metadata = { title: "Lieu de camp" };
 
 const MODIF_LABEL: Record<string, string> = {
   PLACE_CREATED: "Création",
